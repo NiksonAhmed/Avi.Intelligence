@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, assistant, sops
+from app.api import admin, assistant, sops, studies, work
 from app.connectors.sharepoint.graph_client import GraphError
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -44,7 +44,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Content-Type"],
         expose_headers=["Content-Disposition"],
     )
@@ -83,6 +83,8 @@ def create_app() -> FastAPI:
     app.include_router(sops.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
     app.include_router(assistant.router, prefix="/api/v1")
+    app.include_router(studies.router, prefix="/api/v1")
+    app.include_router(work.router, prefix="/api/v1")
     return app
 
 

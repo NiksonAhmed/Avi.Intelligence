@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from fastapi import Depends, HTTPException, status
 
+from app.auth.directory import get_person
 from app.core.config import get_settings
 
 
@@ -31,6 +32,10 @@ class Permission(StrEnum):
     CONNECTOR_MANAGE = "connector.manage"
     AUDIT_READ = "audit.read"
     ASSISTANT_USE = "assistant.use"
+    STUDY_READ = "study.read"
+    WORK_MANAGE = "work.manage"
+    """Create, assign and edit tasks and risks. Administrators only; everyone else is read-only
+    except that the assigned person may update the status of their own task or risk."""
 
 
 ROLE_LABELS: dict[Role, str] = {
@@ -42,7 +47,12 @@ ROLE_LABELS: dict[Role, str] = {
     Role.VIEWER: "Viewer",
 }
 
-_ALL_STAFF = {Permission.SOP_READ, Permission.SOP_DOWNLOAD, Permission.ASSISTANT_USE}
+_ALL_STAFF = {
+    Permission.SOP_READ,
+    Permission.SOP_DOWNLOAD,
+    Permission.ASSISTANT_USE,
+    Permission.STUDY_READ,
+}
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMIN: frozenset(Permission),
@@ -50,7 +60,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.CRA: frozenset(_ALL_STAFF),
     Role.DATA_MANAGER: frozenset(_ALL_STAFF),
     Role.SAFETY: frozenset(_ALL_STAFF),
-    Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE}),
+    Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE, Permission.STUDY_READ}),
 }
 
 
@@ -79,7 +89,9 @@ def get_current_user() -> CurrentUser:
         role = Role(settings.dev_user_role)
     except ValueError:
         role = Role.VIEWER
-    return CurrentUser(id="dev-user", name="Local Developer", email="dev@localhost", role=role)
+    person = get_person(settings.dev_user_id) or get_person("dev-user")
+    assert person is not None
+    return CurrentUser(id=person.id, name=person.name, email=person.email, role=role)
 
 
 def require(permission: Permission) -> Callable[..., CurrentUser]:

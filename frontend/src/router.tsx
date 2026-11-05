@@ -9,6 +9,10 @@ import { AuditTrailPage } from './pages/audit/AuditTrailPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
 import { SopListPage } from './pages/documents/SopListPage'
+import { CommandCentreIndexPage, StudyCommandCentrePage } from './pages/studies/StudyCommandCentrePage'
+import { StudyPortfolioPage } from './pages/studies/StudyPortfolioPage'
+import { MyTasksPage } from './pages/work/MyTasksPage'
+import { RisksPage } from './pages/work/RisksPage'
 
 export const routes: RouteObject[] = [
   {
@@ -23,27 +27,11 @@ export const routes: RouteObject[] = [
           />
         ),
       },
-      {
-        path: 'portfolio',
-        element: <ComingSoon title="Study Portfolio" description="Study list with phase, status and milestones." />,
-      },
-      {
-        path: 'command-centre',
-        element: (
-          <ComingSoon
-            title="Study Command Centre"
-            description="A single workspace per study: milestones, tasks, risks, team and documents."
-          />
-        ),
-      },
-      {
-        path: 'tasks',
-        element: <ComingSoon title="My Tasks" description="Your assigned tasks across studies." />,
-      },
-      {
-        path: 'risks',
-        element: <ComingSoon title="Risks and Issues" description="Risk and issue registers across studies." />,
-      },
+      { path: 'portfolio', element: <StudyPortfolioPage /> },
+      { path: 'command-centre', element: <CommandCentreIndexPage /> },
+      { path: 'command-centre/:studyId', element: <StudyCommandCentrePage /> },
+      { path: 'tasks', element: <MyTasksPage /> },
+      { path: 'risks', element: <RisksPage /> },
       { path: 'documents', element: <Navigate to="/documents/sops" replace /> },
       { path: 'documents/sops', element: <SopListPage /> },
       { path: 'documents/sops/:sopId', element: <SopDetailPage /> },

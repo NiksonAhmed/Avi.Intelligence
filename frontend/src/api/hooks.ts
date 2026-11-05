@@ -7,10 +7,25 @@ import type {
   AuditPage,
   ReindexResponse,
   Me,
+  Person,
+  Risk,
+  RiskFilters,
+  RiskInput,
+  RiskListResponse,
+  RiskStatus,
   SharePointStatus,
   SopDetailResponse,
   SopFilters,
   SopListResponse,
+  StudyDetailResponse,
+  StudyFilters,
+  StudyListResponse,
+  StudySource,
+  Task,
+  TaskFilters,
+  TaskInput,
+  TaskListResponse,
+  TaskStatus,
 } from './types'
 
 export const queryKeys = {
@@ -99,6 +114,153 @@ export function useReindex() {
   return useMutation({
     mutationFn: () => apiRequest<ReindexResponse>('/assistant/reindex', { method: 'POST' }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assistant'] }),
+  })
+}
+
+// --- Studies ---------------------------------------------------------------------------------
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
+export function useStudies(filters: StudyFilters = {}) {
+  return useQuery({
+    queryKey: ['studies', filters],
+    queryFn: () =>
+      apiRequest<StudyListResponse>('/studies', {
+        params: { q: filters.q, status: filters.status, phase: filters.phase },
+      }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useStudy(id: string | undefined) {
+  return useQuery({
+    queryKey: ['study', id],
+    queryFn: () => apiRequest<StudyDetailResponse>(`/studies/${encodeURIComponent(id ?? '')}`),
+    enabled: Boolean(id),
+  })
+}
+
+export function useSimpleTrialsStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ['connectors', 'simpletrials'],
+    queryFn: () => apiRequest<StudySource>('/connectors/simpletrials'),
+    enabled,
+  })
+}
+
+export function useSyncSimpleTrials() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<StudySource>('/connectors/simpletrials/sync', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
+      await queryClient.invalidateQueries({ queryKey: ['studies'] })
+      await queryClient.invalidateQueries({ queryKey: ['study'] })
+    },
+  })
+}
+
+export function usePeople() {
+  return useQuery({
+    queryKey: ['people'],
+    queryFn: () => apiRequest<Person[]>('/people'),
+    staleTime: 10 * 60_000,
+  })
+}
+
+// --- Tasks and risks ---------------------------------------------------------------------------
+
+/** Task and risk changes also change the open counts shown on study screens. */
+async function invalidateWork(queryClient: ReturnType<typeof useQueryClient>, key: 'tasks' | 'risks') {
+  await queryClient.invalidateQueries({ queryKey: [key] })
+  await queryClient.invalidateQueries({ queryKey: ['studies'] })
+  await queryClient.invalidateQueries({ queryKey: ['study'] })
+}
+
+export function useTasks(filters: TaskFilters) {
+  return useQuery({
+    queryKey: ['tasks', filters],
+    queryFn: () =>
+      apiRequest<TaskListResponse>('/tasks', {
+        params: {
+          study_id: filters.study_id,
+          assignee: filters.assignee,
+          include_closed: filters.include_closed ? 'true' : undefined,
+        },
+      }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useCreateTask() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: TaskInput) => apiRequest<Task>('/tasks', jsonInit('POST', input)),
+    onSuccess: () => invalidateWork(queryClient, 'tasks'),
+  })
+}
+
+export function useUpdateTask() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<TaskInput> & { status?: TaskStatus } }) =>
+      apiRequest<Task>(`/tasks/${encodeURIComponent(id)}`, jsonInit('PATCH', input)),
+    onSuccess: () => invalidateWork(queryClient, 'tasks'),
+  })
+}
+
+export function useTaskStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
+      apiRequest<Task>(`/tasks/${encodeURIComponent(id)}/status`, jsonInit('POST', { status })),
+    onSuccess: () => invalidateWork(queryClient, 'tasks'),
+  })
+}
+
+export function useRisks(filters: RiskFilters) {
+  return useQuery({
+    queryKey: ['risks', filters],
+    queryFn: () =>
+      apiRequest<RiskListResponse>('/risks', {
+        params: {
+          study_id: filters.study_id,
+          kind: filters.kind,
+          owner: filters.owner,
+          include_closed: filters.include_closed ? 'true' : undefined,
+        },
+      }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useCreateRisk() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: RiskInput) => apiRequest<Risk>('/risks', jsonInit('POST', input)),
+    onSuccess: () => invalidateWork(queryClient, 'risks'),
+  })
+}
+
+export function useUpdateRisk() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<RiskInput> & { status?: RiskStatus } }) =>
+      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}`, jsonInit('PATCH', input)),
+    onSuccess: () => invalidateWork(queryClient, 'risks'),
+  })
+}
+
+export function useRiskStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: RiskStatus }) =>
+      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}/status`, jsonInit('POST', { status })),
+    onSuccess: () => invalidateWork(queryClient, 'risks'),
   })
 }
 

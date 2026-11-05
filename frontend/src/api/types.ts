@@ -182,3 +182,198 @@ export interface AuditPage {
   items: AuditEvent[]
   total: number
 }
+
+// --- Studies (read-only copy of SimpleTrials) -------------------------------------------------
+
+export type MilestoneState = 'completed' | 'overdue' | 'due_soon' | 'upcoming' | 'not_planned'
+
+export interface SyncInfo {
+  started_at: string
+  finished_at: string | null
+  ok: boolean
+  mode: string
+  counts: Record<string, number>
+  error: string | null
+  triggered_by: string
+}
+
+export interface StudySource {
+  connector: { name: string; mode: 'mock' | 'import' | 'api'; mock_reason: string | null }
+  last_sync: SyncInfo | null
+  last_successful_sync_at: string | null
+}
+
+export interface Milestone {
+  id: string
+  name: string
+  planned_date: string | null
+  actual_date: string | null
+  state: MilestoneState
+}
+
+export interface StudySite {
+  id: string
+  site_number: string
+  name: string
+  country: string | null
+  principal_investigator: string | null
+  status: string | null
+  activation_date: string | null
+  enrolled: number | null
+  enrolment_target: number | null
+  enrolment_percent: number | null
+}
+
+export interface StudySummary {
+  id: string
+  protocol_number: string
+  title: string
+  sponsor: string | null
+  phase: string | null
+  therapeutic_area: string | null
+  status: string | null
+  countries: string[]
+  project_manager: string | null
+  in_source: boolean
+  synced_at: string
+  site_count: number
+  enrolled: number | null
+  enrolment_target: number | null
+  enrolment_percent: number | null
+  overdue_milestones: number
+  next_milestone: Milestone | null
+  open_tasks: number
+  open_risks: number
+}
+
+export type Rules = Record<string, string>
+
+export interface StudyListResponse {
+  studies: StudySummary[]
+  total_unfiltered: number
+  statuses: string[]
+  phases: string[]
+  source: StudySource
+  rules: Rules
+}
+
+export interface StudyDetailResponse {
+  study: StudySummary
+  sites: StudySite[]
+  milestones: Milestone[]
+  source: StudySource
+  rules: Rules
+}
+
+export interface StudyFilters {
+  q?: string
+  status?: string
+  phase?: string
+}
+
+// --- Tasks, risks and issues (managed in Avi.Intelligence) ------------------------------------
+
+export interface Person {
+  id: string
+  name: string
+  email: string
+  job_title: string
+  demo: boolean
+}
+
+export interface StudyRef {
+  id: string
+  protocol_number: string
+  title: string
+}
+
+export const TASK_STATUSES = ['Not started', 'In progress', 'Blocked', 'Completed', 'Cancelled'] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
+
+export interface Task {
+  id: string
+  reference: string
+  study: StudyRef
+  title: string
+  description: string | null
+  assignee_id: string
+  assignee_name: string
+  due_date: string | null
+  status: TaskStatus
+  overdue: boolean
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  can_update_status: boolean
+}
+
+export interface TaskListResponse {
+  tasks: Task[]
+  can_manage: boolean
+  statuses: TaskStatus[]
+}
+
+export interface TaskFilters {
+  study_id?: string
+  assignee?: string
+  include_closed?: boolean
+}
+
+export interface TaskInput {
+  study_id: string
+  title: string
+  description?: string | null
+  assignee_id: string
+  due_date?: string | null
+}
+
+export const RISK_STATUSES = ['Open', 'Mitigating', 'Closed'] as const
+export type RiskStatus = (typeof RISK_STATUSES)[number]
+export type RiskKind = 'risk' | 'issue'
+
+export interface Risk {
+  id: string
+  reference: string
+  kind: RiskKind
+  study: StudyRef
+  title: string
+  description: string | null
+  likelihood: number
+  impact: number
+  score: number
+  rating: 'Low' | 'Medium' | 'High'
+  mitigation: string | null
+  owner_id: string
+  owner_name: string
+  status: RiskStatus
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  closed_at: string | null
+  can_update_status: boolean
+}
+
+export interface RiskListResponse {
+  risks: Risk[]
+  can_manage: boolean
+  statuses: RiskStatus[]
+}
+
+export interface RiskFilters {
+  study_id?: string
+  kind?: RiskKind
+  owner?: string
+  include_closed?: boolean
+}
+
+export interface RiskInput {
+  study_id: string
+  kind: RiskKind
+  title: string
+  description?: string | null
+  likelihood: number
+  impact: number
+  mitigation?: string | null
+  owner_id: string
+}

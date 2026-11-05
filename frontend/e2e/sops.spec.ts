@@ -37,5 +37,6 @@ test('administration shows the SharePoint connector in demo mode', async ({ page
   await page.goto('/admin')
   await expect(page).toHaveURL(/\/admin\/connectors/)
   await expect(page.getByText('SharePoint: SOP library')).toBeVisible()
-  await expect(page.getByText('Demo mode')).toBeVisible()
+  // Several connectors can be in demo mode; check the SharePoint card's own badge.
+  await expect(page.getByText('Demo mode').first()).toBeVisible()
 })

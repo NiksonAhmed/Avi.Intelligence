@@ -1,4 +1,4 @@
-import { CheckCircleFilled, CloseCircleFilled, ReloadOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, CloseCircleFilled, ReloadOutlined, SyncOutlined } from '@ant-design/icons'
 import {
   Alert,
   Button,
@@ -13,8 +13,15 @@ import {
   Typography,
 } from 'antd'
 
-import { useHasPermission, useMe, useSharePointStatus } from '../../api/hooks'
+import {
+  useHasPermission,
+  useMe,
+  useSharePointStatus,
+  useSimpleTrialsStatus,
+  useSyncSimpleTrials,
+} from '../../api/hooks'
 import type { ConnectorColumn } from '../../api/types'
+import { formatDateTime } from '../../lib/format'
 import { Forbidden } from '../../components/Forbidden'
 import { PageHeader } from '../../components/PageHeader'
 import { AssistantAdminCard } from './AssistantAdminCard'
@@ -30,7 +37,66 @@ const FIELD_LABELS: Record<string, string> = {
   department: 'Department',
 }
 
-const PLANNED = ['SimpleTrials', 'Avie Safety database', 'Viedoc', 'Medidata Rave', 'Email (Microsoft 365)']
+const PLANNED = ['Avie Safety database', 'Viedoc', 'Medidata Rave', 'Email (Microsoft 365)']
+
+function SimpleTrialsCard({ enabled }: { enabled: boolean }) {
+  const { data, isLoading } = useSimpleTrialsStatus(enabled)
+  const sync = useSyncSimpleTrials()
+  const last = data?.last_sync
+  return (
+    <Card
+      title="SimpleTrials: studies, sites and milestones"
+      style={{ marginTop: 16 }}
+      extra={
+        data && (
+          <Tag color={data.connector.mode === 'mock' ? 'warning' : last?.ok ? 'success' : 'error'}>
+            {data.connector.mode === 'mock' ? 'Demo mode' : last?.ok ? 'Connected' : 'Sync problem'}
+          </Tag>
+        )
+      }
+    >
+      {isLoading || !data ? (
+        <Skeleton active />
+      ) : (
+        <Flex vertical gap={12}>
+          {data.connector.mock_reason && (
+            <Typography.Text type="secondary">{data.connector.mock_reason}</Typography.Text>
+          )}
+          <Descriptions
+            column={1}
+            size="small"
+            items={[
+              { key: 'mode', label: 'Mode', children: data.connector.mode },
+              {
+                key: 'last',
+                label: 'Last sync',
+                children: last
+                  ? `${formatDateTime(last.finished_at ?? last.started_at)} · ${last.ok ? 'succeeded' : 'failed'} · by ${last.triggered_by}`
+                  : 'Never',
+              },
+              {
+                key: 'counts',
+                label: 'Result',
+                children: last?.ok
+                  ? `${last.counts.studies ?? 0} studies (${last.counts.created ?? 0} new, ${last.counts.updated ?? 0} updated, ${last.counts.no_longer_in_source ?? 0} no longer in source)`
+                  : (last?.error ?? '—'),
+              },
+            ]}
+          />
+          <div>
+            <Button icon={<SyncOutlined />} loading={sync.isPending} onClick={() => sync.mutate()}>
+              Sync now
+            </Button>
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Next: import SimpleTrials export files, then the SimpleTrials API if available. See
+            docs/simpletrials-setup.md.
+          </Typography.Text>
+        </Flex>
+      )}
+    </Card>
+  )
+}
 
 export function ConnectorsPage() {
   const me = useMe()
@@ -167,6 +233,8 @@ export function ConnectorsPage() {
           </Row>
         )}
       </Card>
+
+      <SimpleTrialsCard enabled={allowed} />
 
       <AssistantAdminCard />
 

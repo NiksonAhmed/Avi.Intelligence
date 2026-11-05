@@ -36,6 +36,19 @@ export function formatDateTime(value: string | null | undefined): string {
   return d ? dateTimeFormat.format(d) : '—'
 }
 
+const dayFormat = new Intl.DateTimeFormat('en-AU', {
+  timeZone: 'UTC',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+})
+
+/** Formats a calendar date ("2026-11-05", no time or zone) exactly as recorded. */
+export function formatDay(value: string | null | undefined): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '—'
+  return dayFormat.format(new Date(`${value}T00:00:00Z`))
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '—'
   if (bytes < 1024) return `${bytes} B`

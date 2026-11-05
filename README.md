@@ -3,8 +3,9 @@
 **Smarter clinical trial operations.** An AI-assisted CRO operations platform for Avion Medical,
 designed to become a configurable product for other Contract Research Organisations.
 
-> **Status: early development.** Implemented so far: the app shell and *Documents and Knowledge → SOPs*
-> (read from SharePoint), role-based access, an audit trail and connector diagnostics.
+> **Status: early development.** Implemented so far: the app shell, *Documents and Knowledge → SOPs*
+> (read from SharePoint), the Study Command Centre (SimpleTrials demo data), tasks, risks and issues,
+> role-based access, an audit trail and connector diagnostics.
 > Sign-in (Microsoft Entra ID) is **not** implemented yet, so run it on a developer machine only.
 
 ## What works today
@@ -16,10 +17,12 @@ designed to become a configurable product for other Contract Research Organisati
 | Roles | admin, project_manager, cra, data_manager, safety, viewer, enforced in the API. |
 | Audit trail | Append-only record of SOP downloads and connector tests. |
 | Administration | SharePoint connection test, library columns and field mapping, AI index status and re-index. |
+| Study Portfolio and Command Centre | Studies, sites, milestones and enrolment from SimpleTrials (**demo data** until SimpleTrials is connected; see [docs/simpletrials-setup.md](docs/simpletrials-setup.md)). One workspace per study with milestones, sites, tasks and risks. Overdue and enrolment indicators follow stated rules; nothing is estimated. |
+| My Tasks, Risks and Issues | Administrators create and assign tasks and risks; only the assigned person (or risk owner) can change the status; everyone else is read-only. Every change is audited. |
 | Ask Avi.Intelligence | Chatbot (Documents and Knowledge → Ask, or the header button) that answers from **effective SOPs only**, with numbered citations to SOP and section, labelled as an AI suggestion. Without an API key it shows the most relevant SOP passages instead. Every question is logged. |
 
-Roadmap: Entra ID sign-in → templates and study documents → SimpleTrials, Avie Safety database, Viedoc,
-Rave and email connectors → Study Command Centre.
+Roadmap: SimpleTrials export import, then API → Entra ID sign-in → templates and study documents →
+Avie Safety database, Viedoc, Rave and email connectors.
 
 ### AI assistant set-up
 
@@ -41,7 +44,7 @@ using real SOPs.
 ```
 backend/    FastAPI, SQLAlchemy, Alembic, pytest      (Python 3.12, uv)
 frontend/   React, TypeScript, Vite, Ant Design        (Node 24, npm)
-docs/       sharepoint-setup.md, decisions.md
+docs/       sharepoint-setup.md, simpletrials-setup.md, decisions.md
 docker-compose.yml   PostgreSQL + API + web app
 ```
 

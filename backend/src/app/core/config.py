@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Development-only stand-in for sign-in (ignored in production): admin, project_manager, cra,
     # data_manager, safety or viewer. Lets you check what each role can see.
     dev_user_role: str = "admin"
+    # Which person in the demo directory the development user is (see app/auth/directory.py), so
+    # "My Tasks" and assignee-only status changes can be tried locally.
+    dev_user_id: str = "dev-user"
 
     # SQLite for an isolated local demo; PostgreSQL in Docker Compose / production.
     database_url: str = "sqlite:///./avi_intelligence.db"
@@ -44,6 +47,10 @@ class Settings(BaseSettings):
     # Comma-separated file extensions treated as SOP documents.
     sharepoint_sop_file_types: str = "docx,doc,pdf"
     sharepoint_cache_minutes: int = Field(default=5, ge=0, le=1440)
+
+    # --- SimpleTrials (CTMS) ---
+    # Only "mock" (demo studies) exists today; "import" (SimpleTrials exports) and "api" come next.
+    simpletrials_mode: Literal["mock"] = "mock"
 
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None

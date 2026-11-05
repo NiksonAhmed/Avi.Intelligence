@@ -2,6 +2,34 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-05: Study Command Centre (SimpleTrials, tasks, risks)
+
+**Source of truth.** Study, site and milestone data belongs to SimpleTrials (Avion's CTMS). It is synced
+into a read-only local copy (`studies`, `study_sites`, `study_milestones`) with `synced_at`, and every
+sync run is stored in `connector_syncs` and audited. Only a demo connector exists until Avion obtains a
+SimpleTrials export or API access (see `docs/simpletrials-setup.md`). Demo studies use fictional
+sponsors, sites and people, and every screen says "Demo data".
+
+**Sync, not live fetch.** Unlike SOPs, study data is copied on sync (automatic on first use, then
+"Sync now"). This keeps screens fast and gives a record of what was shown when. Failed syncs keep the
+previous copy; studies missing from the source are flagged, never deleted, so linked work survives.
+
+**Access rules (agreed with the user).** Tasks and risks are managed in Avi.Intelligence. Only
+administrators (`work.manage`) create, assign and edit them. The assigned person (task) or owner (risk)
+may change its status; everyone else is read-only. Only administrators can cancel a task. Nothing is
+deleted. Checks are server-side; the UI shows a lock on read-only status.
+
+**Indicators.** Overdue = planned/due date passed with no actual/completion. Enrolment % only when a
+target exists ("no target recorded" otherwise). Risk score = likelihood × impact as entered. Rule
+texts are served by the API (`rules`) and shown as tooltips. No AI scoring in this release.
+
+**People.** A demo directory stands in for Microsoft Entra ID. `DEV_USER_ID` picks which demo person the
+local developer is, to try assignee-only behaviour.
+
+**Assumptions / open.** Avion may already track tasks or risks in SimpleTrials; if so they should come
+from there. Per-user study access (only "my studies") waits for Entra sign-in. Reference numbers
+(TSK-0001) are count-based, fine for one database but not for concurrent writers at scale.
+
 ## 2026-11-05: Ask Avi.Intelligence (SOP chatbot)
 
 **Grounding.** Answers come only from SOPs with status *Effective*. Passages are retrieved locally and
