@@ -8,7 +8,7 @@ from app.core.config import Settings, get_settings
 
 from .graph_client import GraphClient
 from .live import GraphSopConnector
-from .mapping import parse_field_map
+from .mapping import parse_field_map, parse_list_setting
 from .mock import MockSopConnector
 from .models import SopConnector
 
@@ -37,6 +37,8 @@ def build_sop_connector(settings: Settings) -> SopConnector:
         folder=settings.sharepoint_sop_folder,
         field_map=parse_field_map(settings.sharepoint_sop_field_map),
         cache_seconds=settings.sharepoint_cache_minutes * 60,
+        exclude_folders=parse_list_setting(settings.sharepoint_sop_exclude_folders, ";"),
+        file_types=parse_list_setting(settings.sharepoint_sop_file_types, ","),
     )
 
 

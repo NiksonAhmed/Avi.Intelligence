@@ -46,6 +46,20 @@ SHAREPOINT_SOP_LIBRARY=Documents          # library name as shown in SharePoint
 SHAREPOINT_SOP_FOLDER=SOPs                # optional: limit to a folder (and its subfolders)
 ```
 
+### Avion's current configuration
+
+```ini
+SHAREPOINT_SITE_URL=https://netorg4530830.sharepoint.com/sites/AM
+SHAREPOINT_SOP_LIBRARY=Procedures and SoPs
+SHAREPOINT_SOP_FOLDER=1. Avion SoPs
+SHAREPOINT_SOP_EXCLUDE_FOLDERS=Avion Document Register;R3 Guideline Implementation
+SHAREPOINT_SOP_FILE_TYPES=docx,doc,pdf
+```
+
+SOPs are organised in department subfolders (`01. Clinical Operations` … `10. Medical Physics`). When the
+library has no department column, the department is taken from that subfolder name without its number.
+Only Word and PDF files count as SOPs; other files in the folder (e.g. Excel trackers) are ignored.
+
 ## 4. Check the connection
 
 ```powershell

@@ -270,3 +270,36 @@ def test_connection_check_reports_missing_library() -> None:
     check = asyncio.run(connector.test_connection())
     assert not check.ok
     assert "Available libraries: Controlled Documents, Documents" in (check.steps[-1].detail or "")
+
+
+def test_exclusions_file_types_and_department_from_folder() -> None:
+    fake = FakeGraph()
+    client = GraphClient("t", "c", "s", transport=httpx.MockTransport(fake), sleep=_no_sleep)
+    connector = GraphSopConnector(
+        client,
+        site_url=SITE,
+        library="Controlled Documents",
+        folder=None,
+        field_map=DEFAULT_FIELD_MAP,
+        cache_seconds=0,
+        exclude_folders=["Templates"],
+        file_types=["pdf"],
+    )
+    docs = asyncio.run(connector.list_sops()).documents
+    assert [d.sop_number for d in docs] == ["SOP-002", "SOP-003", "SOP-010"]  # template excluded
+
+    scoped = make_connector(FakeGraph())  # folder "SOPs"
+    by_number = {d.sop_number: d for d in asyncio.run(scoped.list_sops()).documents}
+    assert by_number["SOP-010"].department == "Clinical"  # from "SOPs/Clinical"
+    assert by_number["SOP-002"].department is None  # directly in the SOP folder
+
+    only_docx = GraphSopConnector(
+        GraphClient("t", "c", "s", transport=httpx.MockTransport(FakeGraph()), sleep=_no_sleep),
+        site_url=SITE,
+        library="Controlled Documents",
+        folder=None,
+        field_map=DEFAULT_FIELD_MAP,
+        cache_seconds=0,
+        file_types=["docx"],
+    )
+    assert [d.file_name for d in asyncio.run(only_docx.list_sops()).documents] == ["Template A.docx"]

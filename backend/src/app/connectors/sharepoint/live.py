@@ -13,6 +13,9 @@ from .graph_client import GraphClient, GraphError, site_lookup_path
 from .mapping import (
     FieldMap,
     collect_person_lookup_ids,
+    department_from_folder,
+    has_allowed_extension,
+    is_excluded_folder,
     is_within_folder,
     map_list_item_to_sop,
     sort_sops,
@@ -43,12 +46,16 @@ class GraphSopConnector:
         folder: str | None,
         field_map: FieldMap,
         cache_seconds: float,
+        exclude_folders: list[str] | None = None,
+        file_types: list[str] | None = None,
     ) -> None:
         self._client = client
         self._site_url = site_url
         self._library = library
         self._folder = folder.strip("/") if folder else None
         self._field_map = field_map
+        self._exclude_folders = exclude_folders or []
+        self._file_types = file_types or []
         self._cache_seconds = cache_seconds
         self._targets: tuple[str, str, str] | None = None  # site_id, drive_id, list_id
         self._cache: SopListResult | None = None
@@ -126,8 +133,16 @@ class GraphSopConnector:
         docs: list[SopDocument] = []
         for item in items:
             doc = map_list_item_to_sop(item, self._field_map, people.get)
-            if doc and is_within_folder(doc.folder_path, self._folder):
-                docs.append(doc)
+            if (
+                doc is None
+                or not is_within_folder(doc.folder_path, self._folder)
+                or is_excluded_folder(doc.folder_path, self._folder, self._exclude_folders)
+                or not has_allowed_extension(doc.file_name, self._file_types)
+            ):
+                continue
+            if not doc.department:
+                doc.department = department_from_folder(doc.folder_path, self._folder)
+            docs.append(doc)
         log.info("sharepoint.sops.fetched", extra={"count": len(docs), "items": len(items)})
         return sort_sops(docs)
 

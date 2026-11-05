@@ -178,3 +178,36 @@ def test_sort_is_natural_and_unnumbered_last() -> None:
     ]
     ordered = sort_sops([d for d in docs if d])
     assert [d.sop_number for d in ordered] == ["SOP-2", "SOP-10", None]
+
+
+class TestFolderRules:
+    def test_relative_folder_and_department(self) -> None:
+        from app.connectors.sharepoint.mapping import department_from_folder, relative_folder
+
+        scope = "1. Avion SoPs"
+        assert relative_folder("1. Avion SoPs/01. Clinical Operations/Monitoring", scope) == (
+            "01. Clinical Operations/Monitoring"
+        )
+        assert department_from_folder("1. Avion SoPs/01. Clinical Operations", scope) == "Clinical Operations"
+        assert department_from_folder("1. Avion SoPs/10. Medical Physics/Sub", scope) == "Medical Physics"
+        assert department_from_folder("1. Avion SoPs/08. IT", scope) == "IT"
+        assert department_from_folder("1. Avion SoPs", scope) is None
+
+    def test_excluded_folders_and_file_types(self) -> None:
+        from app.connectors.sharepoint.mapping import (
+            has_allowed_extension,
+            is_excluded_folder,
+            parse_list_setting,
+        )
+
+        scope = "1. Avion SoPs"
+        excluded = parse_list_setting("Avion Document Register; R3 Guideline Implementation ;", ";")
+        assert excluded == ["Avion Document Register", "R3 Guideline Implementation"]
+        assert is_excluded_folder("1. Avion SoPs/Avion Document Register", scope, excluded)
+        assert is_excluded_folder("1. Avion SoPs/r3 guideline implementation/x", scope, excluded)
+        assert not is_excluded_folder("1. Avion SoPs/01. Clinical Operations", scope, excluded)
+
+        types = parse_list_setting("docx,doc,pdf", ",")
+        assert has_allowed_extension("SOP-001 Thing.DOCX", types)
+        assert not has_allowed_extension("Q&A_Sponsor Driven Audit.xlsx", types)
+        assert has_allowed_extension("anything.xlsx", [])

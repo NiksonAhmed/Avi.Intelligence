@@ -186,6 +186,46 @@ def is_within_folder(folder_path: str, scope: str | None) -> bool:
     return a == b or a.startswith(f"{b}/")
 
 
+def relative_folder(folder_path: str, scope: str | None) -> str:
+    """Folder path relative to the configured SOP folder ("01. Clinical Operations/Monitoring")."""
+    path = folder_path.strip("/")
+    if not scope:
+        return path
+    prefix = scope.strip("/")
+    if path.lower() == prefix.lower():
+        return ""
+    if path.lower().startswith(prefix.lower() + "/"):
+        return path[len(prefix) + 1 :]
+    return path
+
+
+def department_from_folder(folder_path: str, scope: str | None) -> str | None:
+    """First subfolder under the SOP folder without its number.
+
+    "01. Clinical Operations" -> "Clinical Operations".
+    """
+    first = relative_folder(folder_path, scope).split("/", 1)[0].strip()
+    if not first:
+        return None
+    return re.sub(r"^\d+[.)\-\s]+\s*", "", first).strip() or first
+
+
+def parse_list_setting(raw: str | None, separator: str) -> list[str]:
+    return [p.strip().strip("/") for p in (raw or "").split(separator) if p.strip().strip("/")]
+
+
+def is_excluded_folder(folder_path: str, scope: str | None, excluded: list[str]) -> bool:
+    rel = relative_folder(folder_path, scope).lower()
+    return any(rel == e.lower() or rel.startswith(e.lower() + "/") for e in excluded)
+
+
+def has_allowed_extension(file_name: str, extensions: list[str]) -> bool:
+    if not extensions:
+        return True
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    return ext in {e.lower().lstrip(".") for e in extensions}
+
+
 def _to_datetime(value: Any) -> datetime | None:
     text = field_to_text(value)
     if not text:

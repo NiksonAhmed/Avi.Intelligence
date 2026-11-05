@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     sharepoint_sop_library: str = "Documents"
     sharepoint_sop_folder: str | None = None
     sharepoint_sop_field_map: str | None = None
+    # Semicolon-separated subfolders (relative to the SOP folder) that do not contain SOPs.
+    sharepoint_sop_exclude_folders: str | None = None
+    # Comma-separated file extensions treated as SOP documents.
+    sharepoint_sop_file_types: str = "docx,doc,pdf"
     sharepoint_cache_minutes: int = Field(default=5, ge=0, le=1440)
 
     # --- AI assistant (Anthropic Claude API) ---
@@ -55,6 +59,7 @@ class Settings(BaseSettings):
         "sharepoint_site_url",
         "sharepoint_sop_folder",
         "sharepoint_sop_field_map",
+        "sharepoint_sop_exclude_folders",
         mode="before",
     )
     @classmethod
