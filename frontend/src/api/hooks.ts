@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiRequest } from './client'
 import type {
+  AskResponse,
+  AssistantStatus,
   AuditPage,
+  ReindexResponse,
   Me,
   SharePointStatus,
   SopDetailResponse,
@@ -66,6 +69,36 @@ export function useSharePointStatus(enabled: boolean) {
     queryFn: () => apiRequest<SharePointStatus>('/connectors/sharepoint'),
     enabled,
     staleTime: 0,
+  })
+}
+
+export function useAssistantStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['assistant', 'status'],
+    queryFn: () => apiRequest<AssistantStatus>('/assistant/status'),
+    enabled,
+  })
+}
+
+export function useAsk() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (question: string) =>
+      apiRequest<AskResponse>('/assistant/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      }),
+    // The first question builds the index, so status counts change.
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assistant', 'status'] }),
+  })
+}
+
+export function useReindex() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<ReindexResponse>('/assistant/reindex', { method: 'POST' }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assistant'] }),
   })
 }
 

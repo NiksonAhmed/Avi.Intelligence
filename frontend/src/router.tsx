@@ -6,6 +6,7 @@ import { AppLayout } from './layout/AppLayout'
 import { NotFound } from './pages/NotFound'
 import { ConnectorsPage } from './pages/admin/ConnectorsPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
+import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
 import { SopListPage } from './pages/documents/SopListPage'
 
@@ -46,6 +47,7 @@ export const routes: RouteObject[] = [
       { path: 'documents', element: <Navigate to="/documents/sops" replace /> },
       { path: 'documents/sops', element: <SopListPage /> },
       { path: 'documents/sops/:sopId', element: <SopDetailPage /> },
+      { path: 'documents/ask', element: <AskPage /> },
       {
         path: 'reports',
         element: (

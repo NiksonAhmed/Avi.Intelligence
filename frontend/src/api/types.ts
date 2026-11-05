@@ -122,6 +122,62 @@ export interface AuditEvent {
   details: Record<string, unknown>
 }
 
+export interface AssistantCitation {
+  number: number
+  sop_id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  section: string
+  cited_text: string
+  web_url: string | null
+}
+
+export interface AnswerSegment {
+  text: string
+  citations: number[]
+}
+
+export interface AssistantExcerpt {
+  sop_id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  section: string
+  text: string
+}
+
+export interface AskResponse {
+  interaction_id: string
+  mode: 'ai' | 'search-only'
+  outcome: 'answered' | 'refused' | 'no-sources'
+  segments: AnswerSegment[]
+  citations: AssistantCitation[]
+  excerpts: AssistantExcerpt[]
+  notice: string | null
+  model: string | null
+  demo: boolean
+}
+
+export interface AssistantStatus {
+  ai_enabled: boolean
+  model: string | null
+  demo: boolean
+  documents: number
+  passages: number
+  failed: number
+  last_indexed_at: string | null
+  suggested_questions: string[]
+}
+
+export interface ReindexResponse {
+  indexed: number
+  unchanged: number
+  removed: number
+  failed: { sop: string; reason: string }[]
+  documents: { sop_number: string | null; title: string; version: string | null; passages: number; error: string | null }[]
+}
+
 export interface AuditPage {
   items: AuditEvent[]
   total: number

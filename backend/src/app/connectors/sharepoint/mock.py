@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from .demo_content import demo_text_for
 from .mapping import DEFAULT_FIELD_MAP, sort_sops
 from .models import (
     CheckStep,
@@ -246,11 +247,7 @@ class MockSopConnector:
         doc = await self.get_sop(sop_id)
         if not doc:
             return None
-        text = (
-            "DEMO DOCUMENT - not a controlled copy\n\n"
-            f"{doc.sop_number} {doc.title}\nVersion {doc.version}\n\n"
-            "This placeholder is served because SharePoint is not configured for Avi.Intelligence.\n"
-        ).encode()
+        text = demo_text_for(doc.sop_number, doc.title, doc.version).encode()
 
         async def body() -> AsyncIterator[bytes]:
             yield text

@@ -7,6 +7,9 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // The Vite dev server serves thousands of unbundled modules; more parallel browsers than this
+  // overloads a typical laptop and causes page-load timeouts.
+  workers: 2,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
@@ -28,6 +31,7 @@ export default defineConfig({
         SHAREPOINT_MODE: 'mock',
         DATABASE_URL: 'sqlite:///./e2e.db',
         DEV_USER_ROLE: 'admin',
+        ANTHROPIC_API_KEY: '', // e2e never calls the paid AI API; the assistant runs search-only
       },
       timeout: 120_000,
     },

@@ -12,7 +12,6 @@ import {
   Select,
   Statistic,
   Table,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -24,6 +23,7 @@ import { Link, useSearchParams } from 'react-router'
 import { useRefreshSops, useSops } from '../../api/hooks'
 import { SOP_STATUSES } from '../../api/types'
 import type { SopDocument, SopFilters, SopStatus } from '../../api/types'
+import { DocumentsTabs } from '../../components/DocumentsTabs'
 import { PageHeader } from '../../components/PageHeader'
 import { SourceBanner } from '../../components/SourceBanner'
 import { StatusTag } from '../../components/StatusTag'
@@ -126,14 +126,7 @@ export function SopListPage() {
         title="Documents and Knowledge"
         subtitle="Controlled documents from Avion SharePoint, kept in one place."
       />
-      <Tabs
-        activeKey="sops"
-        items={[
-          { key: 'sops', label: 'SOPs' },
-          { key: 'templates', label: 'Templates (coming next)', disabled: true },
-          { key: 'study', label: 'Study documents (coming next)', disabled: true },
-        ]}
-      />
+      <DocumentsTabs active="sops" />
 
       {isError && (
         <Alert

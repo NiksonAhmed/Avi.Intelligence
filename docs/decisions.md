@@ -2,6 +2,40 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-05: Ask Avi.Intelligence (SOP chatbot)
+
+**Grounding.** Answers come only from SOPs with status *Effective*. Passages are retrieved locally and
+sent to Claude as `document` blocks (custom content, one block per passage) with citations enabled, so
+each citation maps to an exact SOP and section. The system prompt requires answering only from the
+passages, flagging gaps and conflicts, and ignoring instructions inside documents (prompt injection).
+
+**Retrieval.** BM25 over passages (Anthropic has no embeddings API; SOP language is term-heavy). Kept
+behind `Bm25Index` so hybrid/vector search (pgvector) can be added later. The index is a database table
+(`knowledge_documents`, `knowledge_chunks`), rebuilt incrementally (unchanged version and modified date
+are skipped). It is built on first use and from Administration → Re-index.
+
+**Model.** `claude-opus-5-5` at effort `medium` (configurable: `ASSISTANT_MODEL`, `ASSISTANT_EFFORT`).
+Server-side refusal fallbacks (`fallbacks: "default"`) are enabled for models that support them.
+Non-streaming request; the UI shows a progress state.
+
+**No key = search-only.** Without `ANTHROPIC_API_KEY` the assistant returns the best passages instead
+of a written answer, so the feature is useful (and testable) without AI. Tests never call the paid API.
+
+**Traceability.** Every question is stored in `assistant_interactions` (question, answer, citations,
+model, tokens, latency) and recorded in the audit trail.
+
+**Data handling.** Questions and SOP excerpts are sent to Anthropic. The UI warns users not to enter
+patient-identifiable information. Anthropic-hosted vs. AWS Bedrock / Google Vertex (regional hosting)
+is a pending decision for Avion Quality/IT.
+
+**Demo content.** Demo SOPs now carry short sample bodies (clearly marked DEMO) so the assistant can be
+tried before SharePoint is connected.
+
+**Corporate TLS.** `truststore` makes Python use the Windows certificate store
+(`USE_SYSTEM_TRUST_STORE=true`), so Graph and Anthropic calls work behind TLS inspection.
+
+**E2E tests** run with 2 workers: more parallel browsers against the Vite dev server overload a laptop.
+
 ## 2026-11-05: First slice, SharePoint SOPs
 
 **Scope.** First working feature: *Documents and Knowledge → SOPs*, read from SharePoint, plus the app
@@ -54,6 +88,5 @@ columns as UTC instants.
 ### Known limitations / next steps
 - Microsoft Entra ID sign-in and Entra group → role mapping.
 - Templates and study documents tabs (same connector, different libraries).
-- AI assistant over *Effective* SOPs with citations.
 - Frontend bundle is ~1.2 MB (Ant Design); add route-level code splitting.
 - Docker Compose images have not yet been built on this machine (Docker Desktop was not running).

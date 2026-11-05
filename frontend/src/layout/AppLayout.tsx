@@ -1,4 +1,4 @@
-import { BellOutlined, MenuOutlined } from '@ant-design/icons'
+import { BellOutlined, MenuOutlined, MessageOutlined } from '@ant-design/icons'
 import {
   Avatar,
   Button,
@@ -151,6 +151,13 @@ export function AppLayout() {
               />
             </Flex>
             <Flex align="center" gap={8}>
+              <Button
+                icon={<MessageOutlined />}
+                aria-label="Ask Avi.Intelligence"
+                onClick={() => void navigate('/documents/ask')}
+              >
+                <span className="hide-on-tablet">Ask Avi.Intelligence</span>
+              </Button>
               {me?.auth_mode === 'development' && (
                 <Tag color="gold" className="hide-on-tablet">Development mode</Tag>
               )}

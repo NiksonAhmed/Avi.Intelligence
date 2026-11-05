@@ -17,6 +17,7 @@ import { useHasPermission, useMe, useSharePointStatus } from '../../api/hooks'
 import type { ConnectorColumn } from '../../api/types'
 import { Forbidden } from '../../components/Forbidden'
 import { PageHeader } from '../../components/PageHeader'
+import { AssistantAdminCard } from './AssistantAdminCard'
 
 const FIELD_LABELS: Record<string, string> = {
   sop_number: 'SOP number',
@@ -166,6 +167,8 @@ export function ConnectorsPage() {
           </Row>
         )}
       </Card>
+
+      <AssistantAdminCard />
 
       <Card title="Planned connectors" style={{ marginTop: 16 }}>
         <Flex gap={8} wrap>

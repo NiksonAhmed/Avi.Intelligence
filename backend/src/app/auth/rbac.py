@@ -30,6 +30,7 @@ class Permission(StrEnum):
     SOP_DOWNLOAD = "sop.download"
     CONNECTOR_MANAGE = "connector.manage"
     AUDIT_READ = "audit.read"
+    ASSISTANT_USE = "assistant.use"
 
 
 ROLE_LABELS: dict[Role, str] = {
@@ -41,7 +42,7 @@ ROLE_LABELS: dict[Role, str] = {
     Role.VIEWER: "Viewer",
 }
 
-_ALL_STAFF = {Permission.SOP_READ, Permission.SOP_DOWNLOAD}
+_ALL_STAFF = {Permission.SOP_READ, Permission.SOP_DOWNLOAD, Permission.ASSISTANT_USE}
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMIN: frozenset(Permission),
@@ -49,7 +50,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.CRA: frozenset(_ALL_STAFF),
     Role.DATA_MANAGER: frozenset(_ALL_STAFF),
     Role.SAFETY: frozenset(_ALL_STAFF),
-    Role.VIEWER: frozenset({Permission.SOP_READ}),
+    Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE}),
 }
 
 

@@ -15,10 +15,26 @@ designed to become a configurable product for other Contract Research Organisati
 | Status honesty | Status shows where it came from (status column, content approval, or inferred from version). Demo data is labelled everywhere. |
 | Roles | admin, project_manager, cra, data_manager, safety, viewer, enforced in the API. |
 | Audit trail | Append-only record of SOP downloads and connector tests. |
-| Administration | SharePoint connection test, library columns and field mapping. |
+| Administration | SharePoint connection test, library columns and field mapping, AI index status and re-index. |
+| Ask Avi.Intelligence | Chatbot (Documents and Knowledge → Ask, or the header button) that answers from **effective SOPs only**, with numbered citations to SOP and section, labelled as an AI suggestion. Without an API key it shows the most relevant SOP passages instead. Every question is logged. |
 
-Roadmap: Entra ID sign-in → templates and study documents → AI assistant over effective SOPs (with
-citations) → SimpleTrials, Avie Safety database, Viedoc, Rave and email connectors → Study Command Centre.
+Roadmap: Entra ID sign-in → templates and study documents → SimpleTrials, Avie Safety database, Viedoc,
+Rave and email connectors → Study Command Centre.
+
+### AI assistant set-up
+
+1. Create an API key at [console.anthropic.com](https://console.anthropic.com) and add it to `.env` as
+   `ANTHROPIC_API_KEY` (never commit it or paste it into chat).
+2. Restart the backend. Administration → Connectors shows "AI answers on".
+3. Ask a question. The SOP index is built automatically on first use; use **Re-index SOPs now** after
+   SOPs are published or superseded.
+
+How it works: SOP files (.docx, text-based .pdf, .txt) are split into sections and indexed (BM25 search).
+For each question the best-matching passages from up to 5 effective SOPs are sent to Claude
+(`claude-opus-5-5` by default) as citable documents; Claude must answer only from them and say when they
+don't cover the question. Draft, in-review and superseded SOPs are never indexed. Question text and SOP
+excerpts leave your network and are processed by Anthropic, so confirm this with Quality/IT before
+using real SOPs.
 
 ## Repository layout
 

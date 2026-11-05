@@ -7,11 +7,12 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 
+import truststore
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, sops
+from app.api import admin, assistant, sops
 from app.connectors.sharepoint.graph_client import GraphError
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -29,6 +30,10 @@ SECURITY_HEADERS = {
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    if settings.use_system_trust_store:
+        # Use the OS certificate store for outbound HTTPS (Graph, Anthropic), so corporate
+        # TLS-inspection certificates trusted by Windows are trusted here too.
+        truststore.inject_into_ssl()
 
     app = FastAPI(
         title="Avi.Intelligence API",
@@ -77,6 +82,7 @@ def create_app() -> FastAPI:
 
     app.include_router(sops.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(assistant.router, prefix="/api/v1")
     return app
 
 

@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     sharepoint_sop_field_map: str | None = None
     sharepoint_cache_minutes: int = Field(default=5, ge=0, le=1440)
 
+    # --- AI assistant (Anthropic Claude API) ---
+    anthropic_api_key: SecretStr | None = None
+    assistant_model: str = "claude-opus-5-5"
+    assistant_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+
+    # Trust the operating system's certificate store (needed behind TLS-inspecting proxies).
+    use_system_trust_store: bool = True
+
     @field_validator(
         "sharepoint_tenant_id",
         "sharepoint_client_id",
@@ -55,7 +63,7 @@ class Settings(BaseSettings):
             return None
         return v.strip() if isinstance(v, str) else v
 
-    @field_validator("sharepoint_client_secret", mode="before")
+    @field_validator("sharepoint_client_secret", "anthropic_api_key", mode="before")
     @classmethod
     def _blank_secret_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():

@@ -6,6 +6,7 @@ from alembic import context
 from app.audit import models as _audit_models  # noqa: F401  (registers tables on Base.metadata)
 from app.core.config import get_settings
 from app.db.session import Base
+from app.knowledge import models as _knowledge_models  # noqa: F401
 
 config = context.config
 
