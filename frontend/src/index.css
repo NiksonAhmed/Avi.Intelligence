@@ -1,0 +1,46 @@
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 1000;
+  padding: 8px 16px;
+  background: #ffffff;
+  color: #0a1f3c;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  left: 8px;
+}
+
+/* Visible keyboard focus on navy backgrounds. */
+.ant-layout-sider a:focus-visible,
+.ant-menu-dark .ant-menu-item:focus-visible {
+  outline: 2px solid #9cc0f5;
+  outline-offset: -2px;
+}
+
+.sider-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 31, 60, 0.45);
+  z-index: 15;
+}
+
+@media (max-width: 991px) {
+  .hide-on-tablet {
+    display: none !important;
+  }
+}
