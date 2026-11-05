@@ -105,7 +105,7 @@ export function AppLayout() {
         style={narrow ? { position: 'fixed', height: '100vh', zIndex: 20, left: 0, top: 0 } : undefined}
       >
         <div style={{ padding: '20px 20px 24px' }}>
-          <Link to="/" aria-label="Avi.Intelligence home">
+          <Link to="/" aria-label="Avi.Intelligence home" style={{ display: 'block' }}>
             <BrandMark />
           </Link>
         </div>
