@@ -66,7 +66,17 @@ function SimpleTrialsCard({ enabled }: { enabled: boolean }) {
             column={1}
             size="small"
             items={[
-              { key: 'mode', label: 'Mode', children: data.connector.mode },
+              {
+                key: 'mode',
+                label: 'Mode',
+                children:
+                  data.connector.mode === 'api'
+                    ? `API, read-only (${data.connector.scope === 'workspace' ? 'all studies' : 'single study'})`
+                    : 'Demo data',
+              },
+              ...(data.connector.base_url
+                ? [{ key: 'url', label: 'API address', children: data.connector.base_url }]
+                : []),
               {
                 key: 'last',
                 label: 'Last sync',
@@ -89,8 +99,8 @@ function SimpleTrialsCard({ enabled }: { enabled: boolean }) {
             </Button>
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Next: import SimpleTrials export files, then the SimpleTrials API if available. See
-            docs/simpletrials-setup.md.
+            Read-only: Avi.Intelligence never changes SimpleTrials data. Credentials live only in the
+            server&apos;s .env file. See docs/simpletrials-setup.md.
           </Typography.Text>
         </Flex>
       )}

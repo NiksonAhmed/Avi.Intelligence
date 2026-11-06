@@ -8,6 +8,7 @@ import pytest
 # Isolate tests from any developer .env before app modules read settings.
 os.environ["APP_ENV"] = "test"
 os.environ["SHAREPOINT_MODE"] = "mock"
+os.environ["SIMPLETRIALS_MODE"] = "mock"  # tests never call the real SimpleTrials API
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["USE_SYSTEM_TRUST_STORE"] = "false"

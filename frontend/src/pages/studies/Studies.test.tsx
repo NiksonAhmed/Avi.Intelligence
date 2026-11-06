@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   adminUser,
+  makeMilestone,
   makeStudy,
   makeStudyDetail,
   makeStudyList,
@@ -73,6 +74,107 @@ describe('Study Command Centre', () => {
     unmount()
     renderRoute(`/command-centre/${noTarget.id}`)
     expect(await screen.findByText('9 enrolled · no target recorded')).toBeInTheDocument()
+  })
+
+  it('shows SimpleTrials plan details and labels the sandbox study', async () => {
+    const sandbox = makeStudy({ sandbox: true })
+    const detail = makeStudyDetail(sandbox)
+    detail.milestones = [
+      makeMilestone({
+        id: 'p4',
+        kind: 'phase',
+        is_key: false,
+        name: '04. Site Startup Activities',
+        planned_date: '2026-08-24',
+        baseline_date: '2026-08-24',
+        state: 'overdue',
+        schedule: 'on_plan',
+        variance_days: 0,
+      }),
+      makeMilestone({
+        id: 'fpi',
+        parent_external_id: 'p4',
+        name: '04.05 First Patient In',
+        phase: '04. Site Startup Activities',
+        planned_date: '2026-06-11',
+        baseline_date: '2026-06-09',
+        percent_complete: 100,
+        variance_days: 2,
+        state: 'completed',
+        schedule: 'slipped',
+      }),
+      makeMilestone({
+        id: 'contract',
+        parent_external_id: 'p4',
+        kind: 'task',
+        is_key: false,
+        name: '04.03 Contract Negotiation',
+        planned_date: '2026-07-01',
+        baseline_date: '2026-05-01',
+        variance_days: 61,
+        state: 'overdue',
+        schedule: 'slipped_major',
+      }),
+    ]
+    mockApi({ ...routes(), [`/studies/${sandbox.id}`]: detail })
+    renderRoute(`/command-centre/${sandbox.id}`)
+    expect(await screen.findByText('SimpleTrials sandbox study')).toBeInTheDocument()
+
+    // Key milestones view (default): the key milestone with both end dates and both statuses.
+    expect(screen.getByText('04.05 First Patient In')).toBeInTheDocument()
+    expect(screen.getByLabelText('Key milestone')).toBeInTheDocument()
+    // (Scrollable tables render a measuring copy of the header, hence getAll.)
+    expect(screen.getAllByText('Current').length).toBeGreaterThan(0) // grouped under Start / End
+    expect(screen.getByText('+2 days')).toBeInTheDocument()
+    expect(screen.getByText('Completed')).toBeInTheDocument()
+    expect(screen.queryByText('04.03 Contract Negotiation')).not.toBeInTheDocument()
+
+    // Full plan: phases and tasks as in SimpleTrials.
+    await userEvent.click(screen.getByText('Full plan'))
+    expect(await screen.findByText('04.03 Contract Negotiation')).toBeInTheDocument()
+    expect(screen.getByText('+61 days')).toBeInTheDocument()
+    expect(screen.getByText('On plan')).toBeInTheDocument()
+    expect(screen.getAllByText('04. Site Startup Activities').length).toBeGreaterThan(0)
+    // Phase headings only group the plan: no Assign button on them, only on their entries.
+    expect(screen.queryByRole('button', { name: 'Assign a task for 04. Site Startup Activities' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Assign a task for 04.03 Contract Negotiation' })).toBeInTheDocument()
+  })
+
+  it('shows tasks assigned for plan items, green when completed, and offers Assign to admins', async () => {
+    const detail = makeStudyDetail(study)
+    detail.milestones = [
+      makeMilestone({ id: 'start', name: '01.01 Study Start', planned_date: '2026-02-19', state: 'overdue' }),
+      makeMilestone({ id: 'fpi', name: '04.05 First Patient In', planned_date: '2026-06-11', state: 'overdue' }),
+    ]
+    const done = makeTask({
+      reference: 'TSK-0009',
+      title: '01.01 Study Start',
+      plan_item: { external_id: 'start', name: '01.01 Study Start' },
+      assignee_name: 'Demo CRA One',
+      due_date: '2026-03-01',
+      status: 'Completed',
+      overdue: false,
+    })
+    mockApi({ ...routes(adminUser, [done]), [`/studies/${study.id}`]: detail })
+    renderRoute(`/command-centre/${study.id}`)
+
+    const cell = await screen.findByTestId('plan-task-TSK-0009')
+    expect(cell).toHaveTextContent('Demo CRA One')
+    expect(cell).toHaveTextContent('Due 01 Mar 26')
+    expect(cell).toHaveTextContent('Completed')
+    expect(cell.style.background).toContain('rgb(230, 244, 236)') // green (#E6F4EC) once completed
+    // No task yet for First Patient In: administrators can assign one from the plan.
+    await userEvent.click(screen.getByRole('button', { name: 'Assign a task for 04.05 First Patient In' }))
+    expect(await screen.findByText('For plan item: 04.05 First Patient In')).toBeInTheDocument()
+  })
+
+  it('does not offer Assign on the plan to non-administrators', async () => {
+    const detail = makeStudyDetail(study)
+    detail.milestones = [makeMilestone({ id: 'fpi', name: '04.05 First Patient In', state: 'overdue' })]
+    mockApi({ ...routes(viewerUser, []), [`/studies/${study.id}`]: detail })
+    renderRoute(`/command-centre/${study.id}`)
+    expect(await screen.findByText('04.05 First Patient In')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Assign a task/ })).not.toBeInTheDocument()
   })
 
   it('lets an administrator create tasks', async () => {

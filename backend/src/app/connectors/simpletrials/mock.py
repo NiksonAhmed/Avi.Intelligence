@@ -24,6 +24,7 @@ def _milestones(
             name=name,
             planned_date=_d(today, planned),
             actual_date=_d(today, actual),
+            is_key=True,
         )
         for i, (name, planned, actual) in enumerate(plan)
     ]

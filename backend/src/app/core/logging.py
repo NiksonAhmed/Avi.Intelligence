@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from datetime import UTC, datetime
 from typing import Any
@@ -11,8 +12,19 @@ from typing import Any
 _RESERVED = set(vars(logging.makeLogRecord({})).keys()) | {"message", "asctime"}
 
 
+_SECRET_PARAMS = re.compile(r"((?:study|customer)_key=)[^&\s\"']+", re.IGNORECASE)
+
+
+def redact(text: str) -> str:
+    """Mask API keys that some services (SimpleTrials) take as URL query parameters."""
+    return _SECRET_PARAMS.sub(r"\1***", text)
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        return redact(self._format(record))
+
+    def _format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname,

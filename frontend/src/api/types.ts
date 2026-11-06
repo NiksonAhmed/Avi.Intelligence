@@ -185,7 +185,18 @@ export interface AuditPage {
 
 // --- Studies (read-only copy of SimpleTrials) -------------------------------------------------
 
-export type MilestoneState = 'completed' | 'overdue' | 'due_soon' | 'upcoming' | 'not_planned'
+/** Progress status: against the current end date. */
+export type MilestoneState =
+  | 'completed'
+  | 'overdue'
+  | 'due_soon'
+  | 'in_progress'
+  | 'not_started'
+  | 'upcoming'
+  | 'not_planned'
+
+/** Schedule status: current end date compared with the original (baseline) end date. */
+export type ScheduleState = 'on_plan' | 'slipped' | 'slipped_major' | 'ahead' | 'no_baseline'
 
 export interface SyncInfo {
   started_at: string
@@ -198,17 +209,42 @@ export interface SyncInfo {
 }
 
 export interface StudySource {
-  connector: { name: string; mode: 'mock' | 'import' | 'api'; mock_reason: string | null }
+  connector: {
+    name: string
+    mode: 'mock' | 'import' | 'api'
+    mock_reason: string | null
+    scope: 'workspace' | 'study' | null
+    base_url: string | null
+  }
   last_sync: SyncInfo | null
   last_successful_sync_at: string | null
 }
 
+/** One entry of the study plan (phase, task or milestone), in SimpleTrials order. */
 export interface Milestone {
   id: string
+  external_id: string
+  parent_external_id: string | null
+  kind: 'phase' | 'task' | 'milestone'
+  is_key: boolean
   name: string
+  phase: string | null
+  /** Current start date. */
+  start_date: string | null
+  /** Original (baseline) start date. */
+  baseline_start_date: string | null
+  /** Current start minus original start, in days (positive = later). */
+  start_variance_days: number | null
+  /** Current end date. */
   planned_date: string | null
   actual_date: string | null
+  /** Original (baseline) end date. */
+  baseline_date: string | null
+  percent_complete: number | null
+  /** Current end minus original end, in days (positive = later). */
+  variance_days: number | null
   state: MilestoneState
+  schedule: ScheduleState
 }
 
 export interface StudySite {
@@ -235,6 +271,7 @@ export interface StudySummary {
   countries: string[]
   project_manager: string | null
   in_source: boolean
+  sandbox: boolean
   synced_at: string
   site_count: number
   enrolled: number | null
@@ -290,10 +327,17 @@ export interface StudyRef {
 export const TASK_STATUSES = ['Not started', 'In progress', 'Blocked', 'Completed', 'Cancelled'] as const
 export type TaskStatus = (typeof TASK_STATUSES)[number]
 
+/** The study-plan entry (SimpleTrials milestone/task) a task was raised for. */
+export interface PlanItemRef {
+  external_id: string
+  name: string
+}
+
 export interface Task {
   id: string
   reference: string
   study: StudyRef
+  plan_item: PlanItemRef | null
   title: string
   description: string | null
   assignee_id: string
@@ -322,6 +366,7 @@ export interface TaskFilters {
 
 export interface TaskInput {
   study_id: string
+  plan_item_id?: string | null
   title: string
   description?: string | null
   assignee_id: string

@@ -21,18 +21,17 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { useRisks, useStudies, useStudy, useTasks } from '../../api/hooks'
-import type { Milestone, Risk, StudySite, Task } from '../../api/types'
+import type { PlanItemRef, Risk, StudySite, Task } from '../../api/types'
 import { ApiError } from '../../api/client'
 import { PageHeader } from '../../components/PageHeader'
-import { ProvenanceTag } from '../../components/ProvenanceTag'
+import { PlanTable } from '../../components/PlanTable'
 import { StudySourceBanner } from '../../components/StudySourceBanner'
-import { ToneTag } from '../../components/ToneTag'
 import { RiskFormModal } from '../../components/work/RiskFormModal'
 import { RiskTable } from '../../components/work/RiskTable'
 import { TaskFormModal } from '../../components/work/TaskFormModal'
 import { TaskTable } from '../../components/work/TaskTable'
 import { formatDateTime, formatDay } from '../../lib/format'
-import { MILESTONE_STATE, enrolmentText } from '../../lib/studies'
+import { enrolmentText } from '../../lib/studies'
 import { EnrolmentCell } from './StudyPortfolioPage'
 
 const TABS = ['milestones', 'sites', 'tasks', 'risks'] as const
@@ -79,9 +78,12 @@ export function StudyCommandCentrePage() {
   const tab: TabKey = tabParam && TABS.includes(tabParam) ? tabParam : 'milestones'
 
   const study = useStudy(studyId)
-  const tasks = useTasks({ study_id: studyId })
+  // Closed tasks too: the plan shows completed tasks (in green); the Tasks tab lists open ones.
+  const tasks = useTasks({ study_id: studyId, include_closed: true })
   const risks = useRisks({ study_id: studyId })
-  const [taskModal, setTaskModal] = useState<{ open: boolean; task?: Task | null }>({ open: false })
+  const [taskModal, setTaskModal] = useState<{ open: boolean; task?: Task | null; planItem?: PlanItemRef }>({
+    open: false,
+  })
   const [riskModal, setRiskModal] = useState<{ open: boolean; risk?: Risk | null }>({ open: false })
 
   if (study.isError) {
@@ -99,29 +101,8 @@ export function StudyCommandCentrePage() {
 
   const { study: s, sites, milestones, source, rules } = study.data
   const canManage = Boolean(tasks.data?.can_manage)
-
-  const milestoneColumns = [
-    { title: 'Milestone', dataIndex: 'name' },
-    { title: 'Planned', dataIndex: 'planned_date', width: 140, render: (d: string | null) => formatDay(d) },
-    { title: 'Actual', dataIndex: 'actual_date', width: 140, render: (d: string | null) => formatDay(d) },
-    {
-      title: 'State',
-      dataIndex: 'state',
-      width: 170,
-      render: (_: unknown, m: Milestone) => (
-        <ToneTag
-          tone={MILESTONE_STATE[m.state]}
-          help={
-            m.state === 'overdue'
-              ? rules.milestone_overdue
-              : m.state === 'due_soon'
-                ? rules.milestone_due_soon
-                : undefined
-          }
-        />
-      ),
-    },
-  ]
+  const allTasks = tasks.data?.tasks ?? []
+  const openTasks = allTasks.filter((t) => t.status !== 'Completed' && t.status !== 'Cancelled')
 
   const siteColumns = [
     { title: 'Site', dataIndex: 'site_number', width: 80 },
@@ -158,9 +139,17 @@ export function StudyCommandCentrePage() {
       <PageHeader
         title={`${s.protocol_number} · ${s.title}`}
         breadcrumbs={[{ title: 'Study Command Centre', to: '/command-centre' }, { title: s.protocol_number }]}
-        extra={<ProvenanceTag kind="record" source={source.connector.mode === 'mock' ? 'Demo' : 'SimpleTrials'} />}
       />
       <StudySourceBanner source={source} />
+      {s.sandbox && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="SimpleTrials sandbox study"
+          description="This is SimpleTrials' training study. Its data is fictitious, not a real Avion study."
+        />
+      )}
       {!s.in_source && (
         <Alert
           type="error"
@@ -227,15 +216,16 @@ export function StudyCommandCentrePage() {
           items={[
             {
               key: 'milestones',
-              label: `Milestones (${milestones.length})`,
+              label: `Milestones & tasks (${milestones.filter((m) => m.kind !== 'phase').length})`,
               children: (
-                <Table<Milestone>
-                  rowKey="id"
-                  size="middle"
-                  pagination={false}
-                  columns={milestoneColumns}
-                  dataSource={milestones}
-                  locale={{ emptyText: <Empty description="SimpleTrials has no milestones for this study." /> }}
+                <PlanTable
+                  items={milestones}
+                  rules={rules}
+                  tasks={allTasks}
+                  canManage={canManage}
+                  onAssign={(m) =>
+                    setTaskModal({ open: true, planItem: { external_id: m.external_id, name: m.name } })
+                  }
                 />
               ),
             },
@@ -269,7 +259,7 @@ export function StudyCommandCentrePage() {
                     )}
                   </Flex>
                   <TaskTable
-                    tasks={tasks.data?.tasks ?? []}
+                    tasks={openTasks}
                     loading={tasks.isLoading}
                     canManage={canManage}
                     onEdit={(task) => setTaskModal({ open: true, task })}
@@ -309,6 +299,7 @@ export function StudyCommandCentrePage() {
       <TaskFormModal
         open={taskModal.open}
         task={taskModal.task}
+        planItem={taskModal.planItem}
         defaultStudyId={s.id}
         onClose={() => setTaskModal({ open: false })}
       />

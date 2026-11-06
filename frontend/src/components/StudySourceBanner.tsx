@@ -54,6 +54,7 @@ export function StudySourceBanner({ source }: { source: StudySource }) {
             <ProvenanceTag kind="record" source="SimpleTrials" />
             <Typography.Text type="secondary">
               <CloudSyncOutlined /> Last synced {synced ? formatDateTime(synced) : 'never'}
+              {source.connector.scope === 'study' && ' · single-study API access'}
             </Typography.Text>
           </Flex>
           {syncButton}

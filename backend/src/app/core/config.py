@@ -49,8 +49,20 @@ class Settings(BaseSettings):
     sharepoint_cache_minutes: int = Field(default=5, ge=0, le=1440)
 
     # --- SimpleTrials (CTMS) ---
-    # Only "mock" (demo studies) exists today; "import" (SimpleTrials exports) and "api" come next.
-    simpletrials_mode: Literal["mock"] = "mock"
+    # auto = API when credentials are set, otherwise demo studies. api | mock force a mode.
+    simpletrials_mode: Literal["auto", "api", "mock"] = "auto"
+    simpletrials_base_url: str = "https://app.simpletrials.com/api/v1/"
+    # Single-study read-only credentials (e.g. the Sandbox study) ...
+    simpletrials_study_id: str | None = None
+    simpletrials_study_key: SecretStr | None = None
+    # ... or Workspace/All Studies read-only credentials (take precedence when set).
+    simpletrials_customer_id: str | None = None
+    simpletrials_customer_key: SecretStr | None = None
+    # Key milestones (portfolio headline). SimpleTrials' coded milestones are always key; these
+    # extra names are matched case-insensitively, ignoring numbering like "07.03 " (semicolon-separated).
+    simpletrials_key_milestones: str = (
+        "Protocol Finalized;First Ethics Approval;Database Hard Lock;Clinical Study Report Finalized"
+    )
 
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None
@@ -67,6 +79,8 @@ class Settings(BaseSettings):
         "sharepoint_sop_folder",
         "sharepoint_sop_field_map",
         "sharepoint_sop_exclude_folders",
+        "simpletrials_study_id",
+        "simpletrials_customer_id",
         mode="before",
     )
     @classmethod
@@ -75,7 +89,13 @@ class Settings(BaseSettings):
             return None
         return v.strip() if isinstance(v, str) else v
 
-    @field_validator("sharepoint_client_secret", "anthropic_api_key", mode="before")
+    @field_validator(
+        "sharepoint_client_secret",
+        "anthropic_api_key",
+        "simpletrials_study_key",
+        "simpletrials_customer_key",
+        mode="before",
+    )
     @classmethod
     def _blank_secret_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():
@@ -85,6 +105,15 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def simpletrials_scope(self) -> Literal["workspace", "study"] | None:
+        """Which SimpleTrials credentials are configured (workspace wins over single study)."""
+        if self.simpletrials_customer_id and self.simpletrials_customer_key:
+            return "workspace"
+        if self.simpletrials_study_id and self.simpletrials_study_key:
+            return "study"
+        return None
 
     @property
     def sharepoint_has_credentials(self) -> bool:

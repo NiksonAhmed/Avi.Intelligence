@@ -1,10 +1,10 @@
-import { App, DatePicker, Form, Input, Modal, Select } from 'antd'
+import { Alert, App, DatePicker, Form, Input, Modal, Select } from 'antd'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 
 import { useCreateTask, usePeople, useStudies, useUpdateTask } from '../../api/hooks'
 import { TASK_STATUSES } from '../../api/types'
-import type { Task, TaskStatus } from '../../api/types'
+import type { PlanItemRef, Task, TaskStatus } from '../../api/types'
 
 interface Props {
   open: boolean
@@ -12,6 +12,8 @@ interface Props {
   /** Edit this task; omit to create a new one. */
   task?: Task | null
   defaultStudyId?: string
+  /** Create the task for this study-plan entry (e.g. "01.01 Study Start"). */
+  planItem?: PlanItemRef | null
 }
 
 interface Values {
@@ -24,7 +26,8 @@ interface Values {
 }
 
 /** Administrator form for creating, assigning and editing a task. */
-export function TaskFormModal({ open, onClose, task, defaultStudyId }: Props) {
+export function TaskFormModal({ open, onClose, task, defaultStudyId, planItem }: Props) {
+  const linked = task?.plan_item ?? planItem ?? null
   const [form] = Form.useForm<Values>()
   const studies = useStudies()
   const people = usePeople()
@@ -60,6 +63,7 @@ export function TaskFormModal({ open, onClose, task, defaultStudyId }: Props) {
       create.mutate(
         {
           study_id: v.study_id,
+          plan_item_id: planItem?.external_id ?? null,
           title: v.title,
           description: v.description ?? null,
           assignee_id: v.assignee_id,
@@ -95,9 +99,18 @@ export function TaskFormModal({ open, onClose, task, defaultStudyId }: Props) {
                 due_date: task.due_date ? dayjs(task.due_date) : null,
                 status: task.status,
               }
-            : { study_id: defaultStudyId }
+            : { study_id: defaultStudyId, title: planItem?.name }
         }
       >
+        {linked && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title={`For plan item: ${linked.name}`}
+            description="Completing this task does not change SimpleTrials. Its % complete there is updated separately."
+          />
+        )}
         <Form.Item name="study_id" label="Study" rules={[{ required: true, message: 'Choose a study' }]}>
           <Select
             disabled={editing}

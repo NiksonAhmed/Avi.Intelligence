@@ -75,6 +75,11 @@ export function StudyPortfolioPage() {
               {[s.sponsor, s.therapeutic_area].filter(Boolean).join(' · ')}
             </Typography.Text>
           </div>
+          {s.sandbox && (
+            <Tooltip title="SimpleTrials training study with fictitious data">
+              <Tag color="purple">Sandbox</Tag>
+            </Tooltip>
+          )}
           {!s.in_source && <Tag color="error">No longer in SimpleTrials</Tag>}
         </div>
       ),

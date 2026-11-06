@@ -9,19 +9,48 @@ from datetime import date
 from enum import StrEnum
 
 DUE_SOON_DAYS = 14
+MAJOR_SLIP_DAYS = 30
 
 
 class MilestoneState(StrEnum):
+    """Progress status: against the current end date and today."""
+
     COMPLETED = "completed"
     OVERDUE = "overdue"
     DUE_SOON = "due_soon"
+    IN_PROGRESS = "in_progress"
+    NOT_STARTED = "not_started"
     UPCOMING = "upcoming"
+    """Not due yet, and no start date to tell whether it has started."""
     NOT_PLANNED = "not_planned"
 
 
+class ScheduleState(StrEnum):
+    """Schedule status: current end date compared with the original (baseline) end date."""
+
+    ON_PLAN = "on_plan"
+    SLIPPED = "slipped"
+    SLIPPED_MAJOR = "slipped_major"
+    AHEAD = "ahead"
+    NO_BASELINE = "no_baseline"
+
+
 RULES: dict[str, str] = {
-    "milestone_overdue": "Overdue: the planned date has passed and SimpleTrials has no actual date.",
-    "milestone_due_soon": f"Due soon: planned within the next {DUE_SOON_DAYS} days, not yet completed.",
+    "milestone_overdue": "Overdue: the current end date has passed and SimpleTrials does not show it "
+    "as complete (no actual date, or less than 100% complete).",
+    "milestone_completed": "Completed: SimpleTrials has an actual date or shows 100% complete.",
+    "milestone_due_soon": f"Due soon: current end date within the next {DUE_SOON_DAYS} days, not completed.",
+    "milestone_in_progress": "In progress: the start date has passed, it is not complete and not yet due.",
+    "milestone_not_started": "Not started: the start date is still in the future.",
+    "schedule_on_plan": "On plan: the current end date is the same as the original (baseline) end date.",
+    "schedule_slipped": "Slipped: the current end date is later than the original (baseline) end date. "
+    f"More than {MAJOR_SLIP_DAYS} days is shown in red.",
+    "schedule_ahead": "Ahead: the current end date is earlier than the original (baseline) end date.",
+    "start_moved": "Start moved: the current start date differs from the original (baseline) start date "
+    "(+ later, − earlier). The Schedule status is based on end dates.",
+    "schedule_no_baseline": "No original (baseline) end date in SimpleTrials to compare with.",
+    "key_milestone": "Key milestone: SimpleTrials' standard study milestones (e.g. First Patient In) "
+    "and Avion's chosen list. Portfolio headline figures count key milestones only.",
     "enrolment": "Enrolment: participants enrolled at all sites, as reported by SimpleTrials, against "
     "the study target. Not shown when SimpleTrials has no target.",
     "risk_score": "Score: likelihood × impact as entered by the risk owner (1 = low, 3 = high). "
@@ -30,8 +59,15 @@ RULES: dict[str, str] = {
 }
 
 
-def milestone_state(planned: date | None, actual: date | None, today: date) -> MilestoneState:
-    if actual is not None:
+def milestone_state(
+    planned: date | None,
+    actual: date | None,
+    today: date,
+    percent_complete: int | None = None,
+    start: date | None = None,
+) -> MilestoneState:
+    """Progress status from the current end date (`planned`), start date and % complete."""
+    if actual is not None or percent_complete == 100:
         return MilestoneState.COMPLETED
     if planned is None:
         return MilestoneState.NOT_PLANNED
@@ -39,7 +75,27 @@ def milestone_state(planned: date | None, actual: date | None, today: date) -> M
         return MilestoneState.OVERDUE
     if (planned - today).days <= DUE_SOON_DAYS:
         return MilestoneState.DUE_SOON
+    if start is not None:
+        return MilestoneState.IN_PROGRESS if start <= today else MilestoneState.NOT_STARTED
     return MilestoneState.UPCOMING
+
+
+def variance_days(planned: date | None, baseline: date | None) -> int | None:
+    """Current end minus original end, in days (positive = later). None if either is unknown."""
+    if planned is None or baseline is None:
+        return None
+    return (planned - baseline).days
+
+
+def schedule_state(planned: date | None, baseline: date | None) -> ScheduleState:
+    days = variance_days(planned, baseline)
+    if days is None:
+        return ScheduleState.NO_BASELINE
+    if days == 0:
+        return ScheduleState.ON_PLAN
+    if days < 0:
+        return ScheduleState.AHEAD
+    return ScheduleState.SLIPPED_MAJOR if days > MAJOR_SLIP_DAYS else ScheduleState.SLIPPED
 
 
 def enrolment_percent(enrolled: int | None, target: int | None) -> float | None:

@@ -43,6 +43,8 @@ class Study(Base):
     countries: Mapped[list[str]] = mapped_column(JSON, default=list)
     project_manager: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enrolment_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enrolled: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
     in_source: Mapped[bool] = mapped_column(Boolean, default=True)
     """False when the study no longer appears in SimpleTrials (kept so linked tasks/risks survive)."""
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -89,6 +91,16 @@ class StudyMilestone(Base):
     name: Mapped[str] = mapped_column(String(255))
     planned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     actual_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    baseline_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    percent_complete: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    phase: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Full CTMS plan: phases, tasks and milestones in SimpleTrials order (position).
+    kind: Mapped[str] = mapped_column(String(16), default="milestone", server_default="milestone")
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    baseline_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    parent_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    system_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_key: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     study: Mapped[Study] = relationship(back_populates="milestones")
 
@@ -117,6 +129,10 @@ class Task(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), index=True)
     reference: Mapped[str] = mapped_column(String(32))  # human-readable, e.g. TSK-0007
     study_id: Mapped[str] = mapped_column(String(36), ForeignKey("studies.id"), index=True)
+    # Optional link to an entry of the study plan (SimpleTrials task/milestone id, stable across syncs).
+    # The name is a snapshot so the link stays readable even if the plan entry later disappears.
+    plan_item_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    plan_item_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     assignee_id: Mapped[str] = mapped_column(String(255), index=True)

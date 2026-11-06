@@ -65,6 +65,13 @@ export function TaskTable({ tasks, loading, canManage, showStudy = false, onEdit
       render: (title: string, t) => (
         <div>
           <Typography.Text strong>{title}</Typography.Text>
+          {t.plan_item && t.plan_item.name !== title && (
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Plan: {t.plan_item.name}
+              </Typography.Text>
+            </div>
+          )}
           {t.description && (
             <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ margin: 0, fontSize: 13 }}>
               {t.description}

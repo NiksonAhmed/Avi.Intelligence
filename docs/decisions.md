@@ -2,6 +2,21 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-06: SimpleTrials API connector (read-only)
+
+**Access.** SimpleTrials REST API v1, enabled by an Avion SimpleTrials Administrator (Premium Plus),
+**read-only**, starting with the Sandbox study only. Workspace/All Studies access needs Avion approval.
+Keys live only in `.env`; they travel as URL query parameters (vendor design), so URLs are never
+logged, keys are masked in all log output and kept out of errors and stored sync messages.
+
+**Plan mirrors the CTMS.** All *Milestones & Tasks* entries are stored in SimpleTrials order (phases,
+tasks, milestones). A first rule ("zero duration = milestone") wrongly dropped First Patient In (2-day
+duration), so SimpleTrials' fixed milestone codes (`system_name`) also mark milestones.
+
+**Two statuses** per entry: Progress (vs current end date) and Schedule (current vs original end;
+red beyond 30 days). Completed = 100% complete, because the API has no actual completion date.
+**Key milestones** (coded ones + a configurable name list) alone drive Portfolio headline figures.
+
 ## 2026-11-05: Study Command Centre (SimpleTrials, tasks, risks)
 
 **Source of truth.** Study, site and milestone data belongs to SimpleTrials (Avion's CTMS). It is synced

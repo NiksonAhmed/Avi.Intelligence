@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth.rbac import Role
 from app.connectors.simpletrials.mock import MockStudyConnector, demo_studies
 from app.connectors.simpletrials.models import StudyConnectorInfo, StudyRecord
-from app.studies.models import Study
+from app.studies.models import Study, StudyMilestone
 from app.studies.rules import (
     MilestoneState,
     enrolment_percent,
@@ -132,6 +132,8 @@ class TestStudyApi:
         body = client.get(f"/api/v1/studies/{study['id']}").json()
         assert body["study"]["protocol_number"] == study["protocol_number"]
         assert body["milestones"] and all("state" in m for m in body["milestones"])
+        fields = {"start_date", "baseline_start_date", "start_variance_days", "baseline_date", "schedule"}
+        assert fields <= set(body["milestones"][0])
         assert client.get("/api/v1/studies/00000000-0000-0000-0000-000000000000").status_code == 404
 
     def test_viewer_can_read_but_not_sync(self, make_client) -> None:  # type: ignore[no-untyped-def]
@@ -239,6 +241,72 @@ class TestTaskPermissions:
         assert admin.post("/api/v1/tasks", json=bad_study).status_code == 422
         blank = {"study_id": study["id"], "title": "   ", "assignee_id": "demo-cra-1"}
         assert admin.post("/api/v1/tasks", json=blank).status_code == 422
+
+    def test_task_linked_to_plan_item(self, admin: TestClient, make_client) -> None:  # type: ignore[no-untyped-def]
+        study = _first_study(admin)
+        item = admin.get(f"/api/v1/studies/{study['id']}").json()["milestones"][0]
+        res = admin.post(
+            "/api/v1/tasks",
+            json={
+                "study_id": study["id"],
+                "plan_item_id": item["external_id"],
+                "title": item["name"],
+                "assignee_id": "demo-cra-1",
+                "due_date": "2027-01-15",
+            },
+        )
+        assert res.status_code == 201, res.text
+        task = res.json()
+        assert task["plan_item"] == {"external_id": item["external_id"], "name": item["name"]}
+
+        # The assignee completes it; the link and completion are visible to everyone (closed included).
+        assignee = make_client(Role.CRA, user_id="demo-cra-1")
+        assert (
+            assignee.post(f"/api/v1/tasks/{task['id']}/status", json={"status": "Completed"}).status_code
+            == 200
+        )
+        listed = (
+            make_client(Role.VIEWER)
+            .get("/api/v1/tasks", params={"study_id": study["id"], "include_closed": "true"})
+            .json()["tasks"]
+        )
+        assert listed[0]["plan_item"]["external_id"] == item["external_id"]
+        assert listed[0]["status"] == "Completed"
+        event = next(
+            e for e in admin.get("/api/v1/audit-events").json()["items"] if e["action"] == "task.created"
+        )
+        assert event["details"]["plan_item"] == item["name"]
+
+    def test_phase_headings_cannot_be_assigned(self, admin: TestClient, db_session: Session) -> None:
+        study = _first_study(admin)
+        item = admin.get(f"/api/v1/studies/{study['id']}").json()["milestones"][0]
+        row = db_session.scalars(select(StudyMilestone).where(StudyMilestone.id == item["id"])).one()
+        row.kind = "phase"
+        db_session.commit()
+        res = admin.post(
+            "/api/v1/tasks",
+            json={
+                "study_id": study["id"],
+                "plan_item_id": item["external_id"],
+                "title": "Whole phase",
+                "assignee_id": "demo-cra-1",
+            },
+        )
+        assert res.status_code == 422 and "phase" in res.json()["detail"]
+
+    def test_plan_item_must_belong_to_study(self, admin: TestClient) -> None:
+        studies = admin.get("/api/v1/studies").json()["studies"]
+        other_item = admin.get(f"/api/v1/studies/{studies[1]['id']}").json()["milestones"][0]
+        res = admin.post(
+            "/api/v1/tasks",
+            json={
+                "study_id": studies[0]["id"],
+                "plan_item_id": other_item["external_id"],
+                "title": "Wrong study link",
+                "assignee_id": "demo-cra-1",
+            },
+        )
+        assert res.status_code == 422
 
     def test_open_task_counts_on_portfolio(self, admin: TestClient) -> None:
         task = _create_task(admin)

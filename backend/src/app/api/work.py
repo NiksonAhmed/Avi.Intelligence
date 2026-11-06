@@ -22,7 +22,7 @@ from app.auth.directory import Person, get_person, list_people
 from app.auth.rbac import CurrentUser, Permission, require
 from app.db.session import get_db
 from app.studies.clock import today
-from app.studies.models import Risk, Study, Task
+from app.studies.models import Risk, Study, StudyMilestone, Task
 from app.studies.rules import (
     TASK_CLOSED,
     RiskKind,
@@ -84,10 +84,18 @@ class StudyRef(BaseModel):
 # --- Tasks ----------------------------------------------------------------------------------------
 
 
+class PlanItemRef(BaseModel):
+    """The study-plan entry (SimpleTrials milestone/task) a task was raised for."""
+
+    external_id: str
+    name: str
+
+
 class TaskOut(BaseModel):
     id: str
     reference: str
     study: StudyRef
+    plan_item: PlanItemRef | None
     title: str
     description: str | None
     assignee_id: str
@@ -110,6 +118,8 @@ class TaskListResponse(BaseModel):
 
 class TaskCreate(BaseModel):
     study_id: str
+    plan_item_id: str | None = Field(default=None, max_length=255)
+    """Optional: the study-plan entry this task is for (its SimpleTrials id)."""
     title: str = Field(min_length=3, max_length=300)
     description: str | None = Field(default=None, max_length=5000)
     assignee_id: str
@@ -137,6 +147,9 @@ def _task_out(task: Task, user: CurrentUser, now: date) -> TaskOut:
         id=task.id,
         reference=task.reference,
         study=StudyRef(id=task.study.id, protocol_number=task.study.protocol_number, title=task.study.title),
+        plan_item=PlanItemRef(external_id=task.plan_item_external_id, name=task.plan_item_name or "")
+        if task.plan_item_external_id
+        else None,
         title=task.title,
         description=task.description,
         assignee_id=task.assignee_id,
@@ -194,10 +207,25 @@ def list_tasks(
 def create_task(body: TaskCreate, request: Request, db: Db, user: Manager) -> TaskOut:
     study = _study_or_422(db, user.tenant_id, body.study_id)
     assignee = _person_or_422(body.assignee_id)
+    plan_item = None
+    if body.plan_item_id:
+        plan_item = db.scalars(
+            select(StudyMilestone).where(
+                StudyMilestone.study_id == study.id, StudyMilestone.external_id == body.plan_item_id
+            )
+        ).first()
+        if plan_item is None:
+            raise HTTPException(422, "That milestone or task is not in this study's plan.")
+        if plan_item.kind == "phase":
+            raise HTTPException(
+                422, "Assign tasks to a milestone or task within the phase, not the phase heading."
+            )
     task = Task(
         tenant_id=user.tenant_id,
         reference=_next_reference(db, Task, user.tenant_id, "TSK"),
         study_id=study.id,
+        plan_item_external_id=plan_item.external_id if plan_item else None,
+        plan_item_name=plan_item.name if plan_item else None,
         title=body.title,
         description=body.description,
         assignee_id=assignee.id,
@@ -216,7 +244,12 @@ def create_task(body: TaskCreate, request: Request, db: Db, user: Manager) -> Ta
         entity_type="task",
         entity_id=task.id,
         summary=f'Created {task.reference} "{task.title}" for {assignee.name} ({study.protocol_number})',
-        details={"study": study.protocol_number, "assignee": assignee.name, "due_date": str(body.due_date)},
+        details={
+            "study": study.protocol_number,
+            "plan_item": plan_item.name if plan_item else None,
+            "assignee": assignee.name,
+            "due_date": str(body.due_date),
+        },
         request=request,
     )
     return _task_out(_get_task(db, user.tenant_id, task.id), user, today())

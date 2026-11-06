@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 
 import type {
   Me,
+  Milestone,
   SopDetailResponse,
   SopDocument,
   SopListResponse,
@@ -91,7 +92,13 @@ export function makeSopDetail(doc: SopDocument): SopDetailResponse {
 }
 
 export const studySource: StudySource = {
-  connector: { name: 'SimpleTrials', mode: 'mock', mock_reason: 'SimpleTrials is not connected yet.' },
+  connector: {
+    name: 'SimpleTrials',
+    mode: 'mock',
+    mock_reason: 'SimpleTrials is not connected yet.',
+    scope: null,
+    base_url: null,
+  },
   last_sync: null,
   last_successful_sync_at: '2026-11-05T00:00:00Z',
 }
@@ -102,6 +109,29 @@ export const RULES = {
   enrolment: 'Enrolment: participants enrolled at all sites.',
   risk_score: 'Score: likelihood × impact.',
   task_overdue: 'Overdue task.',
+}
+
+export function makeMilestone(overrides: Partial<Milestone> = {}): Milestone {
+  return {
+    id: overrides.id ?? 'm',
+    external_id: overrides.id ?? 'm',
+    parent_external_id: null,
+    kind: 'milestone',
+    is_key: true,
+    name: 'Milestone',
+    phase: null,
+    start_date: null,
+    baseline_start_date: null,
+    start_variance_days: null,
+    planned_date: null,
+    actual_date: null,
+    baseline_date: null,
+    percent_complete: null,
+    variance_days: null,
+    state: 'upcoming',
+    schedule: 'no_baseline',
+    ...overrides,
+  }
 }
 
 export function makeStudy(overrides: Partial<StudySummary> = {}): StudySummary {
@@ -116,19 +146,14 @@ export function makeStudy(overrides: Partial<StudySummary> = {}): StudySummary {
     countries: ['Australia'],
     project_manager: 'Demo PM One',
     in_source: true,
+    sandbox: false,
     synced_at: '2026-11-05T00:00:00Z',
     site_count: 3,
     enrolled: 53,
     enrolment_target: 120,
     enrolment_percent: 44.2,
     overdue_milestones: 1,
-    next_milestone: {
-      id: 'm1',
-      name: '50% enrolled',
-      planned_date: '2026-10-26',
-      actual_date: null,
-      state: 'overdue',
-    },
+    next_milestone: makeMilestone({ id: 'm1', name: '50% enrolled', planned_date: '2026-10-26', state: 'overdue' }),
     open_tasks: 1,
     open_risks: 0,
     ...overrides,
@@ -164,8 +189,8 @@ export function makeStudyDetail(study: StudySummary): StudyDetailResponse {
       },
     ],
     milestones: [
-      { id: 'm0', name: 'First patient in', planned_date: '2026-04-29', actual_date: '2026-05-03', state: 'completed' },
-      study.next_milestone ?? { id: 'm1', name: 'LPI', planned_date: null, actual_date: null, state: 'not_planned' },
+      makeMilestone({ id: 'm0', name: 'First patient in', planned_date: '2026-04-29', actual_date: '2026-05-03', state: 'completed' }),
+      study.next_milestone ?? makeMilestone({ id: 'm1', name: 'LPI', state: 'not_planned' }),
     ],
     source: studySource,
     rules: RULES,
@@ -177,6 +202,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     id: '22222222-2222-2222-2222-222222222222',
     reference: 'TSK-0001',
     study: { id: '11111111-1111-1111-1111-111111111111', protocol_number: 'DEMO-ONC-301', title: 'Demo' },
+    plan_item: null,
     title: 'Collect signed CVs for site 102',
     description: null,
     assignee_id: 'u1',

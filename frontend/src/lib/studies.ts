@@ -1,4 +1,4 @@
-import type { MilestoneState, Risk, RiskStatus, TaskStatus } from '../api/types'
+import type { MilestoneState, Risk, RiskStatus, ScheduleState, TaskStatus } from '../api/types'
 
 /** Labels and accessible colours (text ≥ 4.5:1 on its background) for derived states. */
 export interface ToneStyle {
@@ -20,8 +20,34 @@ export const MILESTONE_STATE: Record<MilestoneState, ToneStyle> = {
   completed: { label: 'Completed', ...TONES.good },
   overdue: { label: 'Overdue', ...TONES.bad },
   due_soon: { label: 'Due soon', ...TONES.warn },
+  in_progress: { label: 'In progress', ...TONES.info },
+  not_started: { label: 'Not started', ...TONES.neutral },
   upcoming: { label: 'Upcoming', ...TONES.info },
-  not_planned: { label: 'No planned date', ...TONES.neutral },
+  not_planned: { label: 'No end date', ...TONES.neutral },
+}
+
+/** Rule key (from the API's `rules`) explaining each progress status. */
+export const MILESTONE_STATE_RULE: Partial<Record<MilestoneState, string>> = {
+  completed: 'milestone_completed',
+  overdue: 'milestone_overdue',
+  due_soon: 'milestone_due_soon',
+  in_progress: 'milestone_in_progress',
+  not_started: 'milestone_not_started',
+}
+
+export const SCHEDULE_STATE: Record<ScheduleState, ToneStyle & { rule: string }> = {
+  on_plan: { label: 'On plan', ...TONES.good, rule: 'schedule_on_plan' },
+  slipped: { label: 'Slipped', ...TONES.warn, rule: 'schedule_slipped' },
+  slipped_major: { label: 'Slipped', ...TONES.bad, rule: 'schedule_slipped' },
+  ahead: { label: 'Ahead', ...TONES.info, rule: 'schedule_ahead' },
+  no_baseline: { label: 'No original date', ...TONES.neutral, rule: 'schedule_no_baseline' },
+}
+
+/** "+2 days" / "−8 days" for slipped or ahead; the plain label otherwise. */
+export function scheduleLabel(state: ScheduleState, days: number | null): string {
+  if ((state === 'slipped' || state === 'slipped_major') && days !== null) return `+${days} days`
+  if (state === 'ahead' && days !== null) return `−${Math.abs(days)} days`
+  return SCHEDULE_STATE[state].label
 }
 
 export const TASK_STATUS_STYLE: Record<TaskStatus, ToneStyle> = {

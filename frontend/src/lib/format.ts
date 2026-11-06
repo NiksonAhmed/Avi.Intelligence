@@ -49,6 +49,19 @@ export function formatDay(value: string | null | undefined): string {
   return dayFormat.format(new Date(`${value}T00:00:00Z`))
 }
 
+const shortDayFormat = new Intl.DateTimeFormat('en-AU', {
+  timeZone: 'UTC',
+  day: '2-digit',
+  month: 'short',
+  year: '2-digit',
+})
+
+/** Compact calendar date for dense tables: "19 Feb 26". */
+export function formatDayShort(value: string | null | undefined): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '—'
+  return shortDayFormat.format(new Date(`${value}T00:00:00Z`))
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '—'
   if (bytes < 1024) return `${bytes} B`

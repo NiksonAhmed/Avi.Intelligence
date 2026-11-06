@@ -22,9 +22,12 @@ from app.studies.rules import (
     TASK_CLOSED,
     MilestoneState,
     RiskStatus,
+    ScheduleState,
     enrolment_percent,
     milestone_state,
+    schedule_state,
     total_enrolled,
+    variance_days,
 )
 from app.studies.sync import CONNECTOR_NAME, ensure_synced, last_sync, sync_studies
 
@@ -52,11 +55,32 @@ class StudySource(BaseModel):
 
 
 class MilestoneOut(BaseModel):
+    """One entry of the study plan (phase, task or milestone), in SimpleTrials order."""
+
     id: str
+    external_id: str
+    parent_external_id: str | None
+    kind: str
+    is_key: bool
     name: str
+    phase: str | None
+    start_date: date | None
+    """Current start date."""
+    baseline_start_date: date | None
+    """Original start date."""
+    start_variance_days: int | None
+    """Current start minus original start, in days (positive = later)."""
     planned_date: date | None
+    """Current end date."""
     actual_date: date | None
+    baseline_date: date | None
+    """Original end date."""
+    percent_complete: int | None
+    variance_days: int | None
     state: MilestoneState
+    """Progress status (against the current end date)."""
+    schedule: ScheduleState
+    """Schedule status (current vs original end date)."""
 
 
 class SiteOut(BaseModel):
@@ -83,6 +107,7 @@ class StudySummary(BaseModel):
     countries: list[str]
     project_manager: str | None
     in_source: bool
+    sandbox: bool
     synced_at: datetime
     site_count: int
     enrolled: int | None
@@ -126,10 +151,11 @@ def _sync_info(run: ConnectorSync | None) -> SyncInfo | None:
 
 
 def study_source(db: Session, connector: StudyConnector, tenant_id: str) -> StudySource:
-    ok_run = last_sync(db, tenant_id, successful_only=True)
+    mode = connector.info().mode
+    ok_run = last_sync(db, tenant_id, successful_only=True, mode=mode)
     return StudySource(
         connector=connector.info(),
-        last_sync=_sync_info(last_sync(db, tenant_id)),
+        last_sync=_sync_info(last_sync(db, tenant_id, mode=mode)),
         last_successful_sync_at=ok_run.finished_at if ok_run else None,
     )
 
@@ -142,10 +168,22 @@ def _milestones(study: Study, now: date) -> list[MilestoneOut]:
     return [
         MilestoneOut(
             id=m.id,
+            external_id=m.external_id,
+            parent_external_id=m.parent_external_id,
+            kind=m.kind,
+            is_key=m.is_key,
             name=m.name,
+            phase=m.phase,
+            start_date=m.start_date,
+            baseline_start_date=m.baseline_start_date,
+            start_variance_days=variance_days(m.start_date, m.baseline_start_date),
             planned_date=m.planned_date,
             actual_date=m.actual_date,
-            state=milestone_state(m.planned_date, m.actual_date, now),
+            baseline_date=m.baseline_date,
+            percent_complete=m.percent_complete,
+            variance_days=variance_days(m.planned_date, m.baseline_date),
+            state=milestone_state(m.planned_date, m.actual_date, now, m.percent_complete, m.start_date),
+            schedule=schedule_state(m.planned_date, m.baseline_date),
         )
         for m in study.milestones
     ]
@@ -170,9 +208,13 @@ def _open_counts(db: Session, tenant_id: str) -> tuple[dict[str, int], dict[str,
 
 
 def summarise(study: Study, now: date, open_tasks: int, open_risks: int) -> StudySummary:
-    milestones = _milestones(study, now)
+    # Headline figures use key milestones only, so a late minor task does not flag the whole study.
+    milestones = [m for m in _milestones(study, now) if m.is_key and m.kind == "milestone"]
     pending = [m for m in milestones if m.state != MilestoneState.COMPLETED and m.planned_date]
-    enrolled = total_enrolled([s.enrolled for s in study.sites])
+    # Prefer the study-level count reported by SimpleTrials; otherwise sum what the sites report.
+    enrolled = (
+        study.enrolled if study.enrolled is not None else total_enrolled([s.enrolled for s in study.sites])
+    )
     return StudySummary(
         id=study.id,
         protocol_number=study.protocol_number,
@@ -184,6 +226,7 @@ def summarise(study: Study, now: date, open_tasks: int, open_risks: int) -> Stud
         countries=study.countries or [],
         project_manager=study.project_manager,
         in_source=study.in_source,
+        sandbox=study.sandbox,
         synced_at=study.synced_at,
         site_count=len(study.sites),
         enrolled=enrolled,
