@@ -11,12 +11,16 @@ from __future__ import annotations
 import asyncio
 import sys
 
+import truststore
+
 from app.connectors.sharepoint import build_sop_connector
 from app.core.config import get_settings
 
 
 async def main() -> int:
     settings = get_settings()
+    if settings.use_system_trust_store:
+        truststore.inject_into_ssl()  # corporate TLS inspection: trust the Windows certificate store
     connector = build_sop_connector(settings)
     info = connector.info()
     print(f"Mode:    {info.mode}" + (f"  ({info.mock_reason})" if info.mock_reason else ""))

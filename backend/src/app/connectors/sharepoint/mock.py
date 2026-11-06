@@ -14,6 +14,8 @@ from .models import (
     CheckStep,
     ConnectionCheck,
     ConnectorInfo,
+    DocumentKind,
+    EditableCopy,
     SopDocument,
     SopDownload,
     SopListResult,
@@ -179,6 +181,14 @@ _SAMPLES: list[tuple[str, str, str, SopStatus, str, str | None, str | None, str]
 ]
 
 
+# Demo forms/templates: (number, title, version, parent SOP number)
+_FORMS: list[tuple[str, str, str, str]] = [
+    ("SOP-011-A", "Site Initiation Visit Report Template", "3.0", "SOP-011"),
+    ("SOP-011-B", "Delegation of Duties Log", "2.0", "SOP-011"),
+    ("SOP-012-A", "Monitoring Visit Report Template", "5.0", "SOP-012"),
+]
+
+
 def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value).replace(tzinfo=UTC) if value else None
 
@@ -207,6 +217,32 @@ def _build_documents() -> list[SopDocument]:
                 web_url=None,
                 size_bytes=48_000 + len(title) * 512,
                 mime_type=_DOCX,
+            )
+        )
+    parents = {d.sop_number: d for d in docs}
+    for number, title, version, parent_number in _FORMS:
+        parent = parents[parent_number]
+        docs.append(
+            parent.model_copy(
+                update={
+                    "id": f"demo-{number.lower()}",
+                    "title": title,
+                    # Like Avion's library: a signed PDF with an editable Word copy next to it.
+                    "file_name": f"{number} {title} v{version}.pdf",
+                    "mime_type": "application/pdf",
+                    "sop_number": number,
+                    "kind": DocumentKind.FORM,
+                    "parent_sop_number": parent_number,
+                    "version": version,
+                    "review_date": None,
+                    "size_bytes": 24_000 + len(title) * 256,
+                    "editable_copy": EditableCopy(
+                        id=f"demo-{number.lower()}-word",
+                        file_name=f"{number} {title} v{version}.docx",
+                        size_bytes=18_000 + len(title) * 256,
+                        mime_type=_DOCX,
+                    ),
+                }
             )
         )
     return sort_sops(docs)
@@ -243,16 +279,17 @@ class MockSopConnector:
             for v in range(max(major, 1), 0, -1)
         ]
 
-    async def download(self, sop_id: str) -> SopDownload | None:
+    async def download(self, sop_id: str, editable: bool = False) -> SopDownload | None:
         doc = await self.get_sop(sop_id)
-        if not doc:
+        if not doc or (editable and doc.editable_copy is None):
             return None
         text = demo_text_for(doc.sop_number, doc.title, doc.version).encode()
 
         async def body() -> AsyncIterator[bytes]:
             yield text
 
-        stem = doc.file_name.rsplit(".", 1)[0]
+        name = doc.editable_copy.file_name if editable and doc.editable_copy else doc.file_name
+        stem = name.rsplit(".", 1)[0]
         return SopDownload(
             content=body(),
             content_type="text/plain; charset=utf-8",

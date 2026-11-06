@@ -2,6 +2,39 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-06: SharePoint live (Avion SOP library)
+
+- Connected to `sites/AM` → "Procedures and SoPs" → "1. Avion SoPs" with the Entra app
+  (`Sites.Selected`, read-only grant on that one site; other sites return Access denied).
+- **Approved only (user decision):** drafts, documents under review and superseded versions are never
+  listed, opened, downloaded or given to the chatbot. Enforced in the connector, not just the UI.
+- **SOPs + their forms (user decision):** forms/templates are linked to their SOP by numbering
+  (`CO-005-A` → `CO-SOP-005`). Change controls, executed records and unnumbered files
+  are hidden.
+- Status combines folder (`Approved` / `Draft Unapproved` / `Superseded`) and the Document Status column;
+  a document is Effective only if neither says otherwise. Assumption: Avion files approved documents in
+  `Approved` folders consistently (true for all 55 SOPs found).
+- Document version, Effective / Next Review dates, sign-off and change history are read from inside
+  each approved SOP (cover page + "Change History" table) during indexing and stored with the index.
+  Precedence: SharePoint column → document → file name. Nothing is inferred: a blank Effective Date
+  stays blank (approval date shown alongside). Dates are read day-first (Australian usage).
+  SharePoint's version number counts saves and is not shown (user decision).
+- DocuSign stamps the Effective Date month-first on signed PDFs; ambiguous numeric dates take the
+  reading closest to the sign-off date. `Complete_with_Docusign_…` files are signed copies, not
+  signature pages (corrected after first assuming otherwise).
+- Forms/templates are not read inside (not indexed); their version comes from the file name.
+- Known gaps: Effective/Next Review dates are blank for most SOPs in SharePoint; CO-SOP-013's title is
+  cut short by DocuSign and has no Word copy to restore it from.
+- **Current approved SOPs only (user decision):** before each chatbot question the index is synced
+  (changed files re-read, unapproved dropped) and passages are used only from SOPs in the live
+  approved list whose file is unchanged since it was read. SOP pages ignore details read from an older
+  copy of a file; a fresh SharePoint listing triggers a background re-read of changed files.
+- **Forms/templates download as Word (user request):** the Word copy filed next to the signed PDF is
+  attached to the form and served via `?format=word` (only through its approved form; not by its own
+  id). SOPs stay PDF-only. Live library: 76 of 86 forms have a Word copy, 6 are filed only as Word,
+  4 only as PDF (CO-014-A, DM-001-E, DM-001-F, SM-TEM-001).
+- Tests never reuse a running backend (it may be live); each e2e run starts with a fresh database.
+
 ## 2026-11-06: SimpleTrials API connector (read-only)
 
 **Access.** SimpleTrials REST API v1, enabled by an Avion SimpleTrials Administrator (Premium Plus),

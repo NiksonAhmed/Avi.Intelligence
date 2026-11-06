@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -10,8 +11,15 @@ from threading import Lock
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.connectors.sharepoint.models import SopConnector, SopDocument, SopStatus
+from app.connectors.sharepoint.models import (
+    DocumentDetails,
+    DocumentKind,
+    SopConnector,
+    SopDocument,
+    SopStatus,
+)
 
+from .document_details import extract_details
 from .extraction import MAX_FILE_BYTES, UnsupportedDocument, chunk_sections, extract_sections
 from .models import KnowledgeChunk, KnowledgeDocument
 from .search import Bm25Index, Passage
@@ -46,11 +54,14 @@ async def _read_file(connector: SopConnector, sop: SopDocument) -> tuple[bytes, 
 
 
 async def index_sops(db: Session, connector: SopConnector, tenant_id: str) -> IndexResult:
-    """Indexes Effective SOPs only. Drafts, in-review and superseded SOPs are never given to the AI."""
+    """Indexes Effective SOPs only. Drafts, in-review and superseded SOPs are never given to the AI,
+    nor are forms and templates (they hold blank fields, not procedures)."""
     result = IndexResult()
     source = "demo" if connector.info().mode == "mock" else "sharepoint"
     listing = await connector.list_sops()
-    effective = {d.id: d for d in listing.documents if d.status == SopStatus.EFFECTIVE}
+    effective = {
+        d.id: d for d in listing.documents if d.status == SopStatus.EFFECTIVE and d.kind == DocumentKind.SOP
+    }
 
     existing = {
         d.external_id: d
@@ -69,7 +80,10 @@ async def index_sops(db: Session, connector: SopConnector, tenant_id: str) -> In
             current is not None
             and current.source == source
             and current.error is None
-            and current.version == sop.version
+            and current.details is not None  # indexed before document details were read
+            and current.version in {sop.version, current.details.get("version")}
+            and current.title == sop.title
+            and current.sop_number == sop.sop_number
             and _naive_utc(current.source_modified_at) == _naive_utc(sop.modified_at)
         ):
             result.unchanged += 1
@@ -91,6 +105,10 @@ async def index_sops(db: Session, connector: SopConnector, tenant_id: str) -> In
         )
         try:
             data, file_name, content_type = await _read_file(connector, sop)
+            details = extract_details(data, file_name, content_type)
+            doc.details = details.model_dump(mode="json")
+            # The version written in the document wins over the file name (they can disagree).
+            doc.version = details.version or sop.version
             chunks = chunk_sections(extract_sections(data, file_name, content_type))
             doc.chunks = [
                 KnowledgeChunk(position=i, section=c.section, text=c.text) for i, c in enumerate(chunks)
@@ -115,6 +133,47 @@ async def index_sops(db: Session, connector: SopConnector, tenant_id: str) -> In
         },
     )
     return result
+
+
+def _index_lock() -> asyncio.Lock:
+    """One index update at a time per event loop (questions and background refreshes share it)."""
+    loop = asyncio.get_running_loop()
+    return _locks.setdefault(id(loop), asyncio.Lock())
+
+
+_locks: dict[int, asyncio.Lock] = {}
+
+
+async def refresh_index(db: Session, connector: SopConnector, tenant_id: str) -> IndexResult:
+    """Brings the index in line with the current approved SOPs: reads new or changed files and drops
+    SOPs that are no longer approved. Unchanged SOPs are not downloaded again."""
+    async with _index_lock():
+        return await index_sops(db, connector, tenant_id)
+
+
+def is_current(stored_modified_at: datetime | None, sop: SopDocument) -> bool:
+    """True when what was read from the file was read from the file as it is now in SharePoint."""
+    return _naive_utc(stored_modified_at) == _naive_utc(sop.modified_at)
+
+
+def document_details_by_id(
+    db: Session, tenant_id: str, source: str
+) -> dict[str, tuple[DocumentDetails, datetime | None]]:
+    """Details read from inside each indexed document, with the file's modified time when it was read."""
+    rows = db.execute(
+        select(
+            KnowledgeDocument.external_id, KnowledgeDocument.details, KnowledgeDocument.source_modified_at
+        ).where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.source == source,
+            KnowledgeDocument.details.is_not(None),
+        )
+    ).all()
+    return {
+        external_id: (DocumentDetails.model_validate(details), modified)
+        for external_id, details, modified in rows
+        if details
+    }
 
 
 @dataclass

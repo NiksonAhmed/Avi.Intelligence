@@ -11,13 +11,38 @@ export const SOP_STATUSES = [
 
 export type SopStatus = (typeof SOP_STATUSES)[number]
 
-export type StatusSource = 'column' | 'content-approval' | 'version-number' | 'none'
+export type StatusSource = 'column' | 'folder' | 'content-approval' | 'version-number' | 'none'
+
+export interface RevisionEntry {
+  issued: string | null
+  version: string
+  changes: string
+}
+
+/** Document control details read from inside the document (cover page and change history). */
+export interface DocumentDetails {
+  version: string | null
+  effective_date: string | null
+  review_date: string | null
+  prepared_by: string | null
+  prepared_date: string | null
+  reviewed_by: string | null
+  reviewed_date: string | null
+  approved_by: string | null
+  approved_date: string | null
+  revisions: RevisionEntry[]
+}
+
+/** An SOP, or a form/template belonging to an SOP (e.g. CO-005-A under CO-SOP-005). */
+export type DocumentKind = 'sop' | 'form' | 'other'
 
 export interface SopDocument {
   id: string
   title: string
   file_name: string
   sop_number: string | null
+  kind: DocumentKind
+  parent_sop_number: string | null
   version: string | null
   status: SopStatus
   status_source: StatusSource
@@ -31,14 +56,15 @@ export interface SopDocument {
   web_url: string | null
   size_bytes: number | null
   mime_type: string | null
+  /** Read from inside the document when it was indexed (approved SOPs only). */
+  details?: DocumentDetails | null
+  version_source?: 'column' | 'document' | 'file-name' | null
+  /** Set when the file name states a different version than the document itself. */
+  file_name_version?: string | null
+  /** Word copy filed next to the signed PDF; offered as a download for forms/templates. */
+  editable_copy?: { id: string; file_name: string; size_bytes: number | null; mime_type: string | null } | null
 }
 
-export interface SopVersion {
-  id: string
-  modified_at: string | null
-  modified_by: string | null
-  size_bytes: number | null
-}
 
 export interface SopSource {
   mode: 'live' | 'mock'
@@ -46,10 +72,14 @@ export interface SopSource {
   site_url: string | null
   library: string
   folder: string | null
+  /** Only approved documents are listed; drafts and superseded versions are never shown. */
+  approved_only: boolean
 }
 
 export interface SopSummary {
+  /** SOPs only; forms and templates are counted in `forms`. */
   total: number
+  forms: number
   effective: number
   in_review_or_draft: number
   review_due: number
@@ -67,7 +97,10 @@ export interface SopListResponse {
 
 export interface SopDetailResponse {
   document: SopDocument
-  versions: SopVersion[]
+  /** For an SOP: its forms and templates. */
+  forms: SopDocument[]
+  /** For a form or template: the SOP it belongs to. */
+  parent: SopDocument | null
   review_due: boolean
   source: SopSource
 }

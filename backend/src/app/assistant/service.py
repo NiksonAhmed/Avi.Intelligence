@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any, Literal
 
 import anthropic
@@ -18,9 +19,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.rbac import CurrentUser
-from app.connectors.sharepoint.models import SopConnector
+from app.connectors.sharepoint.models import DocumentKind, SopConnector, SopStatus
 from app.core.config import Settings
-from app.knowledge.indexer import get_search_index, index_sops, index_stats
+from app.knowledge.indexer import get_search_index, is_current, refresh_index
 from app.knowledge.models import AssistantInteraction, KnowledgeChunk, KnowledgeDocument
 from app.knowledge.search import Hit
 
@@ -98,15 +99,25 @@ def build_client(settings: Settings) -> anthropic.AsyncAnthropic | None:
     return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value(), max_retries=2)
 
 
-def _select_passages(db: Session, hits: list[Hit]) -> list[tuple[KnowledgeDocument, list[KnowledgeChunk]]]:
-    """Groups hits by document (best-scoring documents first) and loads their rows."""
+def _select_passages(
+    db: Session,
+    hits: list[Hit],
+    allowed: Callable[[KnowledgeDocument], bool] = lambda _doc: True,
+) -> list[tuple[KnowledgeDocument, list[KnowledgeChunk]]]:
+    """Groups hits by document (best-scoring documents first) and loads their rows.
+
+    Documents for which `allowed` is false (e.g. no longer approved in SharePoint) are left out.
+    """
     grouped: OrderedDict[str, list[str]] = OrderedDict()
     for hit in hits:
         ids = grouped.setdefault(hit.passage.document_id, [])
         if len(ids) < MAX_PASSAGES_PER_DOCUMENT:
             ids.append(hit.passage.chunk_id)
-    doc_ids = list(grouped)[:MAX_DOCUMENTS]
-    docs = {d.id: d for d in db.scalars(select(KnowledgeDocument).where(KnowledgeDocument.id.in_(doc_ids)))}
+    candidates = {
+        d.id: d for d in db.scalars(select(KnowledgeDocument).where(KnowledgeDocument.id.in_(list(grouped))))
+    }
+    doc_ids = [d for d in grouped if d in candidates and allowed(candidates[d])][:MAX_DOCUMENTS]
+    docs = {d: candidates[d] for d in doc_ids}
     chunk_ids = [cid for d in doc_ids for cid in grouped[d]]
     chunks = {c.id: c for c in db.scalars(select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids)))}
     selected = []
@@ -223,11 +234,22 @@ async def answer_question(
     settings: Settings,
 ) -> AskResponse:
     demo = connector.info().mode == "mock"
-    if index_stats(db, user.tenant_id).documents == 0:
-        await index_sops(db, connector, user.tenant_id)  # first use: build the index
+    # Bring the index in line with SharePoint first: new or changed SOPs are read, SOPs that are no
+    # longer approved are dropped. Unchanged SOPs are not downloaded again.
+    await refresh_index(db, connector, user.tenant_id)
+    # Answer only from SOPs that are approved in SharePoint right now, as their current file.
+    current = {
+        d.id: d
+        for d in (await connector.list_sops()).documents
+        if d.status == SopStatus.EFFECTIVE and d.kind == DocumentKind.SOP
+    }
+
+    def is_current_sop(doc: KnowledgeDocument) -> bool:
+        sop = current.get(doc.external_id)
+        return sop is not None and is_current(doc.source_modified_at, sop)
 
     hits = get_search_index(db, user.tenant_id).search(question, limit=SEARCH_LIMIT)
-    selected = _select_passages(db, hits)
+    selected = _select_passages(db, hits, is_current_sop)
     mode: Literal["ai", "search-only"] = "ai" if client is not None else "search-only"
 
     interaction = AssistantInteraction(

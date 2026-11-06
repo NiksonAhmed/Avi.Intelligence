@@ -42,6 +42,8 @@ export function makeSop(overrides: Partial<SopDocument> = {}): SopDocument {
     title: 'Site Activation',
     file_name: 'SOP-011 Site Activation v3.0.docx',
     sop_number: 'SOP-011',
+    kind: 'sop',
+    parent_sop_number: null,
     version: '3.0',
     status: 'Effective',
     status_source: 'column',
@@ -64,9 +66,10 @@ export function makeSopList(docs: SopDocument[], mode: 'live' | 'mock' = 'mock')
     documents: docs,
     total_unfiltered: docs.length,
     summary: {
-      total: docs.length,
-      effective: docs.filter((d) => d.status === 'Effective').length,
-      in_review_or_draft: docs.filter((d) => d.status === 'Draft' || d.status === 'In Review').length,
+      total: docs.filter((d) => d.kind === 'sop').length,
+      forms: docs.filter((d) => d.kind !== 'sop').length,
+      effective: docs.filter((d) => d.kind === 'sop' && d.status === 'Effective').length,
+      in_review_or_draft: docs.filter((d) => d.kind === 'sop' && (d.status === 'Draft' || d.status === 'In Review')).length,
       review_due: 0,
     },
     departments: [...new Set(docs.map((d) => d.department).filter((d): d is string => Boolean(d)))],
@@ -78,14 +81,19 @@ export function makeSopList(docs: SopDocument[], mode: 'live' | 'mock' = 'mock')
       site_url: mode === 'live' ? 'https://avion.sharepoint.com/sites/Quality' : null,
       library: 'Controlled Documents',
       folder: 'SOPs',
+      approved_only: mode === 'live',
     },
   }
 }
 
-export function makeSopDetail(doc: SopDocument): SopDetailResponse {
+export function makeSopDetail(
+  doc: SopDocument,
+  extra: Partial<Pick<SopDetailResponse, 'forms' | 'parent'>> = {},
+): SopDetailResponse {
   return {
     document: doc,
-    versions: [{ id: '3.0', modified_at: doc.modified_at, modified_by: 'QA', size_bytes: 1 }],
+    forms: extra.forms ?? [],
+    parent: extra.parent ?? null,
     review_due: false,
     source: makeSopList([doc]).source,
   }

@@ -38,6 +38,28 @@ describe('SOP list page', () => {
     expect(screen.queryByText(/Demo data/)).not.toBeInTheDocument()
   })
 
+  it('nests forms under their SOP and says when only approved documents are shown', async () => {
+    const sop = makeSop({ id: 's5', sop_number: 'CO-SOP-005', title: 'Investigator Site Selection' })
+    const form = makeSop({
+      id: 'f1',
+      kind: 'form',
+      sop_number: 'CO-005-A',
+      parent_sop_number: 'CO-SOP-005',
+      title: 'Site Qualification Visit Report',
+    })
+    mockApi({ '/me': adminUser, '/sops': makeSopList([form, sop], 'live') })
+    renderRoute('/documents/sops')
+
+    expect(await screen.findByText('Approved documents only')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Filter by status' })).not.toBeInTheDocument()
+    expect(screen.getByText('1 form')).toBeInTheDocument()
+    // Collapsed by default: the form appears once its SOP is expanded.
+    expect(screen.queryByRole('link', { name: 'Site Qualification Visit Report' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /expand row/i }))
+    expect(await screen.findByRole('link', { name: 'Site Qualification Visit Report' })).toBeInTheDocument()
+    expect(screen.getByText('Form / template')).toBeInTheDocument()
+  })
+
   it('sends the search term to the API and keeps it in the URL', async () => {
     const fetchMock = mockApi({
       '/me': adminUser,

@@ -30,6 +30,11 @@ def _session_factory() -> sessionmaker[Session]:
     return sessionmaker(bind=get_engine(), expire_on_commit=False)
 
 
+def new_session() -> Session:
+    """A session outside a request (background work). The caller closes it."""
+    return _session_factory()()
+
+
 def get_db() -> Iterator[Session]:
     """FastAPI dependency yielding a session per request."""
     session = _session_factory()()

@@ -39,6 +39,8 @@ def build_sop_connector(settings: Settings) -> SopConnector:
         cache_seconds=settings.sharepoint_cache_minutes * 60,
         exclude_folders=parse_list_setting(settings.sharepoint_sop_exclude_folders, ";"),
         file_types=parse_list_setting(settings.sharepoint_sop_file_types, ","),
+        approved_only=settings.sharepoint_sop_approved_only,
+        numbered_only=settings.sharepoint_sop_numbered_only,
     )
 
 

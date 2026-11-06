@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     sharepoint_sop_exclude_folders: str | None = None
     # Comma-separated file extensions treated as SOP documents.
     sharepoint_sop_file_types: str = "docx,doc,pdf"
+    # Only approved (Effective) documents: drafts, in review and superseded are never shown or opened.
+    sharepoint_sop_approved_only: bool = True
+    # Only SOPs and forms recognised by their number (e.g. CO-SOP-001, CO-005-A); hides change
+    # controls, executed records and unnumbered files.
+    sharepoint_sop_numbered_only: bool = True
     sharepoint_cache_minutes: int = Field(default=5, ge=0, le=1440)
 
     # --- SimpleTrials (CTMS) ---

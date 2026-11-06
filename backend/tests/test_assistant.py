@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.assistant.service import AssistantUnavailable, answer_question
 from app.auth.rbac import CurrentUser, Role
 from app.connectors.sharepoint.mock import MockSopConnector
+from app.connectors.sharepoint.models import SopStatus
 from app.core.config import Settings
 
 USER = CurrentUser(id="u1", name="Test User", email="t@example.com", role=Role.CRA)
@@ -58,17 +60,60 @@ def make_response(content: list[Any], stop_reason: str = "end_turn") -> SimpleNa
     )
 
 
-def ask(db: Session, client: Any, question: str = "What happens at the site initiation visit?") -> Any:
+def ask(
+    db: Session,
+    client: Any,
+    question: str = "What happens at the site initiation visit?",
+    connector: MockSopConnector | None = None,
+) -> Any:
     return asyncio.run(
         answer_question(
             db=db,
             user=USER,
             question=question,
-            connector=MockSopConnector("test"),
+            connector=connector or MockSopConnector("test"),
             client=client,
             settings=Settings(),
         )
     )
+
+
+class ChangedLibrary(MockSopConnector):
+    """The demo library after a change in SharePoint (an SOP superseded, or its file replaced)."""
+
+    def __init__(self, number: str, **update: Any) -> None:
+        super().__init__("test")
+        self._docs = [d.model_copy(update=update) if d.sop_number == number else d for d in self._docs]
+
+
+def test_superseded_sop_is_dropped_before_answering(db_session: Session) -> None:
+    assert ask(db_session, None).excerpts[0].sop_number == "SOP-011"  # indexed and found
+    later = ask(db_session, None, connector=ChangedLibrary("SOP-011", status=SopStatus.SUPERSEDED))
+    assert all(e.sop_number != "SOP-011" for e in later.excerpts)
+
+
+def test_only_current_approved_sops_are_used_even_before_the_index_catches_up(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ask(db_session, None)  # index built
+
+    async def no_refresh(*_args: Any) -> None:  # e.g. SharePoint briefly unreachable while re-reading
+        return None
+
+    monkeypatch.setattr("app.assistant.service.refresh_index", no_refresh)
+    superseded = ask(db_session, None, connector=ChangedLibrary("SOP-011", status=SopStatus.SUPERSEDED))
+    assert all(e.sop_number != "SOP-011" for e in superseded.excerpts)
+    # A replaced file is not quoted from the old copy either.
+    replaced = ask(
+        db_session, None, connector=ChangedLibrary("SOP-011", modified_at=datetime(2026, 11, 6, tzinfo=UTC))
+    )
+    assert all(e.sop_number != "SOP-011" for e in replaced.excerpts)
+
+
+def test_changed_file_is_re_read_before_answering(db_session: Session) -> None:
+    ask(db_session, None)
+    changed = ChangedLibrary("SOP-011", modified_at=datetime(2026, 11, 6, tzinfo=UTC))
+    assert ask(db_session, None, connector=changed).excerpts[0].sop_number == "SOP-011"
 
 
 def test_search_only_mode_returns_passages_without_ai(db_session: Session) -> None:

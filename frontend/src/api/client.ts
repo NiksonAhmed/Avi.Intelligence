@@ -42,6 +42,8 @@ export async function apiRequest<T>(
   return (await res.json()) as T
 }
 
-export function sopDownloadUrl(id: string): string {
-  return `/api/v1/sops/${encodeURIComponent(id)}/download`
+/** format "word": the Word copy of a form/template (for filling in). */
+export function sopDownloadUrl(id: string, format: 'original' | 'word' = 'original'): string {
+  const url = `/api/v1/sops/${encodeURIComponent(id)}/download`
+  return format === 'word' ? `${url}?format=word` : url
 }

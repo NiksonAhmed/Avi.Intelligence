@@ -9,9 +9,12 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, unquote
 
+import httpx
+
 from .graph_client import GraphClient, GraphError, site_lookup_path
 from .mapping import (
     FieldMap,
+    collapse_duplicates,
     collect_person_lookup_ids,
     department_from_folder,
     has_allowed_extension,
@@ -25,9 +28,11 @@ from .models import (
     ConnectionCheck,
     ConnectorColumn,
     ConnectorInfo,
+    DocumentKind,
     SopDocument,
     SopDownload,
     SopListResult,
+    SopStatus,
     SopVersion,
 )
 
@@ -48,8 +53,15 @@ class GraphSopConnector:
         cache_seconds: float,
         exclude_folders: list[str] | None = None,
         file_types: list[str] | None = None,
+        approved_only: bool = False,
+        numbered_only: bool = False,
     ) -> None:
+        """approved_only: drafts, documents in review and superseded versions are never listed, opened or
+        downloaded. numbered_only: only SOPs and forms recognised by their number (hides change controls,
+        executed records and unnumbered files)."""
         self._client = client
+        self._approved_only = approved_only
+        self._numbered_only = numbered_only
         self._site_url = site_url
         self._library = library
         self._folder = folder.strip("/") if folder else None
@@ -68,6 +80,7 @@ class GraphSopConnector:
             site_url=self._site_url,
             library=self._library,
             folder=self._folder,
+            approved_only=self._approved_only,
             field_map=self._field_map,
         )
 
@@ -132,17 +145,20 @@ class GraphSopConnector:
         people = await self._resolve_people(site_id, collect_person_lookup_ids(items, self._field_map))
         docs: list[SopDocument] = []
         for item in items:
-            doc = map_list_item_to_sop(item, self._field_map, people.get)
+            doc = map_list_item_to_sop(item, self._field_map, people.get, scope=self._folder)
             if (
                 doc is None
                 or not is_within_folder(doc.folder_path, self._folder)
                 or is_excluded_folder(doc.folder_path, self._folder, self._exclude_folders)
                 or not has_allowed_extension(doc.file_name, self._file_types)
+                or (self._numbered_only and (doc.kind == DocumentKind.OTHER or not doc.sop_number))
+                or (self._approved_only and doc.status != SopStatus.EFFECTIVE)
             ):
                 continue
             if not doc.department:
                 doc.department = department_from_folder(doc.folder_path, self._folder)
             docs.append(doc)
+        docs = collapse_duplicates(docs)
         log.info("sharepoint.sops.fetched", extra={"count": len(docs), "items": len(items)})
         return sort_sops(docs)
 
@@ -180,17 +196,25 @@ class GraphSopConnector:
             )
         return versions
 
-    async def download(self, sop_id: str) -> SopDownload | None:
+    async def download(self, sop_id: str, editable: bool = False) -> SopDownload | None:
+        # Only a listed (approved, in-scope) document or the Word copy attached to it can be served.
         doc = await self.get_sop(sop_id)
         if not doc:
             return None
+        if editable:
+            if doc.editable_copy is None:
+                return None
+            item_id, file_name = doc.editable_copy.id, doc.editable_copy.file_name
+            mime, size = doc.editable_copy.mime_type, doc.editable_copy.size_bytes
+        else:
+            item_id, file_name, mime, size = doc.id, doc.file_name, doc.mime_type, doc.size_bytes
         _site_id, drive_id, _list_id = await self._resolve_targets()
-        url = await self._client.download_url(f"/drives/{drive_id}/items/{quote(sop_id)}/content")
+        url = await self._client.download_url(f"/drives/{drive_id}/items/{quote(item_id)}/content")
         return SopDownload(
             content=self._client.stream_url(url),
-            content_type=doc.mime_type or "application/octet-stream",
-            file_name=doc.file_name,
-            size_bytes=doc.size_bytes,
+            content_type=mime or "application/octet-stream",
+            file_name=file_name,
+            size_bytes=size,
         )
 
     # ---- diagnostics ------------------------------------------------------------------------
@@ -203,7 +227,7 @@ class GraphSopConnector:
             steps.append(
                 CheckStep(label="Authenticate and open SharePoint site", ok=True, detail=self._site_url)
             )
-        except (GraphError, ValueError) as exc:
+        except (GraphError, ValueError, httpx.HTTPError) as exc:
             steps.append(CheckStep(label="Authenticate and open SharePoint site", ok=False, detail=str(exc)))
             return ConnectionCheck(ok=False, steps=steps)
         try:
@@ -232,8 +256,11 @@ class GraphSopConnector:
         try:
             result = await self.list_sops(force_refresh=True)
             count = len(result.documents)
+            sops = sum(d.kind == DocumentKind.SOP for d in result.documents)
             scope = f' in folder "{self._folder}"' if self._folder else ""
-            steps.append(CheckStep(label="List SOP documents", ok=True, detail=f"{count} documents{scope}"))
+            which = "approved " if self._approved_only else ""
+            detail = f"{sops} {which}SOPs and {count - sops} forms/templates{scope}"
+            steps.append(CheckStep(label="List SOP documents", ok=True, detail=detail))
         except GraphError as exc:
             steps.append(CheckStep(label="List SOP documents", ok=False, detail=str(exc)))
         return ConnectionCheck(

@@ -22,13 +22,14 @@ import { Link, useSearchParams } from 'react-router'
 
 import { useRefreshSops, useSops } from '../../api/hooks'
 import { SOP_STATUSES } from '../../api/types'
-import type { SopDocument, SopFilters, SopStatus } from '../../api/types'
+import type { SopFilters, SopStatus } from '../../api/types'
 import { DocumentsTabs } from '../../components/DocumentsTabs'
 import { PageHeader } from '../../components/PageHeader'
 import { SourceBanner } from '../../components/SourceBanner'
 import { StatusTag } from '../../components/StatusTag'
 import { formatDate } from '../../lib/format'
-import { isReviewDue } from '../../lib/sops'
+import { isReviewDue, toSopTree } from '../../lib/sops'
+import type { SopRow } from '../../lib/sops'
 
 function readFilters(params: URLSearchParams): SopFilters {
   const status = params.get('status')
@@ -39,20 +40,34 @@ function readFilters(params: URLSearchParams): SopFilters {
   }
 }
 
-const columns: TableColumnsType<SopDocument> = [
+type Row = SopRow
+
+const columns: TableColumnsType<Row> = [
   {
-    title: 'SOP no.',
+    title: 'No.',
     dataIndex: 'sop_number',
-    width: 120,
-    render: (value: string | null, doc) => <Link to={`/documents/sops/${doc.id}`}>{value ?? '—'}</Link>,
+    width: 150,
+    render: (value: string | null, doc) => (
+      <Link to={`/documents/sops/${doc.id}`} style={{ whiteSpace: 'nowrap' }}>
+        {value ?? '—'}
+      </Link>
+    ),
   },
   {
     title: 'Title',
     dataIndex: 'title',
     render: (title: string, doc) => (
-      <Link to={`/documents/sops/${doc.id}`} style={{ fontWeight: 500 }}>
-        {title}
-      </Link>
+      <Flex gap={8} align="center" wrap>
+        <Link to={`/documents/sops/${doc.id}`} style={{ fontWeight: doc.kind === 'sop' ? 500 : 400 }}>
+          {title}
+        </Link>
+        {doc.kind === 'form' && <Tag style={{ marginInlineEnd: 0 }}>Form / template</Tag>}
+        {doc.children && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {doc.children.length} {doc.children.length === 1 ? 'form' : 'forms'}
+          </Typography.Text>
+        )}
+      </Flex>
     ),
   },
   { title: 'Version', dataIndex: 'version', width: 90, render: (v: string | null) => v ?? '—' },
@@ -157,8 +172,14 @@ export function SopListPage() {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         {[
           { label: 'SOPs in library', value: data?.summary.total },
-          { label: 'Effective', value: data?.summary.effective },
-          { label: 'In review or draft', value: data?.summary.in_review_or_draft },
+          {
+            label: 'Forms and templates',
+            value: data?.summary.forms,
+            help: 'Forms and templates that belong to an SOP (e.g. CO-005-A under CO-SOP-005). Expand an SOP to see them.',
+          },
+          data?.source.approved_only
+            ? { label: 'Effective', value: data.summary.effective }
+            : { label: 'In review or draft', value: data?.summary.in_review_or_draft },
           {
             label: 'Review due within 30 days',
             value: data?.summary.review_due,
@@ -177,6 +198,15 @@ export function SopListPage() {
       </Row>
 
       <Card>
+        {data?.source.approved_only && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title="Approved documents only"
+            description="Drafts, documents under review and superseded versions in SharePoint are not shown here, and Ask Avi.Intelligence answers only from approved SOPs."
+          />
+        )}
         <Flex gap={12} wrap style={{ marginBottom: 16 }} role="search" aria-label="Filter SOPs">
           <Input.Search
             aria-label="Search SOPs"
@@ -187,15 +217,17 @@ export function SopListPage() {
             onSearch={(v) => setFilter('q', v.trim() || undefined)}
             style={{ width: 340, maxWidth: '100%' }}
           />
-          <Select
-            aria-label="Filter by status"
-            placeholder="All statuses"
-            allowClear
-            value={filters.status}
-            onChange={(v?: SopStatus) => setFilter('status', v)}
-            options={SOP_STATUSES.map((s) => ({ value: s, label: s }))}
-            style={{ width: 180 }}
-          />
+          {!data?.source.approved_only && (
+            <Select
+              aria-label="Filter by status"
+              placeholder="All statuses"
+              allowClear
+              value={filters.status}
+              onChange={(v?: SopStatus) => setFilter('status', v)}
+              options={SOP_STATUSES.map((s) => ({ value: s, label: s }))}
+              style={{ width: 180 }}
+            />
+          )}
           <Select
             aria-label="Filter by department"
             placeholder="All departments"
@@ -212,11 +244,12 @@ export function SopListPage() {
           )}
         </Flex>
 
-        <Table<SopDocument>
+        <Table<Row>
           rowKey="id"
           size="middle"
           columns={columns}
-          dataSource={data?.documents ?? []}
+          dataSource={toSopTree(data?.documents ?? [])}
+          expandable={{ indentSize: 20 }}
           loading={isLoading || (isFetching && !data)}
           pagination={{ pageSize: 25, hideOnSinglePage: true, showSizeChanger: false }}
           locale={{
@@ -241,7 +274,7 @@ export function SopListPage() {
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={7}>
                   <Typography.Text type="secondary">
-                    Showing {data.documents.length} of {data.total_unfiltered} SOPs
+                    Showing {data.documents.length} of {data.total_unfiltered} documents
                   </Typography.Text>
                 </Table.Summary.Cell>
               </Table.Summary.Row>

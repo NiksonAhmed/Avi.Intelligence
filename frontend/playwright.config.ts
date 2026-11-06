@@ -22,10 +22,15 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'uv run alembic upgrade head && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000',
+      // Fresh database every run, so tests that assign tasks find the plan entries unassigned.
+      command:
+        'uv run python -c "import pathlib; pathlib.Path(\'e2e.db\').unlink(missing_ok=True)"' +
+        ' && uv run alembic upgrade head && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000',
       cwd: '../backend',
       url: 'http://127.0.0.1:8000/api/health',
-      reuseExistingServer: !process.env.CI,
+      // Never reuse a running backend: a developer's server may be connected to live SharePoint or
+      // SimpleTrials. If port 8000 is busy, stop that server first.
+      reuseExistingServer: false,
       env: {
         APP_ENV: 'test',
         SHAREPOINT_MODE: 'mock',

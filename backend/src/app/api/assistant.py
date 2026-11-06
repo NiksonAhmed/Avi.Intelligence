@@ -18,7 +18,7 @@ from app.connectors.sharepoint import get_sop_connector
 from app.connectors.sharepoint.models import SopConnector
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
-from app.knowledge.indexer import index_sops, index_stats
+from app.knowledge.indexer import index_stats, refresh_index
 from app.knowledge.models import KnowledgeDocument
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
@@ -151,7 +151,7 @@ async def reindex(
     connector: Connector,
     user: Annotated[CurrentUser, Depends(require(Permission.CONNECTOR_MANAGE))],
 ) -> ReindexResponse:
-    result = await index_sops(db, connector, user.tenant_id)
+    result = await refresh_index(db, connector, user.tenant_id)
     record_event(
         db,
         user,

@@ -23,9 +23,11 @@ def test_security_headers(client: TestClient) -> None:
 
 def test_list_sops_returns_documents_summary_and_source(client: TestClient) -> None:
     body = client.get("/api/v1/sops").json()
-    assert body["total_unfiltered"] == len(body["documents"]) == 15
+    assert body["total_unfiltered"] == len(body["documents"]) == 18  # 15 SOPs + 3 forms
     assert body["source"]["mode"] == "mock"
-    assert body["summary"]["effective"] == sum(d["status"] == "Effective" for d in body["documents"])
+    sops = [d for d in body["documents"] if d["kind"] == "sop"]
+    assert body["summary"]["total"] == 15 and body["summary"]["forms"] == 3
+    assert body["summary"]["effective"] == sum(d["status"] == "Effective" for d in sops)
     assert "Clinical Operations" in body["departments"]
 
 
@@ -36,7 +38,7 @@ def test_list_sops_filters(client: TestClient) -> None:
     assert {d["status"] for d in body["documents"]} == {"Draft"}
     body = client.get("/api/v1/sops", params={"department": "pharmacovigilance"}).json()
     assert len(body["documents"]) == 2
-    assert body["total_unfiltered"] == 15  # summary is unaffected by filters
+    assert body["total_unfiltered"] == 18  # summary is unaffected by filters
 
 
 def test_invalid_status_rejected(client: TestClient) -> None:
@@ -46,7 +48,16 @@ def test_invalid_status_rejected(client: TestClient) -> None:
 def test_get_sop_detail(client: TestClient) -> None:
     body = client.get("/api/v1/sops/demo-sop-011").json()
     assert body["document"]["title"] == "Site Activation"
-    assert [v["id"] for v in body["versions"]] == ["3.0", "2.0", "1.0"]
+    assert "versions" not in body  # SharePoint save history is not shown (saves are not versions)
+    assert [f["sop_number"] for f in body["forms"]] == ["SOP-011-A", "SOP-011-B"]
+    assert body["parent"] is None
+
+
+def test_form_detail_links_to_its_sop(client: TestClient) -> None:
+    body = client.get("/api/v1/sops/demo-sop-011-b").json()
+    assert body["document"]["kind"] == "form"
+    assert body["parent"]["sop_number"] == "SOP-011"
+    assert body["forms"] == []
 
 
 def test_get_sop_not_found_and_bad_id(client: TestClient) -> None:
@@ -67,6 +78,28 @@ def test_download_streams_file_and_writes_audit(client: TestClient) -> None:
     assert event["action"] == "sop.downloaded"
     assert event["entity_id"] == "demo-sop-011"
     assert "Site Activation" in event["summary"]
+
+
+def test_forms_can_be_downloaded_as_word(client: TestClient) -> None:
+    detail = client.get("/api/v1/sops/demo-sop-011-a").json()["document"]
+    assert detail["file_name"].endswith(".pdf")
+    assert detail["editable_copy"]["file_name"].endswith(".docx")
+
+    res = client.get("/api/v1/sops/demo-sop-011-a/download", params={"format": "word"})
+    assert res.status_code == 200
+    assert (
+        "SOP-011-A Site Initiation Visit Report Template v3.0 (DEMO).txt"
+        in res.headers["content-disposition"]
+    )
+    event = client.get("/api/v1/audit-events").json()["items"][0]
+    assert event["summary"].endswith("as Word") and event["details"]["format"] == "word"
+
+
+def test_sops_are_not_issued_as_word(client: TestClient) -> None:
+    res = client.get("/api/v1/sops/demo-sop-011/download", params={"format": "word"})
+    assert res.status_code == 400
+    # The Word copy cannot be fetched directly by its own id either: it is not a listed document.
+    assert client.get("/api/v1/sops/demo-sop-011-a-word/download").status_code == 404
 
 
 def test_refresh(client: TestClient) -> None:

@@ -36,6 +36,9 @@ class KnowledgeDocument(Base):
     web_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     source_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Document control details read from the document itself (cover page, change history);
+    # see app.knowledge.document_details. None = not read yet.
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

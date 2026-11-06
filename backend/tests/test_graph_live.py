@@ -272,6 +272,50 @@ def test_connection_check_reports_missing_library() -> None:
     assert "Available libraries: Controlled Documents, Documents" in (check.steps[-1].detail or "")
 
 
+def test_approved_only_and_numbered_only_avion_layout() -> None:
+    """Avion's layout: status from Approved / Draft Unapproved / Superseded folders, forms under SOPs."""
+    root = "1. Avion SoPs/01. Clinical Operations"
+    items = [
+        file_item("1", "CO-SOP-005 Site Selection.pdf", f"{root}/Approved"),
+        file_item("2", "CO-SOP-005 Site Selection_2.0.docx", f"{root}/Approved/Word_Documents_DoNotEdit"),
+        file_item("3", "CO-SOP-005 Site Selection.pdf", f"{root}/Approved/Superseded"),
+        file_item("4", "CO-SOP-006 Site Initiation_3.0.docx", f"{root}/DraftUnapproved"),
+        file_item("5", "CO-005-A Site Qualification Visit Report_2.0.pdf", f"{root}/Approved"),
+        file_item("6", "Complete_with_Docusign_CO-SOP-005_Site.pdf", f"{root}/Approved"),
+        file_item("7", "CO-SOP-007 Essential Documents.pdf", f"{root}/Approved", DocumentStatus="Superseded"),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/sites/SITE1/lists/L1/items":
+            return httpx.Response(200, json={"value": items})
+        return FakeGraph()(request)
+
+    connector = GraphSopConnector(
+        GraphClient("t", "c", "s", transport=httpx.MockTransport(handler), sleep=_no_sleep),
+        site_url=SITE,
+        library="Controlled Documents",
+        folder="1. Avion SoPs",
+        field_map=DEFAULT_FIELD_MAP,
+        cache_seconds=0,
+        approved_only=True,
+        numbered_only=True,
+    )
+    docs = asyncio.run(connector.list_sops()).documents
+    assert [(d.sop_number, d.kind.value, d.file_name) for d in docs] == [
+        ("CO-005-A", "form", "CO-005-A Site Qualification Visit Report_2.0.pdf"),
+        ("CO-SOP-005", "sop", "CO-SOP-005 Site Selection.pdf"),  # signed PDF, not the Word copy
+    ]
+    assert docs[0].parent_sop_number == "CO-SOP-005"
+    assert docs[1].version == "2.0" and docs[1].department == "Clinical Operations"
+    # The Word copy is attached to the signed PDF and can be downloaded through it.
+    assert docs[1].editable_copy is not None and docs[1].editable_copy.id == "DI2"
+    assert asyncio.run(connector.get_sop("DI2")) is None  # but it is not a listed document itself
+    # Drafts and superseded versions cannot be opened or downloaded by id either.
+    assert asyncio.run(connector.get_sop("DI4")) is None
+    assert asyncio.run(connector.get_sop("DI3")) is None
+    assert asyncio.run(connector.download("DI7")) is None
+
+
 def test_exclusions_file_types_and_department_from_folder() -> None:
     fake = FakeGraph()
     client = GraphClient("t", "c", "s", transport=httpx.MockTransport(fake), sleep=_no_sleep)
