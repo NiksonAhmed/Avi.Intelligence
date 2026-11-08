@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiRequest } from './client'
 import type {
+  ReportFilters,
+  StudyDeliveryReport,
   AskResponse,
   AssistantStatus,
   AuditPage,
@@ -272,6 +274,17 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useStudyDelivery(filters: ReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'study-delivery', filters],
+    queryFn: () =>
+      apiRequest<StudyDeliveryReport>('/reports/study-delivery', {
+        params: { study_id: filters.study_id, site_id: filters.site_id },
+      }),
     placeholderData: (previous) => previous,
   })
 }

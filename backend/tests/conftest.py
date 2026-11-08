@@ -27,6 +27,7 @@ from app.connectors.simpletrials.mock import MockStudyConnector  # noqa: E402
 from app.db.session import Base, get_db  # noqa: E402
 from app.knowledge import models as _knowledge_models  # noqa: E402,F401
 from app.main import create_app  # noqa: E402
+from app.reports import models as _report_models  # noqa: E402,F401
 from app.studies import models as _study_models  # noqa: E402,F401
 
 

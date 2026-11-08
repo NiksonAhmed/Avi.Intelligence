@@ -8,7 +8,7 @@ export interface ToneStyle {
   border: string
 }
 
-const TONES = {
+export const TONES = {
   good: { color: '#0F5B36', background: '#E6F4EC', border: '#9CD1B4' },
   info: { color: '#1A4475', background: '#E8F0FB', border: '#A9C4EA' },
   warn: { color: '#7A4A00', background: '#FDF3E1', border: '#EDC98A' },

@@ -9,6 +9,7 @@ import { AuditTrailPage } from './pages/audit/AuditTrailPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
 import { SopListPage } from './pages/documents/SopListPage'
+import { ReportsPage } from './pages/reports/ReportsPage'
 import { CommandCentreIndexPage, StudyCommandCentrePage } from './pages/studies/StudyCommandCentrePage'
 import { StudyPortfolioPage } from './pages/studies/StudyPortfolioPage'
 import { MyTasksPage } from './pages/work/MyTasksPage'
@@ -36,12 +37,7 @@ export const routes: RouteObject[] = [
       { path: 'documents/sops', element: <SopListPage /> },
       { path: 'documents/sops/:sopId', element: <SopDetailPage /> },
       { path: 'documents/ask', element: <AskPage /> },
-      {
-        path: 'reports',
-        element: (
-          <ComingSoon title="Reports and Insights" description="Study health and portfolio reporting." />
-        ),
-      },
+      { path: 'reports', element: <ReportsPage /> },
       { path: 'admin', element: <Navigate to="/admin/connectors" replace /> },
       { path: 'admin/connectors', element: <ConnectorsPage /> },
       { path: 'audit', element: <AuditTrailPage /> },

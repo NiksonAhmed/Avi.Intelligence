@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # --- SimpleTrials (CTMS) ---
     # auto = API when credentials are set, otherwise demo studies. api | mock force a mode.
     simpletrials_mode: Literal["auto", "api", "mock"] = "auto"
+    # Scheduled read-only sync for reports, in minutes (0 = off; never runs when APP_ENV=test).
+    simpletrials_sync_minutes: int = Field(default=60, ge=0, le=1440)
     simpletrials_base_url: str = "https://app.simpletrials.com/api/v1/"
     # Single-study read-only credentials (e.g. the Sandbox study) ...
     simpletrials_study_id: str | None = None

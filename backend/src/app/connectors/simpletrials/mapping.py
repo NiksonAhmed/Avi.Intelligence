@@ -109,6 +109,7 @@ def map_site(site: dict[str, Any]) -> SiteRecord | None:
         principal_investigator=_text(site.get("principal_investigator_full_name")),
         status=status,
         activation_date=as_date(detail.get("site_activation_actual")),
+        activation_target=as_date(detail.get("site_activation_target")),
         enrolled=as_int(detail.get("subjects_enrolled_actual", detail.get("subject_enrolled_actual"))),
         enrolment_target=as_int(detail.get("subjects_enrolled_target")) or None,
     )

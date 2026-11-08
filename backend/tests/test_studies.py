@@ -94,6 +94,8 @@ class TestSync:
             "created": 0,
             "updated": len(changed),
             "no_longer_in_source": 1,
+            "completions_recorded": 0,  # already recorded by the first sync
+            "snapshot_taken": False,  # one snapshot per day
         }
         studies = {s.external_id: s for s in db_session.scalars(select(Study))}
         assert studies[records[0].external_id].in_source is False

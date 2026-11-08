@@ -91,6 +91,7 @@ class SiteOut(BaseModel):
     principal_investigator: str | None
     status: str | None
     activation_date: date | None
+    activation_target: date | None = None
     enrolled: int | None
     enrolment_target: int | None
     enrolment_percent: float | None
@@ -317,6 +318,7 @@ async def get_study(
                 principal_investigator=s.principal_investigator,
                 status=s.status,
                 activation_date=s.activation_date,
+                activation_target=s.activation_target,
                 enrolled=s.enrolled,
                 enrolment_target=s.enrolment_target,
                 enrolment_percent=enrolment_percent(s.enrolled, s.enrolment_target),

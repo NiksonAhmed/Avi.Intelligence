@@ -7,6 +7,7 @@ from app.audit import models as _audit_models  # noqa: F401  (registers tables o
 from app.core.config import get_settings
 from app.db.session import Base
 from app.knowledge import models as _knowledge_models  # noqa: F401
+from app.reports import models as _report_models  # noqa: F401
 from app.studies import models as _study_models  # noqa: F401
 
 config = context.config

@@ -16,6 +16,8 @@ class SiteRecord(BaseModel):
     principal_investigator: str | None = None
     status: str | None = None
     activation_date: date | None = None
+    activation_target: date | None = None
+    """Planned activation date (SimpleTrials: site_activation_target)."""
     enrolled: int | None = Field(default=None, ge=0)
     enrolment_target: int | None = Field(default=None, ge=0)
 

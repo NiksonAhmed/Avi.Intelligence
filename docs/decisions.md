@@ -2,6 +2,26 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-09: Reports and Insights, Step 1 (foundations) and Study delivery
+
+- User decisions: SimpleTrials sync **hourly** (`SIMPLETRIALS_SYNC_MINUTES=60`, 0 = off, never in tests);
+  **Excel and PDF** exports; **daily snapshots** start now; eTMF "expected" = placeholders, filing target
+  5 working days (for the eTMF step).
+- The hourly sync runs inside the API process (no extra service); each run is an ordinary read-only sync
+  recorded as "system (scheduled)". The first sync of each day stores a small snapshot of key figures
+  (`report_snapshots`) so trends can be drawn later; history starts from today.
+- **On-time completion:** SimpleTrials' API has no actual completion date. Avi.Intelligence records the
+  day a sync first sees a milestone at 100% (`milestone_completions`), but only if an earlier snapshot saw
+  it incomplete; milestones already complete when tracking began get no date and are left out of
+  on-time figures rather than guessed.
+- Site activation compares SimpleTrials' actual activation date with its planned
+  (`site_activation_target`) date, now synced.
+- Excel exports carry an "About" sheet (scope, data as of, source, rules) and are audited
+  (`report.exported`). PDF uses the browser's Save as PDF with a print layout (A4 landscape, navigation
+  and filters hidden, colours kept); a generated PDF file can be added later if needed.
+- Charts are plain HTML/CSS (no chart library), following the approved mock-up; every chart states its
+  rule, every number has a text label, colour is never the only signal.
+
 ## 2026-11-06: SharePoint live (Avion SOP library)
 
 - Connected to `sites/AM` → "Procedures and SoPs" → "1. Avion SoPs" with the Entra app

@@ -47,3 +47,11 @@ export function sopDownloadUrl(id: string, format: 'original' | 'word' = 'origin
   const url = `/api/v1/sops/${encodeURIComponent(id)}/download`
   return format === 'word' ? `${url}?format=word` : url
 }
+
+/** Excel export of a report, with the same filters as on screen. */
+export function reportExportUrl(report: 'study-delivery', filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  const query = params.toString()
+  return `/api/v1/reports/${report}/export.xlsx${query ? `?${query}` : ''}`
+}

@@ -455,3 +455,87 @@ export interface RiskInput {
   mitigation?: string | null
   owner_id: string
 }
+
+// ---- Reports and Insights ----
+
+export type ReportTone = 'good' | 'info' | 'warn' | 'bad' | 'neutral'
+
+export interface ReportTile {
+  key: string
+  label: string
+  value: string
+  note: string
+  tone: ReportTone
+}
+
+export interface ReportOption {
+  id: string
+  label: string
+}
+
+export interface ReportSource {
+  /** "api" (SimpleTrials) or "mock" (demo data). */
+  mode: string
+  /** When the data was last copied from SimpleTrials. */
+  as_of: string | null
+  sandbox_only: boolean
+  /** Days of history kept so far (trend charts need a few weeks). */
+  snapshot_days: number
+}
+
+export interface DeliveryMilestone {
+  study_id: string
+  protocol_number: string
+  name: string
+  original_date: string | null
+  current_date: string | null
+  variance_days: number | null
+  state: MilestoneState
+  schedule: ScheduleState
+  completed_on: string | null
+  completion_basis: 'actual' | 'first-seen' | 'before-tracking' | null
+  on_time: boolean | null
+}
+
+export interface DeliverySite {
+  study_id: string
+  protocol_number: string
+  site_id: string
+  site_number: string
+  name: string
+  country: string | null
+  enrolled: number | null
+  target: number | null
+  percent: number | null
+  flag: 'none' | 'zero' | 'no_target' | 'over_target'
+}
+
+export interface PendingSite {
+  study_id: string
+  protocol_number: string
+  site_id: string
+  site_number: string
+  name: string
+  status: string | null
+  planned_date: string | null
+  days_late: number | null
+  state: 'late' | 'due_soon' | 'upcoming' | 'no_date'
+}
+
+export interface StudyDeliveryReport {
+  tiles: ReportTile[]
+  milestones: DeliveryMilestone[]
+  on_time: { completed: number; on_time: number; with_original_date: number }
+  sites: DeliverySite[]
+  activation: { total: number; activated: number; percent: number | null; with_target: number; on_time: number }
+  pending_sites: PendingSite[]
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
+}
+
+export interface ReportFilters {
+  study_id?: string
+  site_id?: string
+}

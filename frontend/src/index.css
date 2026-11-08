@@ -56,3 +56,37 @@ body {
     display: none !important;
   }
 }
+
+/* Reports: "PDF" uses the browser's Save as PDF. Print the report itself, not the app around it. */
+.print-only {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+  .ant-layout-sider,
+  .ant-layout-header,
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  body,
+  .ant-layout {
+    background: #ffffff !important;
+  }
+  .ant-layout-content {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .report-card {
+    break-inside: avoid;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

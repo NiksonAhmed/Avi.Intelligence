@@ -73,6 +73,7 @@ class StudySite(Base):
     principal_investigator: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str | None] = mapped_column(String(64), nullable=True)
     activation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    activation_target: Mapped[date | None] = mapped_column(Date, nullable=True)
     enrolled: Mapped[int | None] = mapped_column(Integer, nullable=True)
     enrolment_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

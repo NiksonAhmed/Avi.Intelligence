@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.connectors.simpletrials.models import StudyConnector
 from app.core.logging import redact
+from app.reports.history import record_completions, take_daily_snapshot
 
+from .clock import today
 from .models import ConnectorSync, Study, StudyMilestone, StudySite
 
 log = logging.getLogger("studies.sync")
@@ -91,6 +93,14 @@ async def sync_studies(
         "created": created,
         "updated": updated,
         "no_longer_in_source": flagged,
+    }
+    db.commit()
+    # Report history: completion dates and the daily snapshot (both read-only derivations).
+    day = today()
+    run.counts = {
+        **run.counts,
+        "completions_recorded": record_completions(db, tenant_id, source, day),
+        "snapshot_taken": take_daily_snapshot(db, tenant_id, source, day),
     }
     db.commit()
     log.info("simpletrials.synced", extra={"counts": run.counts})
