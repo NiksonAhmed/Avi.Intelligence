@@ -86,3 +86,6 @@ export function milestoneTone(m: DeliveryMilestone): { tone: ReportTone; label: 
   if (m.schedule === 'no_baseline') return { tone: 'neutral', label: 'No original date' }
   return { tone: 'info', label: 'On plan' }
 }
+
+/** Change log periods offered on the Quality (SOPs) report, in months. */
+export const CHANGE_PERIODS = [3, 6, 12, 24]

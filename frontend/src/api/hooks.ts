@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from './client'
 import type {
   ReportFilters,
+  QualityReport,
+  QualityReportFilters,
   StudyDeliveryReport,
   WorkManagementReport,
   WorkReportFilters,
@@ -282,6 +284,17 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useQualityReport(filters: QualityReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'quality', filters],
+    queryFn: () =>
+      apiRequest<QualityReport>('/reports/quality', {
+        params: { department: filters.department, months: filters.months ? String(filters.months) : undefined },
+      }),
     placeholderData: (previous) => previous,
   })
 }

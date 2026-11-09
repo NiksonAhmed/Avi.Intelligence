@@ -11,20 +11,25 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.api.sops import SopSource, _with_details
+from app.api.sops import _source as sop_source
 from app.api.studies import current_source_label, study_source
 from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
+from app.connectors.sharepoint import get_sop_connector
+from app.connectors.sharepoint.models import SopConnector
 from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector
 from app.db.session import get_db
 from app.reports.excel import Sheet, build_workbook
 from app.reports.history import snapshot_days
 from app.reports.models import MilestoneCompletion
+from app.reports.quality import REVIEW_WINDOW_DAYS, Quality, build_quality
 from app.reports.study_delivery import StudyDelivery, build_study_delivery
 from app.reports.work_management import DUE_SOON_DAYS, WorkManagement, build_work_management, level
 from app.studies.clock import today
-from app.studies.models import Risk, Study, Task
-from app.studies.rules import TASK_CATEGORY_LABELS, MilestoneState, ScheduleState, TaskCategory
+from app.studies.models import Risk, Study, Task, TaskDocument
+from app.studies.rules import TASK_CATEGORY_LABELS, TASK_CLOSED, MilestoneState, ScheduleState, TaskCategory
 from app.studies.sync import ensure_synced
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -383,6 +388,152 @@ async def work_management_export(
         request=request,
     )
     name = f"Work management {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# --- Quality (SOPs) ---
+
+SopConnectorDep = Annotated[SopConnector, Depends(get_sop_connector)]
+SopReader = Annotated[CurrentUser, Depends(require(Permission.SOP_READ))]
+Department = Annotated[str | None, Query(max_length=200)]
+Months = Annotated[int, Query(ge=1, le=24, description="Change log period: 3, 6, 12 or 24 months")]
+
+
+class QualityResponse(Quality):
+    source: SopSource
+    fetched_at: datetime
+
+
+async def _quality(
+    db: Session, connector: SopConnector, user: CurrentUser, department: str | None, months: int
+) -> QualityResponse:
+    result = await connector.list_sops()
+    docs = _with_details(result.documents, db, user, connector.info())
+    open_tasks: dict[str, int] = {}
+    for doc in db.scalars(
+        select(TaskDocument)
+        .join(Task)
+        .where(
+            Task.tenant_id == user.tenant_id,
+            Task.category == TaskCategory.SOP.value,
+            Task.status.not_in([s.value for s in TASK_CLOSED]),
+        )
+    ):
+        open_tasks[doc.sop_id] = open_tasks.get(doc.sop_id, 0) + 1
+    report = build_quality(docs, open_tasks, today(), department=department, months=months)
+    return QualityResponse(
+        **report.model_dump(), source=sop_source(connector.info()), fetched_at=result.fetched_at
+    )
+
+
+@router.get("/quality", response_model=QualityResponse)
+async def quality(
+    db: Db, connector: SopConnectorDep, user: SopReader, department: Department = None, months: Months = 12
+) -> QualityResponse:
+    return await _quality(db, connector, user, department, months)
+
+
+_REVIEW_LABEL = {
+    "overdue": "Overdue",
+    "due_soon": f"Due within {REVIEW_WINDOW_DAYS} days",
+    "scheduled": "Scheduled",
+    "no_date": "No review date",
+}
+
+
+@router.get("/quality/export.xlsx")
+async def quality_export(
+    request: Request,
+    db: Db,
+    connector: SopConnectorDep,
+    user: SopReader,
+    department: Department = None,
+    months: Months = 12,
+) -> Response:
+    r = await _quality(db, connector, user, department, months)
+    sheets = [
+        Sheet(
+            "Review schedule",
+            [
+                "SOP",
+                "Title",
+                "Version",
+                "Department",
+                "Owner",
+                "Effective",
+                "Next review",
+                "Days to review",
+                "Review status",
+                "Forms",
+                "Open review tasks",
+            ],
+            [
+                [
+                    s.sop_number,
+                    s.title,
+                    s.version,
+                    s.department,
+                    s.owner,
+                    s.effective_date,
+                    s.review_date,
+                    s.days_to_review,
+                    _REVIEW_LABEL[s.state],
+                    s.forms,
+                    s.open_tasks,
+                ]
+                for s in r.schedule
+            ],
+        ),
+        Sheet(
+            "Change log",
+            ["Document", "Title", "Type", "Version", "Issued", "Changes", "Date from"],
+            [
+                [
+                    c.sop_number,
+                    c.title,
+                    "Form" if c.kind == "form" else "SOP",
+                    c.version,
+                    c.issued,
+                    c.changes,
+                    "Change history" if c.basis == "history" else "Effective date of current version",
+                ]
+                for c in r.changes
+            ],
+        ),
+        Sheet(
+            "Library health",
+            ["Finding", "Document"],
+            [[c.label, i.label] for c in r.health for i in c.items],
+        ),
+    ]
+    scope = (department or "All departments") + f" · changes in the last {r.months} months"
+    about = [
+        ("Report", "Quality (SOPs)"),
+        ("Scope", scope),
+        ("Data as of", r.fetched_at.strftime("%d %b %Y %H:%M UTC")),
+        (
+            "Source",
+            "SharePoint SOP library (approved documents)" if r.source.mode == "live" else "Demo data",
+        ),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="quality",
+        summary=f"Exported Quality (SOPs) report to Excel ({scope})",
+        details={"format": "xlsx", "department": department, "months": r.months},
+        request=request,
+    )
+    name = f"Quality SOPs {datetime.now().strftime('%Y-%m-%d')}.xlsx"
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

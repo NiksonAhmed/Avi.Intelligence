@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router'
 
 import type { ReportFilters, TaskCategory } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
+import { CHANGE_PERIODS } from '../../lib/reports'
+import { QualityTab } from './QualityTab'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
 import { WorkManagementTab } from './WorkManagementTab'
 
@@ -16,9 +18,8 @@ type TabKey = (typeof TABS)[number]['key']
 
 const CATEGORIES: TaskCategory[] = ['study', 'sop', 'vendor', 'system', 'general']
 
-const COMING: Record<Exclude<TabKey, 'study' | 'work'>, string> = {
-  quality: 'SOP review schedule, library health and the change log are being built next.',
-  etmf: 'eTMF completeness, QC pipeline, filing timeliness and expiring documents follow after Quality.',
+const COMING: Record<Exclude<TabKey, 'study' | 'work' | 'quality'>, string> = {
+  etmf: 'eTMF completeness, QC pipeline, filing timeliness and expiring documents are being built next.',
 }
 
 export function ReportsPage() {
@@ -60,6 +61,14 @@ export function ReportsPage() {
         <WorkManagementTab
           filters={{ study_id: filters.study_id, category: CATEGORIES.find((c) => c === params.get('category')) }}
           onFilters={(f) => update({ study: f.study_id, category: f.category })}
+        />
+      ) : tab === 'quality' ? (
+        <QualityTab
+          filters={{
+            department: params.get('department') ?? undefined,
+            months: CHANGE_PERIODS.find((m) => String(m) === params.get('months')),
+          }}
+          onFilters={(f) => update({ department: f.department, months: f.months ? String(f.months) : undefined })}
         />
       ) : (
         <Empty description={COMING[tab]} style={{ padding: '48px 0' }} />

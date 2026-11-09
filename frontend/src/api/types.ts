@@ -661,6 +661,70 @@ export interface WorkManagementReport {
   source: ReportSource
 }
 
+export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'
+
+export interface QualityScheduleRow {
+  id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  department: string | null
+  owner: string | null
+  effective_date: string | null
+  review_date: string | null
+  days_to_review: number | null
+  state: ReviewState
+  forms: number
+  open_tasks: number
+}
+
+export interface QualityMonth {
+  /** "overdue", or the month as YYYY-MM. */
+  key: string
+  label: string
+  count: number
+  items: string[]
+}
+
+export interface QualityHealthCheck {
+  key: string
+  label: string
+  description: string
+  count: number
+  items: { id: string; label: string }[]
+}
+
+export interface QualityChange {
+  id: string
+  sop_number: string | null
+  title: string
+  kind: 'sop' | 'form' | 'other'
+  version: string
+  issued: string
+  changes: string | null
+  basis: 'history' | 'effective'
+}
+
+export interface QualityReport {
+  tiles: ReportTile[]
+  schedule: QualityScheduleRow[]
+  by_month: QualityMonth[]
+  /** Reviews due after the months shown. */
+  later: number
+  health: QualityHealthCheck[]
+  changes: QualityChange[]
+  months: number
+  department_options: ReportOption[]
+  rules: Record<string, string>
+  source: { mode: string; approved_only: boolean; library: string }
+  fetched_at: string
+}
+
+export interface QualityReportFilters {
+  department?: string
+  months?: number
+}
+
 export interface WorkReportFilters {
   study_id?: string
   category?: TaskCategory

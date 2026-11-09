@@ -55,3 +55,30 @@ test('Work management report: overdue task, person and risk heat map', async ({ 
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^Work management \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
+
+test('Quality (SOPs) report: review schedule, department filter and Excel export', async ({ page }) => {
+  await page.goto('/reports')
+  await page.getByRole('tab', { name: 'Quality (SOPs)' }).click()
+  await expect(page).toHaveURL(/tab=quality/)
+  await expect(page.getByText('Demo data: SharePoint is not connected')).toBeVisible()
+  await expect(page.getByTestId('tile-approved')).toHaveText('11')
+  await expect(page.getByTestId('review-month')).toHaveCount(13)
+  const sop001 = page.getByTestId('schedule-row').filter({ hasText: 'SOP-001' })
+  await expect(sop001).toContainText('Overdue')
+
+  await page.getByRole('combobox', { name: 'Filter by department' }).click()
+  await page.getByTitle('Pharmacovigilance', { exact: true }).click()
+  await expect(page).toHaveURL(/department=Pharmacovigilance/)
+  await expect(page.getByTestId('schedule-row').filter({ hasText: 'SOP-001' })).toHaveCount(0)
+  await expect(page.getByTestId('schedule-row').first()).toContainText('Pharmacovigilance')
+
+  // Open an SOP from the schedule.
+  await page.getByTestId('schedule-row').first().getByRole('link').click()
+  await expect(page).toHaveURL(/\/documents\/sops\//)
+  await page.goBack()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: /Excel/ }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^Quality SOPs \d{4}-\d{2}-\d{2}\.xlsx$/)
+})
