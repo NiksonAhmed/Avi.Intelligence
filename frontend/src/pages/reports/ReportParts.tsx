@@ -82,14 +82,65 @@ export function Bar({ percent, color, height = 10, label }: { percent: number; c
   )
 }
 
+/** One stacked horizontal bar: segments drawn in order, scaled to `max`. */
+export function StackedBar({
+  segments,
+  max,
+  label,
+  height = 14,
+}: {
+  segments: { value: number; color: string }[]
+  max: number
+  label: string
+  height?: number
+}) {
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{ display: 'flex', height, background: '#EEF1F5', borderRadius: 3, overflow: 'hidden' }}
+    >
+      {max > 0 &&
+        segments
+          .filter((seg) => seg.value > 0)
+          .map((seg, i) => (
+            <div key={i} style={{ width: `${(seg.value / max) * 100}%`, background: seg.color, height: '100%' }} />
+          ))}
+    </div>
+  )
+}
+
+/** Small colour key for a chart. */
+export function Legend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <Flex gap={14} wrap style={{ fontSize: 12, color: '#3E4C5E' }} aria-hidden>
+      {items.map((i) => (
+        <Flex key={i.label} align="center" gap={6}>
+          <span style={{ width: 12, height: 12, borderRadius: 2, background: i.color }} />
+          {i.label}
+        </Flex>
+      ))}
+    </Flex>
+  )
+}
+
+export interface ToolbarFilter {
+  id: string
+  label: string
+  ariaLabel: string
+  placeholder: string
+  value?: string
+  options: ReportOption[]
+  onChange: (value?: string) => void
+  width?: number
+}
+
 interface ToolbarProps {
-  studyOptions: ReportOption[]
-  siteOptions: ReportOption[]
-  studyId?: string
-  siteId?: string
-  onStudy: (id?: string) => void
-  onSite: (id?: string) => void
+  filters: ToolbarFilter[]
   source?: ReportSource
+  /** Overrides the "As of … · Source …" line. */
+  sourceText?: string
   excelUrl: string
 }
 
@@ -98,41 +149,29 @@ export function ReportToolbar(p: ToolbarProps) {
   return (
     <Card size="small" styles={{ body: { padding: '12px 16px' } }} className="no-print">
       <Flex gap={12} wrap align="flex-end">
-        <Flex vertical gap={4}>
-          <label htmlFor="report-study" style={{ fontSize: 12, fontWeight: 600, color: '#5B6B82' }}>
-            Study
-          </label>
-          <Select
-            id="report-study"
-            aria-label="Filter by study"
-            allowClear
-            placeholder="All studies"
-            value={p.studyId}
-            onChange={(v?: string) => p.onStudy(v)}
-            options={p.studyOptions.map((o) => ({ value: o.id, label: o.label }))}
-            style={{ width: 300, maxWidth: '100%' }}
-            popupMatchSelectWidth={false}
-          />
-        </Flex>
-        <Flex vertical gap={4}>
-          <label htmlFor="report-site" style={{ fontSize: 12, fontWeight: 600, color: '#5B6B82' }}>
-            Site
-          </label>
-          <Select
-            id="report-site"
-            aria-label="Filter by site"
-            allowClear
-            placeholder="All sites"
-            value={p.siteId}
-            onChange={(v?: string) => p.onSite(v)}
-            options={p.siteOptions.map((o) => ({ value: o.id, label: o.label }))}
-            style={{ width: 260, maxWidth: '100%' }}
-            popupMatchSelectWidth={false}
-          />
-        </Flex>
+        {p.filters.map((f) => (
+          <Flex key={f.id} vertical gap={4}>
+            <label htmlFor={f.id} style={{ fontSize: 12, fontWeight: 600, color: '#5B6B82' }}>
+              {f.label}
+            </label>
+            <Select
+              id={f.id}
+              aria-label={f.ariaLabel}
+              allowClear
+              placeholder={f.placeholder}
+              value={f.value}
+              onChange={(v?: string) => f.onChange(v)}
+              options={f.options.map((o) => ({ value: o.id, label: o.label }))}
+              style={{ width: f.width ?? 280, maxWidth: '100%' }}
+              popupMatchSelectWidth={false}
+            />
+          </Flex>
+        ))}
         <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
-          {p.source?.as_of ? `As of ${formatDateTime(p.source.as_of)}` : 'Not synced yet'} ·{' '}
-          {p.source?.mode === 'api' ? 'Source: SimpleTrials (read-only copy)' : 'Source: demo data'}
+          {p.sourceText ??
+            `${p.source?.as_of ? `As of ${formatDateTime(p.source.as_of)}` : 'Not synced yet'} · ${
+              p.source?.mode === 'api' ? 'Source: SimpleTrials (read-only copy)' : 'Source: demo data'
+            }`}
         </Typography.Text>
         <Flex gap={8}>
           <Button icon={<FileExcelOutlined />} href={p.excelUrl}>

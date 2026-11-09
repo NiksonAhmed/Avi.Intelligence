@@ -194,12 +194,28 @@ export function StudyDeliveryTab({ filters, onFilters }: Props) {
   return (
     <Flex vertical gap={18}>
       <ReportToolbar
-        studyOptions={data.study_options}
-        siteOptions={data.site_options}
-        studyId={filters.study_id}
-        siteId={filters.site_id}
-        onStudy={(id) => onFilters({ study_id: id, site_id: undefined })}
-        onSite={(id) => onFilters({ ...filters, site_id: id })}
+        filters={[
+          {
+            id: 'report-study',
+            label: 'Study',
+            ariaLabel: 'Filter by study',
+            placeholder: 'All studies',
+            value: filters.study_id,
+            options: data.study_options,
+            onChange: (id) => onFilters({ study_id: id, site_id: undefined }),
+            width: 300,
+          },
+          {
+            id: 'report-site',
+            label: 'Site',
+            ariaLabel: 'Filter by site',
+            placeholder: 'All sites',
+            value: filters.site_id,
+            options: data.site_options,
+            onChange: (id) => onFilters({ ...filters, site_id: id }),
+            width: 260,
+          },
+        ]}
         source={data.source}
         excelUrl={reportExportUrl('study-delivery', { study_id: filters.study_id, site_id: filters.site_id })}
       />

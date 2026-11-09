@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.studies import current_source_label, study_source
 from app.audit.service import record_event
@@ -21,9 +21,10 @@ from app.reports.excel import Sheet, build_workbook
 from app.reports.history import snapshot_days
 from app.reports.models import MilestoneCompletion
 from app.reports.study_delivery import StudyDelivery, build_study_delivery
+from app.reports.work_management import DUE_SOON_DAYS, WorkManagement, build_work_management, level
 from app.studies.clock import today
-from app.studies.models import Study
-from app.studies.rules import MilestoneState, ScheduleState
+from app.studies.models import Risk, Study, Task
+from app.studies.rules import TASK_CATEGORY_LABELS, MilestoneState, ScheduleState, TaskCategory
 from app.studies.sync import ensure_synced
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -230,6 +231,158 @@ async def study_delivery_export(
         request=request,
     )
     name = f"Study delivery {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# --- Work management ---
+
+
+class WorkManagementResponse(WorkManagement):
+    source: ReportSource
+
+
+async def _work_management(
+    db: Session,
+    connector: StudyConnector,
+    user: CurrentUser,
+    study_id: str | None,
+    category: TaskCategory | None,
+) -> WorkManagementResponse:
+    await ensure_synced(db, connector, user.tenant_id)
+    source = current_source_label(connector)
+    studies = _studies(db, user.tenant_id, source)
+    tasks = list(
+        db.scalars(
+            select(Task)
+            .where(Task.tenant_id == user.tenant_id)
+            .options(joinedload(Task.study), selectinload(Task.documents), selectinload(Task.assignees))
+        ).unique()
+    )
+    risks = list(
+        db.scalars(
+            select(Risk).where(Risk.tenant_id == user.tenant_id).options(joinedload(Risk.study))
+        ).unique()
+    )
+    report = build_work_management(tasks, risks, studies, today(), study_id=study_id, category=category)
+    info = study_source(db, connector, user.tenant_id)
+    return WorkManagementResponse(
+        **report.model_dump(),
+        source=ReportSource(
+            mode=info.connector.mode,
+            as_of=datetime.now(UTC),
+            sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+            snapshot_days=0,
+        ),
+    )
+
+
+@router.get("/work-management", response_model=WorkManagementResponse)
+async def work_management(
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    category: TaskCategory | None = None,
+) -> WorkManagementResponse:
+    return await _work_management(db, connector, user, study_id, category)
+
+
+@router.get("/work-management/export.xlsx")
+async def work_management_export(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    category: TaskCategory | None = None,
+) -> Response:
+    r = await _work_management(db, connector, user, study_id, category)
+    sheets = [
+        Sheet(
+            "Open tasks",
+            ["Task", "Category", "About", "Title", "People (their status)", "Status", "Due", "Days overdue"],
+            [
+                [
+                    t.reference,
+                    t.category_label,
+                    t.about,
+                    t.title,
+                    t.people,
+                    t.status,
+                    t.due_date,
+                    t.days_overdue,
+                ]
+                for t in r.open_tasks
+            ],
+        ),
+        Sheet(
+            "By person",
+            ["Person", "Open parts", "Overdue", f"Due in {DUE_SOON_DAYS} days", "Blocked"],
+            [[p.name, p.open, p.overdue, p.due_soon, p.blocked] for p in r.by_person],
+        ),
+        Sheet(
+            "By category",
+            ["Category", "Open", "Not started", "In progress", "Blocked", "Overdue"],
+            [[c.label, c.total, c.not_started, c.in_progress, c.blocked, c.overdue] for c in r.by_category],
+        ),
+        Sheet(
+            "Open risks and issues",
+            [
+                "Reference",
+                "Type",
+                "Study",
+                "Title",
+                "Likelihood",
+                "Impact",
+                "Score",
+                "Rating",
+                "Owner",
+                "Status",
+            ],
+            [
+                [
+                    x.reference,
+                    "Issue" if x.kind == "issue" else "Risk",
+                    x.protocol_number,
+                    x.title,
+                    level(x.likelihood),
+                    level(x.impact),
+                    x.score,
+                    x.rating,
+                    x.owner_name,
+                    x.status,
+                ]
+                for x in r.top_risks
+            ],
+        ),
+    ]
+    scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
+    if category:
+        scope += f" · {TASK_CATEGORY_LABELS[category]} tasks"
+    about = [
+        ("Report", "Work management"),
+        ("Scope", scope),
+        ("Data as of", datetime.now(UTC).strftime("%d %b %Y %H:%M UTC")),
+        ("Source", "Avi.Intelligence tasks, risks and issues"),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="work-management",
+        summary=f"Exported Work management report to Excel ({scope})",
+        details={"format": "xlsx", "study_id": study_id, "category": category.value if category else None},
+        request=request,
+    )
+    name = f"Work management {datetime.now().strftime('%Y-%m-%d')}.xlsx"
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

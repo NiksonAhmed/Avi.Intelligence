@@ -589,3 +589,79 @@ export interface ReportFilters {
   study_id?: string
   site_id?: string
 }
+
+export interface WorkStatusCounts {
+  key: string
+  label: string
+  not_started: number
+  in_progress: number
+  blocked: number
+  overdue: number
+  total: number
+}
+
+export interface WorkPersonLoad {
+  person_id: string
+  name: string
+  open: number
+  overdue: number
+  due_soon: number
+  blocked: number
+}
+
+export interface WorkOverdueTask {
+  task_id: string
+  reference: string
+  title: string
+  category: TaskCategory
+  category_label: string
+  about: string | null
+  due_date: string
+  days_overdue: number
+  status: TaskStatus
+  /** People who have not finished their part yet. */
+  waiting_on: string[]
+}
+
+export interface RiskHeatCell {
+  likelihood: number
+  impact: number
+  score: number
+  rating: 'Low' | 'Medium' | 'High'
+  risks: number
+  issues: number
+}
+
+export interface WorkOpenRisk {
+  risk_id: string
+  reference: string
+  kind: 'risk' | 'issue'
+  title: string
+  protocol_number: string
+  likelihood: number
+  impact: number
+  score: number
+  rating: 'Low' | 'Medium' | 'High'
+  owner_name: string
+  status: string
+}
+
+export interface WorkManagementReport {
+  tiles: ReportTile[]
+  by_category: WorkStatusCounts[]
+  by_study: WorkStatusCounts[]
+  by_person: WorkPersonLoad[]
+  overdue: WorkOverdueTask[]
+  heat_map: RiskHeatCell[]
+  top_risks: WorkOpenRisk[]
+  completed: { total: number; with_due_date: number; on_time: number }
+  study_options: ReportOption[]
+  category_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
+}
+
+export interface WorkReportFilters {
+  study_id?: string
+  category?: TaskCategory
+}

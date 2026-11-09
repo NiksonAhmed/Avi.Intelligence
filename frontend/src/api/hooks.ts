@@ -4,6 +4,8 @@ import { apiRequest } from './client'
 import type {
   ReportFilters,
   StudyDeliveryReport,
+  WorkManagementReport,
+  WorkReportFilters,
   AskResponse,
   AssistantStatus,
   AuditPage,
@@ -280,6 +282,17 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useWorkManagement(filters: WorkReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'work-management', filters],
+    queryFn: () =>
+      apiRequest<WorkManagementReport>('/reports/work-management', {
+        params: { study_id: filters.study_id, category: filters.category },
+      }),
     placeholderData: (previous) => previous,
   })
 }

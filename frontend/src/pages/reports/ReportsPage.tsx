@@ -1,9 +1,10 @@
 import { Empty, Tabs } from 'antd'
 import { useSearchParams } from 'react-router'
 
-import type { ReportFilters } from '../../api/types'
+import type { ReportFilters, TaskCategory } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
+import { WorkManagementTab } from './WorkManagementTab'
 
 const TABS = [
   { key: 'study', label: 'Study delivery' },
@@ -13,9 +14,10 @@ const TABS = [
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
-const COMING: Record<Exclude<TabKey, 'study'>, string> = {
-  work: 'Tasks by study, overdue by person and the risk heat map are being built next.',
-  quality: 'SOP review schedule, library health and the change log follow after Work management.',
+const CATEGORIES: TaskCategory[] = ['study', 'sop', 'vendor', 'system', 'general']
+
+const COMING: Record<Exclude<TabKey, 'study' | 'work'>, string> = {
+  quality: 'SOP review schedule, library health and the change log are being built next.',
   etmf: 'eTMF completeness, QC pipeline, filing timeliness and expiring documents follow after Quality.',
 }
 
@@ -53,6 +55,11 @@ export function ReportsPage() {
         <StudyDeliveryTab
           filters={filters}
           onFilters={(f) => update({ study: f.study_id, site: f.site_id })}
+        />
+      ) : tab === 'work' ? (
+        <WorkManagementTab
+          filters={{ study_id: filters.study_id, category: CATEGORIES.find((c) => c === params.get('category')) }}
+          onFilters={(f) => update({ study: f.study_id, category: f.category })}
         />
       ) : (
         <Empty description={COMING[tab]} style={{ padding: '48px 0' }} />
