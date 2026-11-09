@@ -52,7 +52,12 @@ describe('Study Command Centre', () => {
     '/me': me,
     [`/studies/${study.id}`]: makeStudyDetail(study),
     '/studies': makeStudyList([study]),
-    '/tasks': { tasks, can_manage: me === adminUser, statuses: [] },
+    '/tasks': {
+      tasks: tasks.map((t) => ({ ...t, can_edit: me === adminUser })),
+      can_manage: me === adminUser,
+      can_create: me === adminUser ? ['study', 'sop', 'vendor', 'system', 'general'] : [],
+      statuses: [],
+    },
     '/risks': { risks: [], can_manage: me === adminUser, statuses: [] },
     '/people': [],
   })
@@ -150,7 +155,7 @@ describe('Study Command Centre', () => {
       reference: 'TSK-0009',
       title: '01.01 Study Start',
       plan_item: { external_id: 'start', name: '01.01 Study Start' },
-      assignee_name: 'Demo CRA One',
+      assignees: [{ person_id: 'demo-cra-1', name: 'Demo CRA One', status: 'Completed', completed_at: null }],
       due_date: '2026-03-01',
       status: 'Completed',
       overdue: false,
@@ -185,7 +190,11 @@ describe('Study Command Centre', () => {
   })
 
   it('is read-only for other roles', async () => {
-    mockApi(routes(viewerUser, [makeTask({ can_update_status: false, assignee_name: 'Someone Else' })]))
+    mockApi(routes(viewerUser, [makeTask({
+        can_update_status: false,
+        my_status: null,
+        assignees: [{ person_id: 'x', name: 'Someone Else', status: 'Not started', completed_at: null }],
+      })]))
     renderRoute(`/command-centre/${study.id}?tab=tasks`)
     expect(await screen.findByText('Collect signed CVs for site 102')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /New task/ })).not.toBeInTheDocument()
@@ -206,7 +215,7 @@ describe('My Tasks', () => {
     const calls: { url: string; body: string }[] = []
     mockApi({
       '/me': viewerUser,
-      '/tasks': { tasks: [makeTask()], can_manage: false, statuses: [] },
+      '/tasks': { tasks: [makeTask({ can_edit: false })], can_manage: false, can_create: [], statuses: [] },
       [`/tasks/${makeTask().id}/status`]: (url: URL, init?: RequestInit) => {
         calls.push({ url: url.pathname, body: String(init?.body) })
         return makeTask({ status: 'In progress' })

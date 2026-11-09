@@ -2,6 +2,33 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-09: Task categories (Procedures and SOPs, Vendor, Computer system, General)
+
+- Tasks now have a **category**: Study (as before), Procedures and SOPs, Vendor, Computer system, General.
+  Existing tasks became Study tasks; the study is now optional (only Study tasks have one).
+- **Procedures and SOPs tasks** name one or more SOPs/forms (user decision: one or more), chosen only from
+  the live approved list; the server re-checks each one. The SOP number, title and version are stored
+  with the task when it is raised (`task_documents`), so it still reads "Review CO-SOP-005 v2.0" after
+  v3.0 is approved. SOPs already on a task keep their original snapshot when the task is edited.
+- **Vendor / Computer system:** the name is typed on each task (user decision; no managed list yet, so
+  spelling variants count separately in reports).
+- **Who assigns what (user decision):** permissions per category (`task.assign.<category>`).
+  Admin: all. Project Manager: Study and General (not Procedures and SOPs). New role **Quality Assurance
+  (`qa`)**: Procedures and SOPs, Vendor, Computer system and General. Whoever may assign a category may
+  also edit and cancel its tasks. QA and PM also see the audit trail (assumption).
+- **Own tasks (user decision):** everyone except viewers (CRA, new **Clinical Trials Associate (`cta`)**,
+  Data Manager, Pharmacovigilance, and PM/QA outside their categories) may create tasks for themselves
+  only, for their own tracking, and edit or cancel them. Never Procedures and SOPs tasks: only QA and
+  Admin create those, even for themselves. Own tasks are visible to everyone (read-only to others).
+  The Safety role is now labelled "Pharmacovigilance".
+- **Several people per task (user decision):** each person has their own status (`task_assignees`); the
+  task shows "1 of 3 completed" and is Completed when everyone is done, Blocked if anyone is blocked,
+  In progress once anyone has started. Only someone who may edit the task cancels it; setting a status
+  in the edit form applies to everyone. Re-assigning keeps the statuses of people who stay. Existing
+  tasks were migrated with their single assignee.
+- Each SOP/form page lists its open tasks and offers "New task" to administrators and QA.
+- Portfolio open-task counts include Study tasks only.
+
 ## 2026-11-09: Reports and Insights, Step 1 (foundations) and Study delivery
 
 - User decisions: SimpleTrials sync **hourly** (`SIMPLETRIALS_SYNC_MINUTES=60`, 0 = off, never in tests);

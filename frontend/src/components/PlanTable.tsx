@@ -88,7 +88,7 @@ function LinkedTask({ task }: { task: Task }) {
       >
         <div style={{ fontWeight: 600 }}>
           {task.status === 'Completed' && <CheckCircleFilled style={{ marginRight: 4 }} aria-hidden />}
-          {task.assignee_name}
+          {task.assignees.map((a) => a.name).join(', ')}
         </div>
         <div>{task.due_date ? `Due ${formatDayShort(task.due_date)}` : 'No due date'}</div>
         <div style={{ fontWeight: 600 }}>{tone.label}</div>

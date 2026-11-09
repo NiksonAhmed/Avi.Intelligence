@@ -174,16 +174,14 @@ class TestTaskPermissions:
     def test_admin_creates_task_with_reference_and_audit(self, admin: TestClient) -> None:
         task = _create_task(admin)
         assert task["reference"] == "TSK-0001"
-        assert task["assignee_name"] == "Demo CRA One"
+        assert [a["name"] for a in task["assignees"]] == ["Demo CRA One"]
         assert task["status"] == "Not started"
         assert task["overdue"] is True
         events = admin.get("/api/v1/audit-events").json()["items"]
         assert any(e["action"] == "task.created" for e in events)
 
-    @pytest.mark.parametrize(
-        "role", [Role.PROJECT_MANAGER, Role.CRA, Role.DATA_MANAGER, Role.SAFETY, Role.VIEWER]
-    )
-    def test_non_admins_cannot_create_or_edit(self, admin: TestClient, make_client, role: Role) -> None:  # type: ignore[no-untyped-def]
+    @pytest.mark.parametrize("role", [Role.CRA, Role.CTA, Role.DATA_MANAGER, Role.SAFETY, Role.VIEWER])
+    def test_staff_cannot_assign_to_others_or_edit(self, admin: TestClient, make_client, role: Role) -> None:  # type: ignore[no-untyped-def]
         task = _create_task(admin)
         other = make_client(role)
         study = _first_study(other)
@@ -203,7 +201,7 @@ class TestTaskPermissions:
         task = _create_task(admin, assignee="demo-cra-1")
         url = f"/api/v1/tasks/{task['id']}/status"
 
-        someone_else = make_client(Role.PROJECT_MANAGER, user_id="demo-pm-1")
+        someone_else = make_client(Role.CRA, user_id="demo-cra-2")
         assert someone_else.post(url, json={"status": "In progress"}).status_code == 403
 
         assignee = make_client(Role.CRA, user_id="demo-cra-1")
@@ -223,17 +221,23 @@ class TestTaskPermissions:
 
         events = admin.get("/api/v1/audit-events").json()["items"]
         change = next(e for e in events if e["action"] == "task.status_changed")
-        assert change["details"] == {"from": "Not started", "to": "Completed"}
+        assert change["details"] == {
+            "from": "Not started",
+            "to": "Completed",
+            "person": "Demo CRA One",
+            "person_status": "Completed",
+        }
 
     def test_admin_edit_records_changes(self, admin: TestClient) -> None:
         task = _create_task(admin)
         res = admin.patch(f"/api/v1/tasks/{task['id']}", json={"assignee_id": "demo-cra-2", "due_date": None})
         assert res.status_code == 200
-        assert res.json()["assignee_name"] == "Demo CRA Two" and res.json()["due_date"] is None
+        assert [a["name"] for a in res.json()["assignees"]] == ["Demo CRA Two"]
+        assert res.json()["due_date"] is None
         event = next(
             e for e in admin.get("/api/v1/audit-events").json()["items"] if e["action"] == "task.updated"
         )
-        assert event["details"]["changes"]["assignee"] == {"from": "Demo CRA One", "to": "Demo CRA Two"}
+        assert event["details"]["changes"]["assignees"] == {"from": ["Demo CRA One"], "to": ["Demo CRA Two"]}
 
     def test_validation(self, admin: TestClient) -> None:
         study = _first_study(admin)

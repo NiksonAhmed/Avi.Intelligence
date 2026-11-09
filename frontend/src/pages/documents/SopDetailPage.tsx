@@ -22,6 +22,7 @@ import type { RevisionEntry, SopDocument } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { ProvenanceTag } from '../../components/ProvenanceTag'
 import { StatusTag } from '../../components/StatusTag'
+import { SopTasksCard } from '../../components/work/SopTasksCard'
 import { formatBytes, formatDate, formatDateTime, formatDay } from '../../lib/format'
 import { STATUS_SOURCE_TEXT, downloadOptions } from '../../lib/sops'
 
@@ -343,6 +344,7 @@ export function SopDetailPage() {
               />
             </Card>
           )}
+          <SopTasksCard doc={doc} />
         </Col>
       </Row>
     </>

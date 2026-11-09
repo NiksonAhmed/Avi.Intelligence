@@ -18,6 +18,7 @@ test('portfolio to command centre: create a task, complete it, see it in the aud
   await dialog.getByLabel('Task').fill(title)
   await dialog.getByLabel('Assign to').click()
   await page.getByTitle('Local Developer (Developer (you))').click()
+  await dialog.getByText('New task', { exact: true }).click() // close the people list
   await dialog.getByRole('button', { name: 'Create task' }).click()
   await expect(page.getByText('Task created and assigned')).toBeVisible()
 
@@ -26,7 +27,7 @@ test('portfolio to command centre: create a task, complete it, see it in the aud
   const row = page.getByRole('row', { name: new RegExp(title) })
   await expect(row).toBeVisible()
   await row.getByRole('combobox', { name: /Status of TSK-/ }).click()
-  await page.getByTitle('Completed').click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle('Completed').click()
   await expect(page.getByText(/marked Completed/)).toBeVisible()
   await expect(page.getByRole('row', { name: new RegExp(title) })).toHaveCount(0)
 
@@ -49,6 +50,7 @@ test('assign a task from the plan; completing it turns the plan entry green', as
   await expect(dialog.getByText(`For plan item: ${item}`)).toBeVisible()
   await dialog.getByLabel('Assign to').click()
   await page.getByTitle('Local Developer (Developer (you))').click()
+  await dialog.getByText('New task', { exact: true }).click() // close the people list
   await dialog.getByRole('button', { name: 'Create task' }).click()
   await expect(page.getByText('Task created and assigned')).toBeVisible()
 
@@ -60,7 +62,7 @@ test('assign a task from the plan; completing it turns the plan entry green', as
   await page.goto('/tasks')
   const taskRow = page.getByRole('row', { name: new RegExp(item) }).first()
   await taskRow.getByRole('combobox', { name: /Status of TSK-/ }).click()
-  await page.getByTitle('Completed').click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle('Completed').click()
   await expect(page.getByText(/marked Completed/)).toBeVisible()
 
   // Back on the plan, the task shows as completed (green).

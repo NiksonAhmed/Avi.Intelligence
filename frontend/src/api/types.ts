@@ -366,43 +366,93 @@ export interface PlanItemRef {
   name: string
 }
 
+/** What a task is about. Study tasks link to a study, SOP tasks to approved SOPs/forms. */
+export type TaskCategory = 'study' | 'sop' | 'vendor' | 'system' | 'general'
+
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  study: 'Study',
+  sop: 'Procedures and SOPs',
+  vendor: 'Vendor',
+  system: 'Computer system',
+  general: 'General',
+}
+
+export interface TaskAssignee {
+  person_id: string
+  name: string
+  status: TaskStatus
+  completed_at: string | null
+}
+
+/** An approved SOP or form, as it was when the task was raised. */
+export interface TaskDocumentRef {
+  sop_id: string
+  kind: string
+  sop_number: string | null
+  title: string
+  version: string | null
+}
+
 export interface Task {
   id: string
   reference: string
-  study: StudyRef
+  category: TaskCategory
+  category_label: string
+  study: StudyRef | null
   plan_item: PlanItemRef | null
+  /** Vendor or computer system name, as typed. */
+  subject_name: string | null
+  documents: TaskDocumentRef[]
   title: string
   description: string | null
-  assignee_id: string
-  assignee_name: string
+  /** Everyone the task is assigned to, each with their own status. */
+  assignees: TaskAssignee[]
+  progress: { completed: number; total: number }
   due_date: string | null
+  /** Overall: Completed when everyone is done; Cancelled when the task was cancelled. */
   status: TaskStatus
+  /** The current user's own status, when they are one of the assigned people. */
+  my_status: TaskStatus | null
+  /** Created by someone for themselves. */
+  own_task: boolean
   overdue: boolean
   created_by_name: string
   created_at: string
   updated_at: string
   completed_at: string | null
   can_update_status: boolean
+  can_edit: boolean
 }
 
 export interface TaskListResponse {
   tasks: Task[]
+  /** Administrator: manages every task. */
   can_manage: boolean
+  /** Categories the current user may create tasks in (empty = read-only). */
+  can_create: TaskCategory[]
+  /** Categories the current user may assign to other people; others are for themselves only. */
+  can_assign: TaskCategory[]
+  categories: { value: TaskCategory; label: string }[]
   statuses: TaskStatus[]
 }
 
 export interface TaskFilters {
   study_id?: string
   assignee?: string
+  category?: TaskCategory
+  sop_id?: string
   include_closed?: boolean
 }
 
 export interface TaskInput {
-  study_id: string
+  category?: TaskCategory
+  study_id?: string | null
   plan_item_id?: string | null
+  subject_name?: string | null
+  document_ids?: string[]
   title: string
   description?: string | null
-  assignee_id: string
+  assignee_ids: string[]
   due_date?: string | null
 }
 

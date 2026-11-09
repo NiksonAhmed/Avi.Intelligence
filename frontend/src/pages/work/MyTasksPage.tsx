@@ -1,12 +1,14 @@
 import { PlusOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Checkbox, Col, Flex, Row, Segmented, Statistic, Typography } from 'antd'
+import { Alert, Button, Card, Checkbox, Col, Flex, Row, Segmented, Select, Statistic, Typography } from 'antd'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { useTasks } from '../../api/hooks'
-import type { Task } from '../../api/types'
+import { TASK_CATEGORY_LABELS } from '../../api/types'
+import type { Task, TaskCategory } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { TaskFormModal } from '../../components/work/TaskFormModal'
+import { useCreatableCategories } from '../../lib/tasks'
 import { TaskTable } from '../../components/work/TaskTable'
 import { taskBucket } from '../../lib/studies'
 
@@ -16,10 +18,14 @@ export function MyTasksPage() {
   const [params, setParams] = useSearchParams()
   const scope: Scope = params.get('scope') === 'all' ? 'all' : 'me'
   const includeClosed = params.get('closed') === '1'
+  const categoryParam = params.get('category')
+  const category = categoryParam && categoryParam in TASK_CATEGORY_LABELS ? (categoryParam as TaskCategory) : undefined
   const { data, isLoading, isError, error, refetch } = useTasks({
     assignee: scope === 'me' ? 'me' : undefined,
+    category,
     include_closed: includeClosed,
   })
+  const creatable = useCreatableCategories()
   const [modal, setModal] = useState<{ open: boolean; task?: Task | null }>({ open: false })
 
   const setParam = (key: string, value: string | null) => {
@@ -34,14 +40,15 @@ export function MyTasksPage() {
   const overdue = open.filter((t) => taskBucket(t.due_date, t.overdue) === 'overdue').length
   const thisWeek = open.filter((t) => taskBucket(t.due_date, t.overdue) === 'week').length
   const canManage = Boolean(data?.can_manage)
+  const canCreate = (data?.can_create ?? creatable).length > 0
 
   return (
     <>
       <PageHeader
         title="My Tasks"
-        subtitle="Tasks assigned to you across all studies. You can update the status of your own tasks."
+        subtitle="Tasks assigned to you: studies, procedures and SOPs, vendors, computer systems and general work. Update your own part of each task, or add a task for your own tracking."
         extra={
-          canManage && (
+          canCreate && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal({ open: true })}>
               New task
             </Button>
@@ -85,22 +92,36 @@ export function MyTasksPage() {
               { value: 'all', label: 'All tasks' },
             ]}
           />
+          <Select<TaskCategory | 'all'>
+            aria-label="Filter by category"
+            value={category ?? 'all'}
+            style={{ minWidth: 200 }}
+            onChange={(v) => setParam('category', v === 'all' ? null : v)}
+            options={[
+              { value: 'all', label: 'All categories' },
+              ...(Object.keys(TASK_CATEGORY_LABELS) as TaskCategory[]).map((c) => ({
+                value: c,
+                label: TASK_CATEGORY_LABELS[c],
+              })),
+            ]}
+          />
           <Checkbox checked={includeClosed} onChange={(e) => setParam('closed', e.target.checked ? '1' : null)}>
             Show completed and cancelled
           </Checkbox>
           {scope === 'all' && !canManage && (
-            <Typography.Text type="secondary">Tasks assigned to others are read-only.</Typography.Text>
+            <Typography.Text type="secondary">
+              Tasks assigned to others are read-only unless you can manage them.
+            </Typography.Text>
           )}
         </Flex>
         <TaskTable
           tasks={tasks}
           loading={isLoading}
-          canManage={canManage}
-          showStudy
+          showAbout
           onEdit={(task) => setModal({ open: true, task })}
           emptyText={
             scope === 'me'
-              ? 'Nothing assigned to you. Tasks an administrator assigns to you will appear here.'
+              ? 'Nothing assigned to you. Tasks assigned to you, and tasks you add for yourself, appear here.'
               : 'No tasks yet.'
           }
         />

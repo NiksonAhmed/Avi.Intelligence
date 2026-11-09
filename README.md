@@ -14,7 +14,7 @@ designed to become a configurable product for other Contract Research Organisati
 |---|---|
 | SOP library | Lists SOPs from a SharePoint library/folder with number, version, status, effective and review dates, owner, department. Search, filter, detail page, version history, download, open in SharePoint. |
 | Status honesty | Status shows where it came from (status column, content approval, or inferred from version). Demo data is labelled everywhere. |
-| Roles | admin, project_manager, cra, data_manager, safety, viewer, enforced in the API. |
+| Roles | admin, project_manager, cra, data_manager, safety, qa, cta, viewer, enforced in the API. |
 | Audit trail | Append-only record of SOP downloads and connector tests. |
 | Administration | SharePoint connection test, library columns and field mapping, AI index status and re-index. |
 | Study Portfolio and Command Centre | Studies, sites, milestones and enrolment from SimpleTrials (**demo data** until SimpleTrials is connected; see [docs/simpletrials-setup.md](docs/simpletrials-setup.md)). One workspace per study with milestones, sites, tasks and risks. Overdue and enrolment indicators follow stated rules; nothing is estimated. |

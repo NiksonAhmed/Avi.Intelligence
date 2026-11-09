@@ -29,6 +29,24 @@ export const adminUser: Me = {
   auth_mode: 'development',
 }
 
+export const qaUser: Me = {
+  ...adminUser,
+  id: 'qa1',
+  role: 'qa',
+  role_label: 'Quality Assurance',
+  permissions: [
+    'audit.read',
+    'sop.download',
+    'sop.read',
+    'study.read',
+    'task.assign.sop',
+    'task.assign.vendor',
+    'task.assign.system',
+    'task.assign.general',
+    'task.create_own',
+  ],
+}
+
 export const viewerUser: Me = {
   ...adminUser,
   role: 'viewer',
@@ -209,20 +227,27 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: '22222222-2222-2222-2222-222222222222',
     reference: 'TSK-0001',
+    category: 'study',
+    category_label: 'Study',
     study: { id: '11111111-1111-1111-1111-111111111111', protocol_number: 'DEMO-ONC-301', title: 'Demo' },
     plan_item: null,
+    subject_name: null,
+    documents: [],
     title: 'Collect signed CVs for site 102',
     description: null,
-    assignee_id: 'u1',
-    assignee_name: 'Jane Smith',
+    assignees: [{ person_id: 'u1', name: 'Jane Smith', status: 'Not started', completed_at: null }],
+    progress: { completed: 0, total: 1 },
     due_date: '2026-11-01',
     status: 'Not started',
+    my_status: 'Not started',
+    own_task: false,
     overdue: true,
     created_by_name: 'Admin',
     created_at: '2026-11-01T00:00:00Z',
     updated_at: '2026-11-01T00:00:00Z',
     completed_at: null,
     can_update_status: true,
+    can_edit: true,
     ...overrides,
   }
 }

@@ -3,8 +3,10 @@
 Two kinds of table live here:
   * Synced from SimpleTrials (studies, study_sites, study_milestones, connector_syncs): read-only in
     Avi.Intelligence. Rows carry `source`, `external_id` and `synced_at` so every value can be traced.
-  * Managed in Avi.Intelligence (tasks, risks): created by an administrator, status updated by the
-    assigned person. Every change is written to the audit trail.
+  * Managed in Avi.Intelligence (tasks, risks). Tasks are assigned by Admin, Project Managers and QA
+    (by category) or created by anyone for themselves; each assigned person updates their own status.
+    A task belongs to a category: a study, approved SOPs/forms, a vendor, a computer system, or general.
+    Every change is written to the audit trail.
 """
 
 from __future__ import annotations
@@ -129,16 +131,23 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(64), index=True)
     reference: Mapped[str] = mapped_column(String(32))  # human-readable, e.g. TSK-0007
-    study_id: Mapped[str] = mapped_column(String(36), ForeignKey("studies.id"), index=True)
+    # study | sop | vendor | system | general (see TaskCategory). Existing tasks are study tasks.
+    category: Mapped[str] = mapped_column(String(16), default="study", server_default="study", index=True)
+    # Study tasks only.
+    study_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("studies.id"), index=True, nullable=True
+    )
+    # Vendor / computer system tasks: the name as typed (no managed list yet).
+    subject_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Optional link to an entry of the study plan (SimpleTrials task/milestone id, stable across syncs).
     # The name is a snapshot so the link stays readable even if the plan entry later disappears.
     plan_item_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     plan_item_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    assignee_id: Mapped[str] = mapped_column(String(255), index=True)
-    assignee_name: Mapped[str] = mapped_column(String(255))
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Overall status, derived from the assigned people's statuses (see overall_task_status), or
+    # "Cancelled" when a manager cancels the whole task. Stored so lists can filter on it.
     status: Mapped[str] = mapped_column(String(32))
     created_by_id: Mapped[str] = mapped_column(String(255))
     created_by_name: Mapped[str] = mapped_column(String(255))
@@ -146,7 +155,51 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    study: Mapped[Study] = relationship()
+    study: Mapped[Study | None] = relationship()
+    documents: Mapped[list[TaskDocument]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", order_by="TaskDocument.position"
+    )
+    assignees: Mapped[list[TaskAssignee]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", order_by="TaskAssignee.position"
+    )
+
+
+class TaskAssignee(Base):
+    """A person a task is assigned to, with their own status (e.g. 5 of 8 have read the SOP)."""
+
+    __tablename__ = "task_assignees"
+    __table_args__ = (Index("uq_task_assignee", "task_id", "person_id", unique=True),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("tasks.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    person_id: Mapped[str] = mapped_column(String(255), index=True)
+    person_name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    task: Mapped[Task] = relationship(back_populates="assignees")
+
+
+class TaskDocument(Base):
+    """An approved SOP or form a Procedures and SOPs task is about.
+
+    Number, title and version are a snapshot taken when the task is raised, so the task still reads
+    "Review CO-SOP-005 v2.0" after v3.0 is approved or the file moves in SharePoint.
+    """
+
+    __tablename__ = "task_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    task_id: Mapped[str] = mapped_column(String(36), ForeignKey("tasks.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    sop_id: Mapped[str] = mapped_column(String(200), index=True)  # SharePoint drive item id
+    kind: Mapped[str] = mapped_column(String(16))  # sop | form
+    sop_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
+    version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    task: Mapped[Task] = relationship(back_populates="documents")
 
 
 class Risk(Base):

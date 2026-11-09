@@ -191,13 +191,20 @@ def _milestones(study: Study, now: date) -> list[MilestoneOut]:
 
 
 def _open_counts(db: Session, tenant_id: str) -> tuple[dict[str, int], dict[str, int]]:
-    tasks = dict(
-        db.execute(
+    # Only study tasks count towards a study (SOP, vendor, system and general tasks have none).
+    tasks = {
+        study_id: count
+        for study_id, count in db.execute(
             select(Task.study_id, func.count())
-            .where(Task.tenant_id == tenant_id, Task.status.not_in([s.value for s in TASK_CLOSED]))
+            .where(
+                Task.tenant_id == tenant_id,
+                Task.study_id.is_not(None),
+                Task.status.not_in([s.value for s in TASK_CLOSED]),
+            )
             .group_by(Task.study_id)
         ).all()
-    )
+        if study_id
+    }
     risks = dict(
         db.execute(
             select(Risk.study_id, func.count())

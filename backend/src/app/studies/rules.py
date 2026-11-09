@@ -131,6 +131,40 @@ class TaskStatus(StrEnum):
 
 
 TASK_CLOSED = {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
+PERSON_STATUSES = [s for s in TaskStatus if s != TaskStatus.CANCELLED]
+"""Statuses each assigned person can set for their own part (only a manager cancels a task)."""
+
+
+def overall_task_status(statuses: list[str]) -> TaskStatus:
+    """A task with several people: Completed when everyone is done, Blocked if anyone is blocked,
+    In progress once anyone has started or finished, otherwise Not started."""
+    values = [TaskStatus(s) for s in statuses]
+    if values and all(v == TaskStatus.COMPLETED for v in values):
+        return TaskStatus.COMPLETED
+    if TaskStatus.BLOCKED in values:
+        return TaskStatus.BLOCKED
+    if any(v in (TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED) for v in values):
+        return TaskStatus.IN_PROGRESS
+    return TaskStatus.NOT_STARTED
+
+
+class TaskCategory(StrEnum):
+    """What a task is about. Study tasks link to a study; SOP tasks to approved SOPs/forms."""
+
+    STUDY = "study"
+    SOP = "sop"
+    VENDOR = "vendor"
+    SYSTEM = "system"
+    GENERAL = "general"
+
+
+TASK_CATEGORY_LABELS: dict[TaskCategory, str] = {
+    TaskCategory.STUDY: "Study",
+    TaskCategory.SOP: "Procedures and SOPs",
+    TaskCategory.VENDOR: "Vendor",
+    TaskCategory.SYSTEM: "Computer system",
+    TaskCategory.GENERAL: "General",
+}
 
 
 class RiskStatus(StrEnum):

@@ -51,8 +51,9 @@ export function useHasPermission(permission: string): boolean {
   return Boolean(data?.permissions.includes(permission))
 }
 
-export function useSops(filters: SopFilters) {
+export function useSops(filters: SopFilters, options: { enabled?: boolean } = {}) {
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: queryKeys.sops(filters),
     queryFn: () =>
       apiRequest<SopListResponse>('/sops', {
@@ -191,6 +192,8 @@ export function useTasks(filters: TaskFilters) {
         params: {
           study_id: filters.study_id,
           assignee: filters.assignee,
+          category: filters.category,
+          sop_id: filters.sop_id,
           include_closed: filters.include_closed ? 'true' : undefined,
         },
       }),
@@ -218,8 +221,11 @@ export function useUpdateTask() {
 export function useTaskStatus() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
-      apiRequest<Task>(`/tasks/${encodeURIComponent(id)}/status`, jsonInit('POST', { status })),
+    mutationFn: ({ id, status, personId }: { id: string; status: TaskStatus; personId?: string }) =>
+      apiRequest<Task>(
+        `/tasks/${encodeURIComponent(id)}/status`,
+        jsonInit('POST', personId ? { status, person_id: personId } : { status }),
+      ),
     onSuccess: () => invalidateWork(queryClient, 'tasks'),
   })
 }

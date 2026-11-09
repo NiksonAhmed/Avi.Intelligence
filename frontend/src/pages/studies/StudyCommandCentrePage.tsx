@@ -261,7 +261,6 @@ export function StudyCommandCentrePage() {
                   <TaskTable
                     tasks={openTasks}
                     loading={tasks.isLoading}
-                    canManage={canManage}
                     onEdit={(task) => setTaskModal({ open: true, task })}
                     emptyText="No open tasks for this study."
                   />

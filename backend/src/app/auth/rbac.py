@@ -21,8 +21,10 @@ class Role(StrEnum):
     ADMIN = "admin"
     PROJECT_MANAGER = "project_manager"
     CRA = "cra"
+    CTA = "cta"
     DATA_MANAGER = "data_manager"
     SAFETY = "safety"
+    QA = "qa"
     VIEWER = "viewer"
 
 
@@ -34,16 +36,25 @@ class Permission(StrEnum):
     ASSISTANT_USE = "assistant.use"
     STUDY_READ = "study.read"
     WORK_MANAGE = "work.manage"
-    """Create, assign and edit tasks and risks. Administrators only; everyone else is read-only
-    except that the assigned person may update the status of their own task or risk."""
+    """Administrators: manage every task, risk and issue."""
+    TASK_ASSIGN_STUDY = "task.assign.study"
+    TASK_ASSIGN_SOP = "task.assign.sop"
+    TASK_ASSIGN_VENDOR = "task.assign.vendor"
+    TASK_ASSIGN_SYSTEM = "task.assign.system"
+    TASK_ASSIGN_GENERAL = "task.assign.general"
+    """task.assign.<category>: create, assign to anyone, edit and cancel tasks of that category."""
+    TASK_CREATE_OWN = "task.create_own"
+    """Create tasks assigned only to yourself, for your own tracking (never Procedures and SOPs)."""
 
 
 ROLE_LABELS: dict[Role, str] = {
     Role.ADMIN: "Administrator",
     Role.PROJECT_MANAGER: "Project Manager",
     Role.CRA: "Clinical Research Associate",
+    Role.CTA: "Clinical Trials Associate",
     Role.DATA_MANAGER: "Data Manager",
-    Role.SAFETY: "Safety / Pharmacovigilance",
+    Role.SAFETY: "Pharmacovigilance",
+    Role.QA: "Quality Assurance",
     Role.VIEWER: "Viewer",
 }
 
@@ -52,14 +63,30 @@ _ALL_STAFF = {
     Permission.SOP_DOWNLOAD,
     Permission.ASSISTANT_USE,
     Permission.STUDY_READ,
+    Permission.TASK_CREATE_OWN,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMIN: frozenset(Permission),
-    Role.PROJECT_MANAGER: frozenset(_ALL_STAFF | {Permission.AUDIT_READ}),
+    # Project Managers assign Study and General tasks (not Procedures and SOPs).
+    Role.PROJECT_MANAGER: frozenset(
+        _ALL_STAFF | {Permission.AUDIT_READ, Permission.TASK_ASSIGN_STUDY, Permission.TASK_ASSIGN_GENERAL}
+    ),
     Role.CRA: frozenset(_ALL_STAFF),
+    Role.CTA: frozenset(_ALL_STAFF),
     Role.DATA_MANAGER: frozenset(_ALL_STAFF),
     Role.SAFETY: frozenset(_ALL_STAFF),
+    # QA assigns Procedures and SOPs, Vendor, Computer system and General tasks.
+    Role.QA: frozenset(
+        _ALL_STAFF
+        | {
+            Permission.AUDIT_READ,
+            Permission.TASK_ASSIGN_SOP,
+            Permission.TASK_ASSIGN_VENDOR,
+            Permission.TASK_ASSIGN_SYSTEM,
+            Permission.TASK_ASSIGN_GENERAL,
+        }
+    ),
     Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE, Permission.STUDY_READ}),
 }
 
