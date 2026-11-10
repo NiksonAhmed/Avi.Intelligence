@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -200,14 +201,24 @@ def index_stats(db: Session, tenant_id: str) -> IndexStats:
     return IndexStats(documents=docs[0], passages=int(docs[1]), failed=failed or 0, last_indexed_at=docs[2])
 
 
-_cache: dict[str, tuple[tuple[int, int, str], Bm25Index]] = {}
+_cache: dict[str, tuple[str, Bm25Index]] = {}
 _cache_lock = Lock()
+
+
+def _content_signature(db: Session, tenant_id: str) -> str:
+    """Changes whenever an SOP is added, re-read or removed: a re-read SOP is stored as a new row with a
+    new id. (A timestamp is not enough: two indexings within one clock tick would look the same.)"""
+    rows = db.execute(
+        select(KnowledgeDocument.id, KnowledgeDocument.chunk_count)
+        .where(KnowledgeDocument.tenant_id == tenant_id)
+        .order_by(KnowledgeDocument.id)
+    ).all()
+    return hashlib.sha256(repr([tuple(r) for r in rows]).encode()).hexdigest()
 
 
 def get_search_index(db: Session, tenant_id: str) -> Bm25Index:
     """Returns a cached BM25 index, rebuilt whenever the tenant's indexed content changes."""
-    stats = index_stats(db, tenant_id)
-    signature = (stats.documents, stats.passages, str(stats.last_indexed_at))
+    signature = _content_signature(db, tenant_id)
     with _cache_lock:
         cached = _cache.get(tenant_id)
         if cached and cached[0] == signature:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from app.studies.clock import today as app_today
+
 from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyConnectorInfo, StudyRecord
 
 
@@ -31,7 +33,7 @@ def _milestones(
 
 
 def demo_studies(today: date | None = None) -> list[StudyRecord]:
-    t = today or date.today()
+    t = today or app_today()  # the app's clock (APP_TIME_ZONE), not the computer's
     return [
         StudyRecord(
             external_id="DEMO-ST-1001",
@@ -292,7 +294,7 @@ def _demo_doc(
 
 def with_demo_documents(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
     """Adds demo eTMF metadata: expected documents per study and site, most filed at active sites."""
-    t = today or date.today()
+    t = today or app_today()  # the app's clock (APP_TIME_ZONE), not the computer's
     for si, study in enumerate(studies):
         docs: list[EtmfDocumentRecord] = []
         for j, spec in enumerate(_STUDY_DOCS):
