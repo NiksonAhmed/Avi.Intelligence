@@ -43,8 +43,20 @@ SIMPLETRIALS_CUSTOMER_KEY=
 | Sites | `GET /sites`: `number`, `organization_display_name`, PI, `status_display` + `substatus_display`, `detail.site_activation_actual`, `detail.subjects_enrolled_actual/target` |
 | Milestones & tasks | `GET /tasks`: the **whole** *Milestones & Tasks* plan in SimpleTrials order. Phase = has children; milestone = zero duration or a SimpleTrials milestone code (`system_name`, e.g. `fpi`); task = the rest. `baseline_start_date` / `start_date` (original / current start), `baseline_end_date` / `end_date` (original / current end), `percent_complete` |
 
+| eTMF document metadata | `GET /documents`: `placeholder` (expected, not yet filed), `state` (`staged` / `uploaded`), `tmf_level`, `site_id`, `document_path` (section = first folder below the study, or below `BY SITE/<site>`), `common_name`/`title`, `doc_status_display`, `qc_status` and QC dates, `uploaded_at`, `signature_date`/`doc_version_on`, `expires_on`, `expiration_status`, `doc_version`. Records that are another record's `precursor_id` (older versions) or have a `parent_type` (e.g. payment attachments) are left out. |
+
 The API has **no actual completion date** for milestones, so "Completed" means 100% complete in
 SimpleTrials. Patient-level data (`/subjects`) is deliberately not read.
+
+**eTMF: metadata only.** Files are never downloaded, and file names, links, descriptions, user ids and
+the investigator names inside folder paths are not stored. If `/documents` cannot be read (for example
+the key has no eTMF access), the study still syncs and the last eTMF copy is kept.
+
+**Known gap (Nov 2026):** with the single-study Sandbox key, `/documents` returns the site-level documents
+exactly as the eTMF dashboard shows them (e.g. site 1001: 54), but only 6 of the study's 221 study-level
+TMF documents (none of the 91 Final ones). `/documents` accepts only the `state` filter, and no other
+eTMF endpoint exists. Open question for SimpleTrials: which call returns study-level TMF documents, and
+whether a Workspace key sees more. Until then the eTMF report under-counts filed study-level documents.
 
 ### Two statuses per plan entry
 

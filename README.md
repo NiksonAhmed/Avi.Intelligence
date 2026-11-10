@@ -4,8 +4,9 @@
 designed to become a configurable product for other Contract Research Organisations.
 
 > **Status: early development.** Implemented so far: the app shell, *Documents and Knowledge → SOPs*
-> (read from SharePoint), the Study Command Centre (SimpleTrials demo data), tasks, risks and issues,
-> role-based access, an audit trail and connector diagnostics.
+> (read from SharePoint), the Study Command Centre (SimpleTrials, read-only), tasks, risks and issues,
+> Reports and Insights, Ask Avi.Intelligence (SOPs and studies), role-based access, an audit trail and
+> connector diagnostics.
 > Sign-in (Microsoft Entra ID) is **not** implemented yet, so run it on a developer machine only.
 
 ## What works today
@@ -15,14 +16,16 @@ designed to become a configurable product for other Contract Research Organisati
 | SOP library | Lists SOPs from a SharePoint library/folder with number, version, status, effective and review dates, owner, department. Search, filter, detail page, version history, download, open in SharePoint. |
 | Status honesty | Status shows where it came from (status column, content approval, or inferred from version). Demo data is labelled everywhere. |
 | Roles | admin, project_manager, cra, data_manager, safety, qa, cta, viewer, enforced in the API. |
-| Audit trail | Append-only record of SOP downloads and connector tests. |
+| Audit trail | Append-only record of SOP downloads, connector tests and syncs, task and risk changes, report exports and assistant questions. |
 | Administration | SharePoint connection test, library columns and field mapping, AI index status and re-index. |
 | Study Portfolio and Command Centre | Studies, sites, milestones and enrolment from SimpleTrials (**demo data** until SimpleTrials is connected; see [docs/simpletrials-setup.md](docs/simpletrials-setup.md)). One workspace per study with milestones, sites, tasks and risks. Overdue and enrolment indicators follow stated rules; nothing is estimated. |
-| My Tasks, Risks and Issues | Administrators create and assign tasks and risks; only the assigned person (or risk owner) can change the status; everyone else is read-only. Every change is audited. |
-| Ask Avi.Intelligence | Chatbot (Documents and Knowledge → Ask, or the header button) that answers from **effective SOPs only**, with numbered citations to SOP and section, labelled as an AI suggestion. Without an API key it shows the most relevant SOP passages instead. Every question is logged. |
+| My Tasks, Risks and Issues | Tasks by category (Study, Procedures and SOPs, Vendor, Computer system, General). Admin assigns any category; Project Managers Study and General; QA Procedures and SOPs, Vendor, Computer system and General. Everyone else (except viewers) creates tasks for themselves only, never SOP tasks. A task can have several people, each with their own status. Risks are managed by administrators; the risk owner updates status. Every change is audited. |
+| Reports and Insights | Study delivery, Work management, Quality (SOPs) and eTMF tabs: headline tiles, charts that state their rule, filters, Excel export (audited) and print to PDF. The eTMF tab uses SimpleTrials document metadata only and currently under-counts study-level documents (see [docs/simpletrials-setup.md](docs/simpletrials-setup.md)). |
+| Ask Avi.Intelligence | One question box (Documents and Knowledge → Ask, or the header button). **SOP questions** are answered from effective SOPs only, with numbered citations to SOP and section, labelled as an AI suggestion; without an API key it shows the most relevant SOP passages. **Study questions** ("How are my studies going?", "Is anything due for study close-out?", "When is LPI?", "Which sites are behind on enrolment?") are answered **without AI** from the read-only SimpleTrials copy, using the same rules as the Command Centre and Reports, with links to the source records. Every question is logged. |
 
-Roadmap: SimpleTrials export import, then API → Entra ID sign-in → templates and study documents →
-Avie Safety database, Viedoc, Rave and email connectors.
+Roadmap: SimpleTrials Workspace (all studies) key and the study-level eTMF → Entra ID sign-in →
+Claude for free-form study questions (the look-ups are ready as tools) → templates and study documents
+→ Avie Safety database, Viedoc, Rave and email connectors.
 
 ### AI assistant set-up
 
@@ -98,6 +101,9 @@ npm run lint; npm run typecheck; npm test; npm run build
 npx playwright install chromium      # once
 npm run e2e                          # starts backend (demo mode) + frontend, desktop and tablet
 ```
+
+Stop any backend already running on port 8000 before `npm run e2e`: the browser tests always start
+their own demo backend with a fresh database, so they never touch live SharePoint or SimpleTrials.
 
 CI runs all of the above on every push and pull request (`.github/workflows/ci.yml`).
 

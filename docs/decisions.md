@@ -2,6 +2,50 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
+
+All three tabs follow Step 1's pattern: headline tiles, charts that state their rule, filters kept in the
+address, an audited Excel export with an About sheet, and print to PDF.
+
+**Work management** (Avi.Intelligence's own tasks, risks and issues; live, no sync needed)
+- Tiles: open tasks, overdue, due in 14 days, completed in 30 days (on time = finished on or before the due
+  date, by the day the last person finished), open High risks and issues.
+- Open tasks by category and by study (Not started / In progress / Blocked, with the overdue count); every
+  study in scope is listed, even with no open tasks.
+- **Open work by person counts each person's unfinished part**: a task with three people counts once for
+  each; someone who has finished their part is not counted (agreed per-person status model).
+- Overdue tasks name who it is still waiting on. Risk heat map: 3 × 3 likelihood × impact of Open and
+  Mitigating risks and issues (score ≥ 6 High, 3–4 Medium, 1–2 Low), plus the five highest.
+- Filters: study and task category. The category filter applies to tasks only; risks always belong to a
+  study, so the study filter applies to them too.
+
+**Quality (SOPs)** (the SharePoint library, approved documents, plus what is read from inside each file)
+- Review schedule of approved SOPs: next review from SharePoint or the cover page; Overdue (date passed),
+  Due within 30 days (same window as the SOP library), Scheduled, No review date. Forms are reviewed with
+  their SOP and are not scheduled separately. Each row shows its forms and open Procedures and SOPs tasks.
+- Reviews due by month: an Overdue column, then the next 12 months; later ones are counted below.
+- Library health findings: approved SOP with no review date; approved SOP or form with no effective date
+  (drafts and in-review documents are not flagged); SOP with no owner; file name and cover page disagree
+  on the version; form without an editable Word copy; form whose SOP is not in the library; no number.
+- Change log: entries from each document's change history issued in the period (3, 6, 12 or 24 months);
+  when a file has no readable change history, the date its current version took effect is used instead,
+  and the row says so.
+- **Training impact** (who is affected by SOP changes) is left out until a training records connector
+  exists.
+
+**eTMF** (SimpleTrials `/documents`, metadata only; see docs/simpletrials-setup.md)
+- Synced with each SimpleTrials sync into `etmf_documents` (replaced per study, like sites). Expected =
+  placeholders (user decision); superseded versions and attachments of other records are left out.
+- Completeness = filed ÷ expected; sites with the most missing documents; a site × TMF section heat map;
+  QC status as recorded (shown as "No QC recorded" when SimpleTrials has none); filing timeliness in
+  working days (Mon–Fri) from the document's own date (signature date, else version date) to filing,
+  target 5 working days (user decision), documents without a date shown separately; documents expired
+  or expiring within 60 days. The Excel export starts with the full list of missing documents.
+- **Known gap:** site-level documents match SimpleTrials' eTMF dashboard exactly, but the single-study key
+  receives only 6 of 221 study-level TMF documents, so study-level completeness is understated. The tab
+  is shipped with this stated; figures should not be shared until SimpleTrials confirms how to read the
+  study-level eTMF (possibly the Workspace key).
+
 ## 2026-11-11: Ask Avi.Intelligence about studies (no AI)
 
 - User decision: answer study questions **without an Anthropic key or paid calls**, read-only, but leave room
