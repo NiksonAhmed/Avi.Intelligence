@@ -49,7 +49,7 @@ export function sopDownloadUrl(id: string, format: 'original' | 'word' = 'origin
 }
 
 /** Excel export of a report, with the same filters as on screen. */
-export function reportExportUrl(report: 'study-delivery' | 'work-management' | 'quality', filters: Record<string, string | undefined>): string {
+export function reportExportUrl(report: 'study-delivery' | 'work-management' | 'quality' | 'etmf', filters: Record<string, string | undefined>): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
   const query = params.toString()

@@ -93,7 +93,7 @@ describe('Task categories', () => {
       assignee_ids: ['demo-cra-1'],
     })
     expect(posted[0]).not.toHaveProperty('study_id')
-  })
+  }, 15_000) // many form interactions: slower when the whole suite runs in parallel
 
   it('admin chooses a vendor category and types its name', async () => {
     const posted: unknown[] = []

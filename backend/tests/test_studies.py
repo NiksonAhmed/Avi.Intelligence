@@ -94,6 +94,7 @@ class TestSync:
             "created": 0,
             "updated": len(changed),
             "no_longer_in_source": 1,
+            "etmf_documents": 0,
             "completions_recorded": 0,  # already recorded by the first sync
             "snapshot_taken": False,  # one snapshot per day
         }

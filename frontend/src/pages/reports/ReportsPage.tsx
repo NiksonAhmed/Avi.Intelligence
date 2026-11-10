@@ -1,9 +1,10 @@
-import { Empty, Tabs } from 'antd'
+import { Tabs } from 'antd'
 import { useSearchParams } from 'react-router'
 
 import type { ReportFilters, TaskCategory } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { CHANGE_PERIODS } from '../../lib/reports'
+import { EtmfTab } from './EtmfTab'
 import { QualityTab } from './QualityTab'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
 import { WorkManagementTab } from './WorkManagementTab'
@@ -17,10 +18,6 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key']
 
 const CATEGORIES: TaskCategory[] = ['study', 'sop', 'vendor', 'system', 'general']
-
-const COMING: Record<Exclude<TabKey, 'study' | 'work' | 'quality'>, string> = {
-  etmf: 'eTMF completeness, QC pipeline, filing timeliness and expiring documents are being built next.',
-}
 
 export function ReportsPage() {
   const [params, setParams] = useSearchParams()
@@ -71,7 +68,7 @@ export function ReportsPage() {
           onFilters={(f) => update({ department: f.department, months: f.months ? String(f.months) : undefined })}
         />
       ) : (
-        <Empty description={COMING[tab]} style={{ padding: '48px 0' }} />
+        <EtmfTab filters={filters} onFilters={(f) => update({ study: f.study_id, site: f.site_id })} />
       )}
     </>
   )

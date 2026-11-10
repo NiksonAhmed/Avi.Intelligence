@@ -10,6 +10,11 @@ Field choices (verified against the Sandbox study, Nov 2026):
   * Plan: every active entry of "Milestones & Tasks" (/tasks) in SimpleTrials order, as phase / task /
     milestone (see map_plan). end_date is the current plan, baseline_end_date the original plan,
     percent_complete the progress. The API has no actual completion date.
+  * eTMF (/documents, metadata only): placeholder = expected but not yet filed; tmf_level and site_id;
+    the section is the first folder of document_path below the study (and below "BY SITE/<site>").
+    Superseded versions (another record's precursor_id) and attachments of other records
+    (parent_type set, e.g. payments) are left out. File names, URLs, descriptions and user ids are
+    not kept.
 Nothing is inferred beyond this; missing values stay empty.
 """
 
@@ -19,7 +24,7 @@ import re
 from datetime import date
 from typing import Any
 
-from .models import MilestoneRecord, SiteRecord, StudyRecord
+from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyRecord
 
 
 def as_int(value: Any) -> int | None:
@@ -209,3 +214,47 @@ def map_study(
         sites=[s for s in (map_site(x) for x in sites) if s is not None],
         milestones=map_plan(tasks, key_names),
     )
+
+
+def _path_parts(path: Any) -> list[str]:
+    """Folders below the study (and below "BY SITE/<site>" or "BY COUNTRY/<country>")."""
+    parts = [p.strip() for p in str(path or "").split("/") if p.strip()]
+    parts = parts[1:]  # the study name
+    if parts and parts[0].upper().startswith("BY "):
+        parts = parts[2:]
+    return parts
+
+
+def map_documents(docs: list[dict[str, Any]]) -> list[EtmfDocumentRecord]:
+    superseded = {str(d["precursor_id"]) for d in docs if d.get("precursor_id")}
+    records: list[EtmfDocumentRecord] = []
+    for d in docs:
+        if d.get("id") is None or d.get("active") is False or d.get("parent_type"):
+            continue
+        if str(d["id"]) in superseded:
+            continue
+        parts = _path_parts(d.get("document_path"))
+        level = d.get("tmf_level") if d.get("tmf_level") in ("study", "country", "site") else None
+        site = d.get("site_id")
+        records.append(
+            EtmfDocumentRecord(
+                external_id=str(d["id"]),
+                level=level or ("site" if site else "study"),
+                site_external_id=str(site) if site else None,
+                section=(_text(parts[0], 200) if parts else None) or "Unfiled",
+                folder=_text(parts[-1], 200) if len(parts) > 1 else None,
+                name=_text(d.get("common_name"), 300) or _text(d.get("title"), 300) or "Untitled document",
+                filed=d.get("placeholder") is not True,
+                doc_status=_text(d.get("doc_status_display") or d.get("doc_status"), 64),
+                qc_status=_text(d.get("qc_status"), 64),
+                qc_started_on=as_date(d.get("qc_started_at")),
+                qc_ended_on=as_date(d.get("qc_ended_at")),
+                created_on=as_date(d.get("created_at")),
+                uploaded_on=as_date(d.get("uploaded_at")),
+                document_date=as_date(d.get("signature_date")) or as_date(d.get("doc_version_on")),
+                expires_on=as_date(d.get("expires_on")),
+                expired=str(d.get("expiration_status") or "").lower() == "expired",
+                version=_text(d.get("doc_version"), 32),
+            )
+        )
+    return records

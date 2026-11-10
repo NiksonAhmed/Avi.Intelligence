@@ -133,16 +133,13 @@ describe('Reports and Insights page', () => {
     )
   })
 
-  it('prints the report for PDF and explains the other tabs are coming', async () => {
+  it('prints the report for PDF', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined)
     mockApi({ '/me': adminUser, '/reports/study-delivery': report() })
     renderRoute('/reports')
     await screen.findByTestId('tile-on_plan')
     await userEvent.click(screen.getByRole('button', { name: /PDF/ }))
     expect(print).toHaveBeenCalled()
-
-    await userEvent.click(screen.getByRole('tab', { name: 'eTMF' }))
-    expect(await screen.findByText(/eTMF completeness, QC pipeline/)).toBeInTheDocument()
   })
 
   it('labels the SimpleTrials sandbox', async () => {

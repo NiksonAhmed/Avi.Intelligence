@@ -11,19 +11,33 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.assistant.service import AskResponse, AssistantUnavailable, answer_question, build_client
+from app.api.studies import current_source_label, study_source
+from app.assistant.service import (
+    AskResponse,
+    AssistantUnavailable,
+    answer_question,
+    answer_study_question,
+    build_client,
+)
+from app.assistant.study_questions import STUDY_QUESTIONS, understand
+from app.assistant.study_tools import load_study_data
 from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
 from app.connectors.sharepoint import get_sop_connector
 from app.connectors.sharepoint.models import SopConnector
+from app.connectors.simpletrials import get_study_connector
+from app.connectors.simpletrials.models import StudyConnector
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.knowledge.indexer import index_stats, refresh_index
 from app.knowledge.models import KnowledgeDocument
+from app.studies.clock import today
+from app.studies.sync import ensure_synced
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
 
 Connector = Annotated[SopConnector, Depends(get_sop_connector)]
+Studies = Annotated[StudyConnector, Depends(get_study_connector)]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -69,6 +83,8 @@ class AssistantStatus(BaseModel):
     failed: int
     last_indexed_at: datetime | None
     suggested_questions: list[str]
+    study_questions: list[str]
+    """Example study questions (empty when the user cannot see studies)."""
 
 
 class ReindexResponse(BaseModel):
@@ -107,6 +123,26 @@ def status(
         failed=stats.failed,
         last_indexed_at=stats.last_indexed_at,
         suggested_questions=_suggestions(db, user.tenant_id),
+        study_questions=STUDY_QUESTIONS if user.can(Permission.STUDY_READ) else [],
+    )
+
+
+async def _study_answer(
+    db: Session, studies: StudyConnector, user: CurrentUser, question: str
+) -> AskResponse | None:
+    """A study answer when the question is about studies and the user may see them; else None (SOPs)."""
+    if not user.can(Permission.STUDY_READ):
+        return None
+    await ensure_synced(db, studies, user.tenant_id)
+    info = study_source(db, studies, user.tenant_id)
+    data = load_study_data(
+        db, user.tenant_id, current_source_label(studies), today(), info.last_successful_sync_at
+    )
+    parsed = understand(question, data)
+    if parsed is None:
+        return None
+    return answer_study_question(
+        db=db, user=user, question=question, parsed=parsed, data=data, demo=studies.info().mode == "mock"
     )
 
 
@@ -116,16 +152,41 @@ async def ask(
     request: Request,
     db: Db,
     connector: Connector,
+    studies: Studies,
     client: LlmClient,
     user: Annotated[CurrentUser, Depends(require(Permission.ASSISTANT_USE))],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AskResponse:
-    try:
-        result = await answer_question(
-            db=db, user=user, question=body.question, connector=connector, client=client, settings=settings
+    result = await _study_answer(db, studies, user, body.question)
+    if result is None:
+        try:
+            result = await answer_question(
+                db=db,
+                user=user,
+                question=body.question,
+                connector=connector,
+                client=client,
+                settings=settings,
+            )
+        except AssistantUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+    if result.study is not None:
+        record_event(
+            db,
+            user,
+            action="assistant.asked",
+            entity_type="assistant_interaction",
+            entity_id=result.interaction_id,
+            summary=f"Asked: {body.question[:200]}",
+            details={
+                "kind": "study",
+                "mode": result.mode,
+                "intent": result.study.intent,
+                "understood": result.study.understood,
+            },
+            request=request,
         )
-    except AssistantUnavailable as exc:
-        raise HTTPException(503, str(exc)) from exc
+        return result
     record_event(
         db,
         user,

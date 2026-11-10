@@ -21,6 +21,7 @@ from app.connectors.sharepoint.models import SopConnector
 from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector
 from app.db.session import get_db
+from app.reports.etmf import Etmf, build_etmf
 from app.reports.excel import Sheet, build_workbook
 from app.reports.history import snapshot_days
 from app.reports.models import MilestoneCompletion
@@ -534,6 +535,136 @@ async def quality_export(
         request=request,
     )
     name = f"Quality SOPs {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# --- eTMF ---
+
+
+class EtmfResponse(Etmf):
+    source: ReportSource
+
+
+async def _etmf(
+    db: Session, connector: StudyConnector, user: CurrentUser, study_id: str | None, site_id: str | None
+) -> EtmfResponse:
+    await ensure_synced(db, connector, user.tenant_id)
+    source = current_source_label(connector)
+    studies = list(
+        db.scalars(
+            select(Study)
+            .where(Study.tenant_id == user.tenant_id, Study.source == source, Study.in_source.is_(True))
+            .options(selectinload(Study.sites), selectinload(Study.etmf_documents))
+            .order_by(Study.protocol_number)
+        )
+    )
+    report = build_etmf(studies, today(), study_id=study_id, site_id=site_id)
+    info = study_source(db, connector, user.tenant_id)
+    return EtmfResponse(
+        **report.model_dump(),
+        source=ReportSource(
+            mode=info.connector.mode,
+            as_of=info.last_successful_sync_at,
+            sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+            snapshot_days=0,
+        ),
+    )
+
+
+@router.get("/etmf", response_model=EtmfResponse)
+async def etmf(
+    db: Db, connector: Connector, user: Reader, study_id: IdParam = None, site_id: IdParam = None
+) -> EtmfResponse:
+    return await _etmf(db, connector, user, study_id, site_id)
+
+
+@router.get("/etmf/export.xlsx")
+async def etmf_export(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    site_id: IdParam = None,
+) -> Response:
+    r = await _etmf(db, connector, user, study_id, site_id)
+    sheets = [
+        Sheet(
+            "Missing documents",
+            ["Study", "Site", "Section", "Folder", "Document"],
+            [[m.protocol_number, m.where, m.section, m.folder, m.name] for m in r.missing_documents],
+        ),
+        Sheet(
+            "Completeness by study",
+            ["Study", "Expected", "Filed", "Missing", "% filed"],
+            [[c.label, c.expected, c.filed, c.missing, c.percent] for c in r.by_study],
+        ),
+        Sheet(
+            "By site and section",
+            ["Study", "Site", *[f"{sec} (filed of expected)" for sec in r.sections]],
+            [
+                [
+                    h.protocol_number,
+                    h.label,
+                    *[f"{c.filed} of {c.expected}" if c.expected else "" for c in h.cells],
+                ]
+                for h in r.heat_map
+            ],
+        ),
+        Sheet(
+            "Expiring documents",
+            ["Study", "Where", "Document", "Expires", "Days", "State"],
+            [
+                [
+                    e.protocol_number,
+                    e.where,
+                    e.name,
+                    e.expires_on,
+                    e.days,
+                    "Expired" if e.state == "expired" else "Expiring",
+                ]
+                for e in r.expiring
+            ],
+        ),
+        Sheet(
+            "QC and timeliness",
+            ["Measure", "Group", "Documents"],
+            [["QC status", b.label, b.count] for b in r.qc]
+            + [["Filing timeliness", b.label, b.count] for b in r.timeliness],
+        ),
+    ]
+    scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
+    if site_id:
+        scope += f" · site {next((o.label for o in r.site_options if o.id == site_id), '')}"
+    about = [
+        ("Report", "eTMF"),
+        ("Scope", scope),
+        ("Data as of", r.source.as_of.strftime("%d %b %Y %H:%M UTC") if r.source.as_of else "Not yet synced"),
+        (
+            "Source",
+            "SimpleTrials eTMF document metadata (read-only copy; files are never downloaded)"
+            if r.source.mode == "api"
+            else "Demo data (SimpleTrials not connected)",
+        ),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="etmf",
+        summary=f"Exported eTMF report to Excel ({scope})",
+        details={"format": "xlsx", "study_id": study_id, "site_id": site_id},
+        request=request,
+    )
+    name = f"eTMF {datetime.now().strftime('%Y-%m-%d')}.xlsx"
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

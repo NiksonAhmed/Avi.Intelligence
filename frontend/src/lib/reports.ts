@@ -89,3 +89,12 @@ export function milestoneTone(m: DeliveryMilestone): { tone: ReportTone; label: 
 
 /** Change log periods offered on the Quality (SOPs) report, in months. */
 export const CHANGE_PERIODS = [3, 6, 12, 24]
+
+/** Colour for a completeness percentage: all filed, most, half, or less. */
+export function completenessTone(percent: number | null): ReportTone {
+  if (percent === null) return 'neutral'
+  if (percent >= 100) return 'good'
+  if (percent >= 75) return 'info'
+  if (percent >= 50) return 'warn'
+  return 'bad'
+}

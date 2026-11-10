@@ -16,6 +16,7 @@ from app.connectors.simpletrials.api_client import SimpleTrialsClient, SimpleTri
 from app.connectors.simpletrials.live import ApiStudyConnector
 from app.connectors.simpletrials.mapping import (
     as_int,
+    map_documents,
     map_plan,
     map_site,
     map_study,
@@ -149,6 +150,51 @@ TASKS = [
         "active": False,
         "end_date": "2026-01-01",
     },
+]
+
+
+DOCUMENTS: list[dict[str, Any]] = [
+    {  # expected at a site, not yet filed
+        "id": 1,
+        "active": True,
+        "placeholder": True,
+        "tmf_level": "site",
+        "site_id": 5001,
+        "common_name": "Original Protocol",
+        "title": "Original Protocol",
+        "document_path": "Sandbox Study/BY SITE/1001 : General Hospital : USA : smith, john/"
+        "01. General Study Documents/01.01 Protocol",
+        "created_at": "2026-02-19T16:54:57.401+00:00",
+    },
+    {  # filed at study level; an older version (precursor 3) is left out
+        "id": 2,
+        "active": True,
+        "placeholder": False,
+        "tmf_level": "study",
+        "precursor_id": 3,
+        "title": "Insurance certificate v2.pdf",
+        "file_name": "Insurance certificate v2.pdf",
+        "original_file_name": "secret-name.pdf",
+        "url": "https://example.invalid/file",
+        "document_path": "Sandbox Study/01. General Study Documents",
+        "uploaded_at": "2026-04-14T05:13:14.975+00:00",
+        "doc_version_on": "2026-04-10",
+        "expires_on": "2026-04-15",
+        "expiration_status": "expired",
+        "doc_status_display": "Draft",
+        "qc_status": "approved",
+        "qc_ended_at": "2026-04-16T00:00:00+00:00",
+        "doc_version": "2.0",
+    },
+    {
+        "id": 3,
+        "active": True,
+        "placeholder": False,
+        "document_path": "Sandbox Study/01. General Study Documents",
+    },
+    {"id": 4, "active": True, "placeholder": False, "parent_type": "PaymentHistory", "document_path": "x"},
+    {"id": 5, "active": False, "placeholder": True, "document_path": "Sandbox Study/02. Other"},
+    {"id": 6, "active": True, "placeholder": True, "document_path": "", "title": "Loose document"},
 ]
 
 
@@ -336,8 +382,22 @@ class TestConnector:
         connector = ApiStudyConnector(api.client())
         records = asyncio.run(connector.fetch_studies())
         assert len(records) == 1 and records[0].protocol_number == "Sandbox Study"
-        assert [r.url.path.rsplit("/", 1)[-1] for r in api.requests] == ["study", "sites", "tasks"]
+        assert [r.url.path.rsplit("/", 1)[-1] for r in api.requests] == [
+            "study",
+            "sites",
+            "tasks",
+            "documents",
+        ]
         assert connector.info().mode == "api" and connector.info().scope == "study"
+        # No eTMF access (404 here): the study still syncs and the previous eTMF copy is kept.
+        assert records[0].documents is None
+
+    def test_reads_etmf_metadata_and_never_patient_data(self) -> None:
+        api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS, "documents": DOCUMENTS})
+        records = asyncio.run(ApiStudyConnector(api.client()).fetch_studies())
+        assert records[0].documents is not None and len(records[0].documents) == 3
+        paths = {r.url.path.rsplit("/", 1)[-1] for r in api.requests}
+        assert "subjects" not in paths and paths <= {"study", "sites", "tasks", "documents"}
 
     def test_workspace_scope_lists_studies(self) -> None:
         api = FakeApi(
@@ -396,3 +456,34 @@ def test_logs_redact_keys() -> None:
     record = logging.makeLogRecord({"msg": f"url customer_key={KEY}&x=1", "levelname": "INFO", "name": "t"})
     out = json.loads(JsonFormatter().format(record))
     assert KEY not in out["msg"]
+
+
+def test_map_documents() -> None:
+    docs = {d.external_id: d for d in map_documents(DOCUMENTS)}
+    assert set(docs) == {"1", "2", "6"}  # superseded (3), payment attachment (4) and inactive (5) left out
+    site = docs["1"]
+    assert (site.level, site.site_external_id, site.filed) == ("site", "5001", False)
+    assert (site.section, site.folder, site.name) == (
+        "01. General Study Documents",
+        "01.01 Protocol",
+        "Original Protocol",
+    )
+    filed = docs["2"]
+    assert (filed.level, filed.section, filed.folder, filed.filed) == (
+        "study",
+        "01. General Study Documents",
+        None,
+        True,
+    )
+    assert filed.uploaded_on == date(2026, 4, 14) and filed.document_date == date(2026, 4, 10)
+    assert filed.expired is True and filed.expires_on == date(2026, 4, 15)
+    assert (filed.doc_status, filed.qc_status, filed.version) == ("Draft", "approved", "2.0")
+    assert filed.qc_ended_on == date(2026, 4, 16)
+    # File names, URLs and people are never kept.
+    dumped = str(filed.model_dump())
+    assert (
+        "secret-name" not in dumped
+        and "example.invalid" not in dumped
+        and "smith" not in str(site.model_dump())
+    )
+    assert docs["6"].section == "Unfiled" and docs["6"].name == "Loose document"

@@ -18,7 +18,7 @@ from app.core.logging import redact
 from app.reports.history import record_completions, take_daily_snapshot
 
 from .clock import today
-from .models import ConnectorSync, Study, StudyMilestone, StudySite
+from .models import ConnectorSync, EtmfDocument, Study, StudyMilestone, StudySite
 
 log = logging.getLogger("studies.sync")
 
@@ -51,7 +51,7 @@ async def sync_studies(
         s.external_id: s
         for s in db.scalars(select(Study).where(Study.tenant_id == tenant_id, Study.source == source))
     }
-    created = updated = 0
+    created = updated = documents = 0
     seen: set[str] = set()
     for rec in records:
         seen.add(rec.external_id)
@@ -79,6 +79,9 @@ async def sync_studies(
         study.milestones = [
             StudyMilestone(position=i, **m.model_dump()) for i, m in enumerate(rec.milestones)
         ]
+        if rec.documents is not None:  # None: not readable this time, keep the previous copy
+            study.etmf_documents = [EtmfDocument(**d.model_dump()) for d in rec.documents]
+            documents += len(rec.documents)
 
     flagged = 0
     for ext_id, study in existing.items():
@@ -93,6 +96,7 @@ async def sync_studies(
         "created": created,
         "updated": updated,
         "no_longer_in_source": flagged,
+        "etmf_documents": documents,
     }
     db.commit()
     # Report history: completion dates and the daily snapshot (both read-only derivations).

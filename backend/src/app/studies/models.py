@@ -57,6 +57,9 @@ class Study(Base):
     milestones: Mapped[list[StudyMilestone]] = relationship(
         back_populates="study", cascade="all, delete-orphan", order_by="StudyMilestone.position"
     )
+    etmf_documents: Mapped[list[EtmfDocument]] = relationship(
+        back_populates="study", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("ux_studies_external", "tenant_id", "source", "external_id", unique=True),)
 
@@ -106,6 +109,36 @@ class StudyMilestone(Base):
     is_key: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     study: Mapped[Study] = relationship(back_populates="milestones")
+
+
+class EtmfDocument(Base):
+    """A read-only copy of one SimpleTrials eTMF document's metadata (never the file itself)."""
+
+    __tablename__ = "etmf_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    level: Mapped[str] = mapped_column(String(16))  # study | country | site
+    site_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    section: Mapped[str] = mapped_column(String(200))
+    folder: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    name: Mapped[str] = mapped_column(String(300))
+    filed: Mapped[bool] = mapped_column(Boolean)
+    doc_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    qc_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    qc_started_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    qc_ended_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    uploaded_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expired: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="etmf_documents")
 
 
 class ConnectorSync(Base):

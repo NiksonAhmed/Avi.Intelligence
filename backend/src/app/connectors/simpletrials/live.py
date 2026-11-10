@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from .api_client import SimpleTrialsClient
-from .mapping import map_study
+from .api_client import SimpleTrialsClient, SimpleTrialsError
+from .mapping import map_documents, map_study
 from .models import StudyConnectorInfo, StudyRecord
+
+log = logging.getLogger("simpletrials")
 
 
 class ApiStudyConnector:
@@ -32,5 +35,12 @@ class ApiStudyConnector:
             study = await self._client.get("study", params)
             sites = await self._client.list_all("sites", "sites", params)
             tasks = await self._client.list_all("tasks", "tasks", params)
-            records.append(map_study(study, sites, tasks, self._key_names))
+            record = map_study(study, sites, tasks, self._key_names)
+            try:  # eTMF metadata only; a key without eTMF access must not stop the study sync
+                record.documents = map_documents(
+                    await self._client.list_all("documents", "documents", params)
+                )
+            except SimpleTrialsError as exc:
+                log.warning("simpletrials.documents_unavailable", extra={"status": exc.status})
+            records.append(record)
         return records

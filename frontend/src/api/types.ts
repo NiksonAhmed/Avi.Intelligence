@@ -180,9 +180,34 @@ export interface AssistantExcerpt {
   text: string
 }
 
+export interface StudyAnswerTable {
+  title: string
+  columns: string[]
+  rows: string[][]
+  /** Per row: where the record is shown in Avi.Intelligence. */
+  links: (string | null)[]
+  /** Rows not shown (the table is capped). */
+  more: number
+}
+
+/** A study question answered from the SimpleTrials copy by fixed rules (no AI). */
+export interface StudyAnswer {
+  intent: 'status' | 'due' | 'behind' | 'milestone' | 'enrolment' | 'activation' | 'tasks' | 'risks'
+  /** How the question was read, e.g. "What is due · close-out · next 90 days · all studies". */
+  understood: string
+  headline: string
+  lines: string[]
+  tables: StudyAnswerTable[]
+  sources: { label: string; url: string }[]
+  as_of: string | null
+  sandbox_only: boolean
+  follow_ups: string[]
+  note: string
+}
+
 export interface AskResponse {
   interaction_id: string
-  mode: 'ai' | 'search-only'
+  mode: 'ai' | 'search-only' | 'study-lookup'
   outcome: 'answered' | 'refused' | 'no-sources'
   segments: AnswerSegment[]
   citations: AssistantCitation[]
@@ -190,6 +215,8 @@ export interface AskResponse {
   notice: string | null
   model: string | null
   demo: boolean
+  kind: 'sop' | 'study'
+  study: StudyAnswer | null
 }
 
 export interface AssistantStatus {
@@ -201,6 +228,8 @@ export interface AssistantStatus {
   failed: number
   last_indexed_at: string | null
   suggested_questions: string[]
+  /** Example study questions (empty when the user cannot see studies). */
+  study_questions: string[]
 }
 
 export interface ReindexResponse {
@@ -657,6 +686,54 @@ export interface WorkManagementReport {
   completed: { total: number; with_due_date: number; on_time: number }
   study_options: ReportOption[]
   category_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
+}
+
+export interface EtmfCompleteness {
+  key: string
+  label: string
+  expected: number
+  filed: number
+  missing: number
+  percent: number | null
+}
+
+export interface EtmfHeatRow {
+  site_id: string
+  label: string
+  protocol_number: string
+  cells: EtmfCompleteness[]
+}
+
+export interface EtmfExpiring {
+  id: string
+  name: string
+  protocol_number: string
+  /** The site, or "Study level". */
+  where: string
+  expires_on: string
+  /** Days until expiry (negative: expired that many days ago). */
+  days: number
+  state: 'expired' | 'expiring'
+}
+
+export interface EtmfReport {
+  tiles: ReportTile[]
+  overall: EtmfCompleteness
+  by_study: EtmfCompleteness[]
+  sites_missing: EtmfCompleteness[]
+  sections: string[]
+  heat_map: EtmfHeatRow[]
+  qc: { label: string; count: number }[]
+  timeliness: { key: string; label: string; count: number }[]
+  timeliness_measured: number
+  timeliness_on_time: number
+  expiring: EtmfExpiring[]
+  missing_documents: { protocol_number: string; where: string; section: string; folder: string | null; name: string }[]
+  has_documents: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
   rules: Record<string, string>
   source: ReportSource
 }

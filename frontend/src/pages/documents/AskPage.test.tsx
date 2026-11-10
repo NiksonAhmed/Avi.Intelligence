@@ -15,6 +15,7 @@ const status: AssistantStatus = {
   failed: 0,
   last_indexed_at: '2026-11-05T00:00:00Z',
   suggested_questions: ['What are the key steps in SOP-011 Site Activation?'],
+  study_questions: ['How are my studies going?'],
 }
 
 const aiAnswer: AskResponse = {
@@ -51,6 +52,8 @@ const aiAnswer: AskResponse = {
   notice: null,
   model: 'claude-opus-5-5',
   demo: true,
+  kind: 'sop',
+  study: null,
 }
 
 describe('Ask Avi.Intelligence', () => {

@@ -25,6 +25,9 @@ from app.knowledge.indexer import get_search_index, is_current, refresh_index
 from app.knowledge.models import AssistantInteraction, KnowledgeChunk, KnowledgeDocument
 from app.knowledge.search import Hit
 
+from .study_questions import StudyAnswer, StudyQuestion, answer
+from .study_tools import StudyData
+
 log = logging.getLogger(__name__)
 
 MAX_DOCUMENTS = 5
@@ -79,7 +82,7 @@ class Excerpt(BaseModel):
 
 class AskResponse(BaseModel):
     interaction_id: str
-    mode: Literal["ai", "search-only"]
+    mode: Literal["ai", "search-only", "study-lookup"]
     outcome: Literal["answered", "refused", "no-sources"]
     segments: list[AnswerSegment]
     citations: list[Citation]
@@ -87,6 +90,9 @@ class AskResponse(BaseModel):
     notice: str | None
     model: str | None
     demo: bool
+    kind: Literal["sop", "study"] = "sop"
+    study: StudyAnswer | None = None
+    """For study questions: the answer worked out from the SimpleTrials copy (no AI)."""
 
 
 class AssistantUnavailable(Exception):
@@ -357,3 +363,36 @@ async def answer_question(
     elif not citations:
         notice = "This answer has no citations. Treat it with caution and check the SOPs directly."
     return finish("answered", segments=segments, citations=citations, notice=notice)
+
+
+def answer_study_question(
+    *, db: Session, user: CurrentUser, question: str, parsed: StudyQuestion, data: StudyData, demo: bool
+) -> AskResponse:
+    """A study question, answered from the SimpleTrials copy by fixed rules (no AI, no cost)."""
+    result = answer(data, parsed)
+    interaction = AssistantInteraction(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        user_name=user.name,
+        question=question,
+        mode="study-lookup",
+        outcome="answered",
+        model=None,
+        answer="\n".join([result.headline, *result.lines]),
+        citations=[{"label": s.label, "url": s.url} for s in result.sources],
+    )
+    db.add(interaction)
+    db.commit()
+    return AskResponse(
+        interaction_id=interaction.id,
+        mode="study-lookup",
+        outcome="answered",
+        segments=[],
+        citations=[],
+        excerpts=[],
+        notice=None,
+        model=None,
+        demo=demo,
+        kind="study",
+        study=result,
+    )

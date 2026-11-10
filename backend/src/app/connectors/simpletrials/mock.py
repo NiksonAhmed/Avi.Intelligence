@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from .models import MilestoneRecord, SiteRecord, StudyConnectorInfo, StudyRecord
+from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyConnectorInfo, StudyRecord
 
 
 def _d(today: date, days: int | None) -> date | None:
@@ -218,4 +218,99 @@ class MockStudyConnector:
         return StudyConnectorInfo(mode="mock", mock_reason=self._reason)
 
     async def fetch_studies(self) -> list[StudyRecord]:
-        return demo_studies()
+        return with_demo_documents(demo_studies())
+
+
+# Demo eTMF structure: (section, folder, document name, expires).
+_STUDY_DOCS: list[tuple[str, str, str, bool]] = [
+    ("01. Trial Management", "Protocol", "Final Protocol", False),
+    ("01. Trial Management", "Protocol", "Protocol Amendment 1", False),
+    ("02. Central Trial Documents", "Investigator's Brochure", "Investigator's Brochure", False),
+    ("03. Regulatory", "Regulatory Approval", "Regulatory Authority Approval", False),
+    ("04. Ethics", "Ethics Approval", "Ethics Committee Approval", False),
+    ("05. Safety Reporting", "Safety Plan", "Safety Management Plan", False),
+]
+_SITE_DOCS: list[tuple[str, str, str, bool]] = [
+    ("01. General Site Documents", "Protocol", "Signed Protocol Signature Page", False),
+    ("01. General Site Documents", "Logs", "Delegation of Duties Log", False),
+    ("02. Site Personnel", "Investigator", "Principal Investigator CV", False),
+    ("02. Site Personnel", "Investigator", "Principal Investigator GCP Certificate", True),
+    ("02. Site Personnel", "Investigator", "Medical Licence", True),
+    ("03. Site Ethics", "Approval", "Site Ethics Approval", False),
+    ("03. Site Ethics", "Consent", "Approved Informed Consent Form", False),
+    ("04. Site Agreements", "Contracts", "Clinical Trial Agreement", False),
+    ("04. Site Agreements", "Contracts", "Site Budget", False),
+    ("05. Monitoring", "Visit Reports", "Site Initiation Visit Report", False),
+    ("05. Monitoring", "Visit Reports", "Monitoring Visit Report", False),
+    ("06. Laboratory", "Laboratory", "Laboratory Normal Ranges", False),
+    ("06. Laboratory", "Laboratory", "Laboratory Accreditation Certificate", True),
+]
+# Demo QC statuses (SimpleTrials' own values are shown as recorded when connected).
+_QC = [None, "Approved", "Approved", "In review", "Pending", "Approved", "Rejected", None]
+_EXPIRY_DAYS = [-12, 18, 40, 150, 400, 25, 260]
+
+
+def _demo_doc(
+    t: date, key: str, n: int, spec: tuple[str, str, str, bool], filed: bool, site: str | None
+) -> EtmfDocumentRecord:
+    section, folder, name, expires = spec
+    if not filed:
+        return EtmfDocumentRecord(
+            external_id=key,
+            level="site" if site else "study",
+            site_external_id=site,
+            section=section,
+            folder=folder,
+            name=name,
+            filed=False,
+            created_on=t - timedelta(days=300),
+        )
+    doc_day = t - timedelta(days=20 + (n * 37) % 260)
+    delay = (n * 5) % 37  # calendar days from the document's date to filing
+    qc = _QC[n % len(_QC)]
+    expiry = t + timedelta(days=_EXPIRY_DAYS[n % len(_EXPIRY_DAYS)]) if expires else None
+    return EtmfDocumentRecord(
+        external_id=key,
+        level="site" if site else "study",
+        site_external_id=site,
+        section=section,
+        folder=folder,
+        name=name,
+        filed=True,
+        doc_status="Final",
+        qc_status=qc,
+        qc_started_on=doc_day + timedelta(days=delay + 1) if qc else None,
+        qc_ended_on=doc_day + timedelta(days=delay + 3) if qc in ("Approved", "Rejected") else None,
+        created_on=t - timedelta(days=300),
+        uploaded_on=doc_day + timedelta(days=delay),
+        document_date=None if n % 11 == 0 else doc_day,
+        expires_on=expiry,
+        expired=expiry is not None and expiry < t,
+        version="1.0",
+    )
+
+
+def with_demo_documents(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo eTMF metadata: expected documents per study and site, most filed at active sites."""
+    t = today or date.today()
+    for si, study in enumerate(studies):
+        docs: list[EtmfDocumentRecord] = []
+        for j, spec in enumerate(_STUDY_DOCS):
+            n = si * 31 + j
+            docs.append(_demo_doc(t, f"{study.external_id}-D{j}", n, spec, filed=(n * 7) % 10 < 8, site=None))
+        for k, site in enumerate(study.sites):
+            share = 9 if site.activation_date else 3  # filed out of every 10 expected
+            for j, spec in enumerate(_SITE_DOCS):
+                n = si * 31 + k * 17 + j
+                docs.append(
+                    _demo_doc(
+                        t,
+                        f"{site.external_id}-D{j}",
+                        n,
+                        spec,
+                        filed=(n * 7 + k) % 10 < share,
+                        site=site.external_id,
+                    )
+                )
+        study.documents = docs
+    return studies

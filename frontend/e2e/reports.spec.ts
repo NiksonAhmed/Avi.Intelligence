@@ -82,3 +82,26 @@ test('Quality (SOPs) report: review schedule, department filter and Excel export
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^Quality SOPs \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
+
+test('eTMF report: completeness, heat map, expiring documents and Excel export', async ({ page }) => {
+  await page.goto('/reports')
+  await page.getByRole('tab', { name: 'eTMF' }).click()
+  await expect(page).toHaveURL(/tab=etmf/)
+  await expect(page.getByText('Demo data: SimpleTrials is not connected')).toBeVisible()
+  await expect(page.getByTestId('tile-completeness')).toContainText('%')
+  await expect(page.getByRole('img', { name: /^eTMF completeness: \d+ of \d+/ })).toBeVisible()
+  await expect(page.getByTestId('study-completeness-row')).toHaveCount(4)
+  await expect(page.getByTestId('heat-row').first()).toBeVisible()
+  await expect(page.getByTestId('expiring-row').first()).toBeVisible()
+
+  await page.getByRole('combobox', { name: 'Filter by study' }).click()
+  await page.getByTitle(/^DEMO-CV-201 ·/).click()
+  await expect(page).toHaveURL(/study=/)
+  await expect(page.getByTestId('study-completeness-row')).toHaveCount(1)
+  await expect(page.getByTestId('study-completeness-row')).toContainText('DEMO-CV-201')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: /Excel/ }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^eTMF \d{4}-\d{2}-\d{2}\.xlsx$/)
+})

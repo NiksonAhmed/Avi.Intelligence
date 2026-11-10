@@ -2,6 +2,33 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-11: Ask Avi.Intelligence about studies (no AI)
+
+- User decision: answer study questions **without an Anthropic key or paid calls**, read-only, but leave room
+  to switch on Claude later.
+- The Ask box now handles both: a question that mentions a study, site or plan entry, or asks what is due,
+  behind, enrolled, activated, or about tasks/risks, gets a **study answer**; questions about procedures
+  (SOP, form, template, process, requirements, "how do I", SAE, training…) still go to SOP search.
+- Study answers are worked out by fixed rules from the read-only SimpleTrials copy (synced hourly) plus
+  Avi.Intelligence's own tasks and risks, using the **same rules as the Study Command Centre and Reports**
+  (overdue, due soon = 14 days, slipped > 30 days, on plan). Each answer shows how the question was read,
+  the answer, tables linking to the source records, the "data as of" time and follow-up questions. Nothing
+  is sent outside Avi.Intelligence, SimpleTrials is not called while answering, and no patient data is read.
+- Understood: status (one study, all studies, or a site), what is due (default next 90 days, or "next 30
+  days", "this month"…), close-out (phases containing "close", LPO, database lock, CSR, study end), what is
+  behind, milestone dates ("When is LPI?"; abbreviations and spelling mistakes tolerated; "first" never
+  matches "last"), enrolment against target, site activation, open tasks and risks. A plan entry's name
+  only counts when the question is about timing or names a study or site, so "site initiation visit"
+  alone stays an SOP search.
+- Every study question is recorded like SOP questions (`assistant_interactions`, mode `study-lookup`) and in
+  the audit trail (`assistant.asked`, kind `study`).
+- **Later, with an Anthropic key:** the look-ups in `app/assistant/study_tools.py` are already written as
+  tools (typed inputs, descriptions, `anthropic_tool_definitions()`, `run_tool()`), so Claude can be given
+  them unchanged for free-form questions. Until that is built and agreed, study questions stay rule-based
+  even when a key is set.
+- Limitations: it understands questions built from words it knows, one subject at a time; there is no
+  enrolment history yet (only today's figure against target), so recruitment pace is not judged.
+
 ## 2026-11-09: Task categories (Procedures and SOPs, Vendor, Computer system, General)
 
 - Tasks now have a **category**: Study (as before), Procedures and SOPs, Vendor, Computer system, General.

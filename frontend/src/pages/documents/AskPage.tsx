@@ -23,11 +23,12 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { useAsk, useAssistantStatus } from '../../api/hooks'
-import type { AskResponse, AssistantCitation, AssistantExcerpt } from '../../api/types'
+import type { AskResponse, AssistantCitation, AssistantExcerpt, StudyAnswerTable } from '../../api/types'
 import { DocumentsTabs } from '../../components/DocumentsTabs'
 import { PageHeader } from '../../components/PageHeader'
 import { ProvenanceTag } from '../../components/ProvenanceTag'
-import { answerAsText, sopLabel } from '../../lib/assistant'
+import { answerAsText, sopLabel, studyAnswerAsText } from '../../lib/assistant'
+import { formatDateTime } from '../../lib/format'
 import { brand } from '../../theme'
 
 interface Turn {
@@ -94,9 +95,136 @@ function ExcerptList({ excerpts }: { excerpts: AssistantExcerpt[] }) {
   )
 }
 
-function AnswerView({ turn }: { turn: Turn }) {
+function StudyTable({ table }: { table: StudyAnswerTable }) {
+  return (
+    <div>
+      <Typography.Title level={5} style={{ marginTop: 0 }}>
+        {table.title}
+      </Typography.Title>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="study-answer-table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+          <thead>
+            <tr>
+              {table.columns.map((c) => (
+                <th key={c} scope="col" style={{ textAlign: 'left', padding: '6px 8px', borderBottom: `2px solid ${brand.border}`, whiteSpace: 'nowrap' }}>
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, i) => (
+              <tr key={i} data-testid="study-answer-row">
+                {row.map((cell, j) => (
+                  <td key={j} style={{ padding: '6px 8px', borderBottom: `1px solid ${brand.border}`, verticalAlign: 'top' }}>
+                    {j === (table.columns[0] === 'Study' && table.columns.length > 1 ? 1 : 0) && table.links[i] ? (
+                      <Link to={table.links[i]!}>{cell}</Link>
+                    ) : (
+                      cell
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {table.more > 0 && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          and {table.more} more (open the source page for the full list)
+        </Typography.Text>
+      )}
+    </div>
+  )
+}
+
+function StudyAnswerView({ turn, onAsk }: { turn: Turn; onAsk: (q: string) => void }) {
   const { message } = App.useApp()
   const r = turn.response
+  const a = r.study!
+  return (
+    <Flex vertical gap={16}>
+      <div>
+        <Typography.Text type="secondary">Question</Typography.Text>
+        <Typography.Paragraph strong style={{ margin: 0 }}>
+          {turn.question}
+        </Typography.Paragraph>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }} data-testid="study-understood">
+          Read as: {a.understood}
+        </Typography.Text>
+      </div>
+
+      <Flex gap={8} wrap align="center">
+        <ProvenanceTag kind="record" source="SimpleTrials (read-only copy)" />
+        <Tag variant="outlined">No AI · worked out by fixed rules</Tag>
+        {r.demo && <Tag color="gold">Demo studies</Tag>}
+        {a.sandbox_only && <Tag color="blue">SimpleTrials sandbox study</Tag>}
+        <Button
+          size="small"
+          icon={<CopyOutlined />}
+          style={{ marginInlineStart: 'auto' }}
+          onClick={() => void navigator.clipboard.writeText(studyAnswerAsText(r)).then(() => message.success('Answer copied'))}
+        >
+          Copy
+        </Button>
+      </Flex>
+
+      <div aria-live="polite">
+        <Typography.Paragraph strong style={{ fontSize: 16, margin: 0 }} data-testid="study-headline">
+          {a.headline}
+        </Typography.Paragraph>
+        {a.lines.length > 0 && (
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.65 }}>
+            {a.lines.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {a.tables.map((t) => (
+        <StudyTable key={t.title} table={t} />
+      ))}
+
+      {a.sources.length > 0 && (
+        <div>
+          <Typography.Title level={5}>Sources</Typography.Title>
+          <Flex gap={8} wrap>
+            {a.sources.map((s) => (
+              <Link key={s.url} to={s.url}>
+                <Tag icon={<FileTextOutlined />} style={{ cursor: 'pointer' }}>
+                  {s.label}
+                </Tag>
+              </Link>
+            ))}
+          </Flex>
+        </div>
+      )}
+
+      {a.follow_ups.length > 0 && (
+        <Flex gap={8} wrap align="center">
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Ask next:
+          </Typography.Text>
+          {a.follow_ups.map((f) => (
+            <Button key={f} size="small" onClick={() => onAsk(f)}>
+              {f}
+            </Button>
+          ))}
+        </Flex>
+      )}
+
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <QuestionCircleOutlined /> Data as of {a.as_of ? formatDateTime(a.as_of) : 'the last sync'}. {a.note}
+      </Typography.Text>
+    </Flex>
+  )
+}
+
+function AnswerView({ turn, onAsk }: { turn: Turn; onAsk: (q: string) => void }) {
+  const { message } = App.useApp()
+  const r = turn.response
+  if (r.study) return <StudyAnswerView turn={turn} onAsk={onAsk} />
   const hasAnswer = r.segments.length > 0
 
   return (
@@ -204,7 +332,7 @@ export function AskPage() {
     <>
       <PageHeader
         title="Documents and Knowledge"
-        subtitle="Ask questions and get answers drawn only from Avion's effective SOPs, with sources."
+        subtitle="Ask about Avion's effective SOPs or how your studies are going, with sources."
       />
       <DocumentsTabs active="ask" />
 
@@ -214,7 +342,7 @@ export function AskPage() {
           showIcon
           style={{ marginBottom: 16 }}
           title="AI answers are not switched on yet"
-          description="Add an Anthropic API key (ANTHROPIC_API_KEY in .env) to enable written answers. Until then, questions return the most relevant SOP passages."
+          description="Study questions are answered from SimpleTrials data without AI. SOP questions return the most relevant SOP passages; add an Anthropic API key (ANTHROPIC_API_KEY in .env) to get written SOP answers."
         />
       )}
 
@@ -229,7 +357,7 @@ export function AskPage() {
             >
               <Input.TextArea
                 aria-label="Your question"
-                placeholder="e.g. What are the key requirements for site activation?"
+                placeholder="e.g. Is anything due for study close-out? or What are the key requirements for site activation?"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
@@ -255,9 +383,26 @@ export function AskPage() {
               </Flex>
             </form>
 
+            {status.data && status.data.study_questions.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <Typography.Text strong>About your studies</Typography.Text>
+                <Flex vertical gap={6} style={{ marginTop: 8 }}>
+                  {status.data.study_questions.map((q) => (
+                    <Button
+                      key={q}
+                      onClick={() => submit(q)}
+                      style={{ justifyContent: 'flex-start', textAlign: 'left', height: 'auto', whiteSpace: 'normal', padding: '6px 12px' }}
+                    >
+                      {q}
+                    </Button>
+                  ))}
+                </Flex>
+              </div>
+            )}
+
             {status.data && status.data.suggested_questions.length > 0 && (
               <div style={{ marginTop: 20 }}>
-                <Typography.Text strong>Suggested questions</Typography.Text>
+                <Typography.Text strong>About SOPs</Typography.Text>
                 <Flex vertical gap={6} style={{ marginTop: 8 }}>
                   {status.data.suggested_questions.map((q) => (
                     <Button
@@ -296,7 +441,8 @@ export function AskPage() {
                 {status.data.documents > 0
                   ? `Searching ${status.data.documents} effective SOPs (${status.data.passages} passages).`
                   : 'The SOP index is built the first time someone asks a question.'}{' '}
-                Draft, in-review and superseded SOPs are never used.
+                Draft, in-review and superseded SOPs are never used. Study answers use the read-only copy of
+                SimpleTrials (synced hourly), never patient-level data.
               </Typography.Paragraph>
             )}
           </Card>
@@ -306,7 +452,7 @@ export function AskPage() {
           <Card title="Answer">
             {ask.isPending ? (
               <div role="status">
-                <Typography.Text type="secondary">Searching SOPs and preparing an answer…</Typography.Text>
+                <Typography.Text type="secondary">Looking it up…</Typography.Text>
                 <Skeleton active paragraph={{ rows: 6 }} style={{ marginTop: 12 }} />
               </div>
             ) : ask.isError && !current ? (
@@ -316,10 +462,10 @@ export function AskPage() {
                 {ask.isError && (
                   <Alert type="error" showIcon style={{ marginBottom: 16 }} title="Could not answer" description={ask.error.message} />
                 )}
-                <AnswerView turn={current} />
+                <AnswerView turn={current} onAsk={submit} />
               </>
             ) : (
-              <Empty description="Ask a question about Avion SOPs. Answers cite the SOP and section they come from." />
+              <Empty description="Ask about Avion SOPs or your studies. Answers show where they come from." />
             )}
           </Card>
         </Col>
