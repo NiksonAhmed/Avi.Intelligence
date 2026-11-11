@@ -9,6 +9,7 @@ import type { DmScope, DmStatus } from './api'
 import { useDmOverview, useDmStatus, useDmSync } from './api'
 import { OverviewTab } from './OverviewTab'
 import { QueriesTab } from './QueriesTab'
+import { SdvTab } from './SdvTab'
 
 const ENV_TAG: Record<string, { color: string; label: string }> = {
   demo: { color: 'gold', label: 'Demo study' },
@@ -109,7 +110,8 @@ export function DataManagementPage() {
   const s = status.data
   const scope = s.scopes.find((c) => c.id === params.get('scope')) ?? s.scopes.find((c) => c.id === s.default_scope)
   if (!scope) return <Empty description="No Viedoc connection configured." />
-  const tab = params.get('tab') === 'queries' ? 'queries' : 'overview'
+  const raw = params.get('tab')
+  const tab = raw === 'queries' || raw === 'sdv' ? raw : 'overview'
 
   return (
     <>
@@ -148,7 +150,18 @@ export function DataManagementPage() {
           activeKey={tab}
           onChange={(key) => update({ tab: key === 'overview' ? undefined : key })}
           items={[
-            { key: 'overview', label: 'Overview', children: <OverviewTab scope={scope.id} status={s} onOpen={(f) => update({ tab: 'queries', ...f })} /> },
+            {
+              key: 'overview',
+              label: 'Overview',
+              children: (
+                <OverviewTab
+                  scope={scope.id}
+                  status={s}
+                  onOpen={(f) => update({ tab: 'queries', ...f })}
+                  onOpenSdv={(site) => update({ tab: 'sdv', ssite: site })}
+                />
+              ),
+            },
             {
               key: 'queries',
               label: 'Queries',
@@ -160,6 +173,11 @@ export function DataManagementPage() {
                   onChange={(changes) => update(changes)}
                 />
               ),
+            },
+            {
+              key: 'sdv',
+              label: 'SDV',
+              children: <SdvTab scope={scope.id} params={params} onChange={(changes) => update(changes)} />,
             },
           ]}
         />

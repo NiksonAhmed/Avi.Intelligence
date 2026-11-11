@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { adminUser, mockApi, renderRoute, viewerUser } from '../../test/utils'
-import type { DmOverview, DmQueryDetail, DmQueryList, DmStatus } from './api'
+import type { DmOverview, DmQueryDetail, DmQueryList, DmSdv, DmStatus } from './api'
 
 const dmUser = { ...adminUser, permissions: [...adminUser.permissions, 'dm.view', 'dm.sync'] }
 
@@ -32,9 +32,11 @@ const overview: DmOverview = {
     { key: 'open_at_site', label: 'Open at site', value: 314, note: '120 over 5 working days', tone: 'bad' },
     { key: 'awaiting_approval', label: 'Answered, awaiting approval', value: 35, note: '30 over 3 working days', tone: 'bad' },
     { key: 'missing_items', label: 'Unconfirmed missing data', value: 1845, note: 'Blank fields', tone: 'warn' },
+    { key: 'sdv', label: 'SDV completed (%)', value: 25, note: '40 of 160 fields verified', tone: 'info' },
   ],
+  sdv: { required: 160, done: 40, percent: 25, forms_total: 24, forms_complete: 6 },
   sites: [
-    { connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre', open_at_site: 3, awaiting_approval: 2, overdue: 2, oldest_days: 40, missing_items: 4, pending_forms: 3 },
+    { connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre', open_at_site: 3, awaiting_approval: 2, overdue: 2, oldest_days: 40, missing_items: 4, pending_forms: 3, sdv_required: 160, sdv_done: 40 },
   ],
   ageing: [
     { label: '0-7', open_at_site: 2, awaiting_approval: 1 },
@@ -93,12 +95,48 @@ const detail: DmQueryDetail = {
   ],
 }
 
+const sdv: DmSdv = {
+  scope: 'sandbox',
+  multi: false,
+  environment: 'sandbox',
+  tiles: [
+    { key: 'fields', label: 'Fields verified', value: 25, note: '40 of 160 fields (%)', tone: 'info' },
+    { key: 'forms_complete', label: 'Forms fully verified', value: 6, note: 'of 24 forms needing SDV', tone: 'neutral' },
+    { key: 'waiting', label: 'Waiting for SDV', value: 26, note: 'Oldest visit 60 days ago', tone: 'warn' },
+    { key: 'data_review', label: 'Data reviewed', value: 25, note: '6 of 24 forms (%)', tone: 'neutral' },
+  ],
+  summary: { required: 160, done: 40, percent: 25, forms_total: 24, forms_complete: 6 },
+  sites: [
+    { connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre', required: 160, done: 40, percent: 25, forms_waiting: 26, oldest_waiting_days: 60 },
+  ],
+  visits: [
+    { event_id: 'E01_SCR', event_name: 'Screening', required: 80, done: 40, percent: 50 },
+    { event_id: 'E03_D1', event_name: 'Day 1', required: 80, done: 0, percent: 0 },
+  ],
+  forms: [
+    {
+      id: 'f1', connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre',
+      subject_id: '102-003', event_name: 'Screening', event_date: '2026-09-12T00:00:00Z', form_label: 'ECG', kind: 'form',
+      required: 5, done: 2, percent: 40, status: 'waiting', days_since_visit: 60, last_sdv_at: null, last_sdv_by: null,
+      data_review_at: '2026-09-20T00:00:00Z', signed_at: null, locked_at: null,
+    },
+  ],
+  total: 1,
+  views: { waiting: 26, complete: 6, all: 32 },
+  studies: [{ connection: 'sandbox', study_code: 'DEMO_IS' }],
+  site_options: [{ id: '102', label: '102 · Demo Cancer Centre' }],
+  form_options: [{ id: 'EG', label: 'EG · ECG' }],
+  visit_options: [{ id: 'E01_SCR', label: 'Screening' }],
+  rules: { sdv: 'SDV is counted per field.', review: 'Review rule.' },
+}
+
 const routes = {
   '/me': dmUser,
   '/data-management/status': status,
   '/data-management/overview': overview,
   '/data-management/queries': list,
   '/data-management/queries/q8': detail,
+  '/data-management/sdv': sdv,
 }
 
 describe('Data Management', () => {
@@ -253,5 +291,38 @@ describe('Data Management', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(router.state.location.search).toBe('?tab=queries&view=awaiting')
     expect(screen.queryByTestId('dm-active-filters')).not.toBeInTheDocument()
+  })
+
+  it('reports SDV completed vs required on the overview and opens the SDV tab for a site', async () => {
+    mockApi({ ...routes })
+    const { router } = renderRoute('/data-management')
+    expect(await screen.findByTestId('dm-tile-sdv')).toHaveTextContent('25%')
+    expect(screen.getByTestId('dm-sdv-figure')).toHaveTextContent('40 of 160')
+    const site = screen.getByTestId('dm-sdv-overview-site')
+    expect(site).toHaveTextContent('40 / 160 (25%)')
+    await userEvent.click(within(site).getByRole('button', { name: /102 · Demo Cancer Centre/ }))
+    expect(router.state.location.search).toBe('?tab=sdv&ssite=102')
+  })
+
+  it('shows the SDV tab: tiles, site and visit progress, and forms waiting for SDV', async () => {
+    const fetchMock = mockApi({ ...routes })
+    const { router } = renderRoute('/data-management?tab=sdv')
+    expect(await screen.findByTestId('dm-sdv-tile-fields')).toHaveTextContent('25%')
+    expect(screen.getByTestId('dm-sdv-tile-forms_complete')).toHaveTextContent('6')
+    expect(screen.getByTestId('dm-sdv-site-row')).toHaveTextContent('40 / 160 (25%)')
+    expect(screen.getAllByTestId('dm-sdv-visit-row')[0]).toHaveTextContent('40 / 80 (50%)')
+    expect(screen.getByTestId('dm-sdv-view-waiting')).toHaveTextContent('Waiting for SDV26')
+    const row = screen.getByTestId('dm-sdv-form-row')
+    expect(row).toHaveTextContent('102-003')
+    expect(row).toHaveTextContent('2 / 5')
+    expect(row).toHaveTextContent(/20 Sept? 2026/) // data review date
+
+    await userEvent.click(screen.getByTestId('dm-sdv-view-complete'))
+    expect(router.state.location.search).toBe('?tab=sdv&sview=complete')
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/data-management/sdv') && String(u).includes('view=complete'))).toBe(true)
+
+    await userEvent.click(within(screen.getAllByTestId('dm-sdv-visit-row')[1]!).getByRole('button', { name: 'Day 1' }))
+    expect(router.state.location.search).toBe('?tab=sdv&sview=complete&svisit=E03_D1')
+    expect(await screen.findByTestId('dm-sdv-active-filters')).toHaveTextContent('Visit: E03_D1')
   })
 })

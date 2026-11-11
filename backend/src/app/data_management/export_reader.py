@@ -352,28 +352,49 @@ def read_export(content: bytes) -> ExportData:
     )
 
 
-def _form_key(row: dict[str, str]) -> tuple[str, str, str, str]:
+def _date_key(value: str) -> str:
+    """The visit date as a plain day, so files that write it differently (with or without a time) match."""
+    parsed = parse_time(value)
+    if parsed is not None:
+        return parsed.date().isoformat()
+    for fmt in ("%d %b %Y", "%d-%b-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(value.strip(), fmt).date().isoformat()
+        except ValueError:
+            continue
+    return value.strip()
+
+
+def _form_key(row: dict[str, str]) -> tuple[str, str, str, str, str]:
+    """Matches a form across SDV.csv and Review_status.csv: subject, visit ID and visit date, form and the
+    subject's form sequence number. Viedoc's event sequence number is not unique per visit, so it is not
+    used; on visit-date rows the review file uses a system form code ("$...") where SDV.csv has none."""
     c = SDV_COLUMNS
     return (
         _get(row, c["subject_id"]),
-        _get(row, c["event_seq"]),
-        _get(row, c["form_id"]),
+        _get(row, c["event_id"]),
+        _date_key(_get(row, c["event_date"])),
+        _real_form_id(row),
         _get(row, c["form_seq"]),
     )
+
+
+def _real_form_id(row: dict[str, str]) -> str:
+    """The form's ID, or "" for Viedoc's system codes starting with "$" (used on visit-date rows)."""
+    form_id = _get(row, SDV_COLUMNS["form_id"])
+    return "" if form_id.startswith("$") else form_id
 
 
 def _form_statuses(sdv_rows: list[dict[str, str]], review_rows: list[dict[str, str]]) -> list[FormStatus]:
     """One row per form at a visit (or visit date), from field-level SDV and form-level review rows."""
     c = SDV_COLUMNS
-    forms: dict[tuple[str, str, str, str], FormStatus] = {}
+    forms: dict[tuple[str, str, str, str, str], FormStatus] = {}
 
     def form_for(row: dict[str, str]) -> FormStatus:
         key = _form_key(row)
         found = forms.get(key)
         if found is None:
-            is_visit_date = _get(row, c["reviewed_item"]).lower() == "event date" or not _get(
-                row, c["form_id"]
-            )
+            is_visit_date = _get(row, c["reviewed_item"]).lower() == "event date" or not _real_form_id(row)
             found = forms[key] = FormStatus(
                 site_code=_get(row, c["site_code"]),
                 site_name=_clean(_get(row, c["site_name"]), 300) or "",
@@ -381,8 +402,8 @@ def _form_statuses(sdv_rows: list[dict[str, str]], review_rows: list[dict[str, s
                 event_id=_clean(_get(row, c["event_id"]), 64),
                 event_name=_clean(_get(row, c["event_name"]), 200),
                 event_date=parse_time(_get(row, c["event_date"])),
-                form_id=_clean(_get(row, c["form_id"]), 64),
-                form_name=_clean(_get(row, c["form_name"]), 200),
+                form_id=None if is_visit_date else _clean(_real_form_id(row), 64),
+                form_name=None if is_visit_date else _clean(_get(row, c["form_name"]), 200),
                 form_seq=_clean(_get(row, c["form_seq"]), 32),
                 kind="event_date" if is_visit_date else "form",
             )

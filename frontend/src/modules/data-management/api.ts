@@ -58,6 +58,8 @@ export interface DmOverview {
   studies: { connection: string; study_code: string }[]
   as_of: string | null
   tiles: { key: string; label: string; value: number; note: string; tone: Tone }[]
+  /** SDV completed vs required, counted per field. */
+  sdv: DmSdvSummary
   sites: {
     connection: string
     study_code: string
@@ -69,6 +71,8 @@ export interface DmOverview {
     oldest_days: number | null
     missing_items: number
     pending_forms: number
+    sdv_required: number
+    sdv_done: number
   }[]
   ageing: { label: string; open_at_site: number; awaiting_approval: number }[]
   forms: { form: string; open: number }[]
@@ -179,6 +183,98 @@ export function useDmQueries(filters: DmQueryFilters) {
           raised_to: filters.raisedTo,
           search: filters.search,
           limit: '500',
+        },
+      }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export interface DmSdvSummary {
+  required: number
+  done: number
+  percent: number | null
+  forms_total: number
+  forms_complete: number
+}
+
+export interface DmSdvForm {
+  id: string
+  connection: string
+  study_code: string
+  site_code: string
+  site_name: string
+  subject_id: string
+  event_name: string | null
+  event_date: string | null
+  form_label: string
+  kind: 'form' | 'event_date'
+  required: number
+  done: number
+  percent: number | null
+  status: 'waiting' | 'complete'
+  days_since_visit: number | null
+  last_sdv_at: string | null
+  last_sdv_by: string | null
+  data_review_at: string | null
+  signed_at: string | null
+  locked_at: string | null
+}
+
+export interface DmSdv {
+  scope: string
+  multi: boolean
+  environment: string
+  tiles: { key: string; label: string; value: number; note: string; tone: Tone }[]
+  summary: DmSdvSummary
+  sites: {
+    connection: string
+    study_code: string
+    site_code: string
+    site_name: string
+    required: number
+    done: number
+    percent: number | null
+    forms_waiting: number
+    oldest_waiting_days: number | null
+  }[]
+  visits: { event_id: string; event_name: string; required: number; done: number; percent: number | null }[]
+  forms: DmSdvForm[]
+  total: number
+  views: Record<'waiting' | 'complete' | 'all', number>
+  studies: { connection: string; study_code: string }[]
+  site_options: { id: string; label: string }[]
+  form_options: { id: string; label: string }[]
+  visit_options: { id: string; label: string }[]
+  rules: Record<string, string>
+}
+
+export interface DmSdvFilters {
+  scope?: string
+  study?: string
+  view?: 'waiting' | 'complete' | 'all'
+  site?: string
+  form?: string
+  visit?: string
+  visitFrom?: string
+  visitTo?: string
+  search?: string
+}
+
+export function useDmSdv(filters: DmSdvFilters) {
+  return useQuery({
+    queryKey: ['dm', 'sdv', filters],
+    queryFn: () =>
+      apiRequest<DmSdv>(`${BASE}/sdv`, {
+        params: {
+          scope: filters.scope,
+          study: filters.study,
+          view: filters.view,
+          site: filters.site,
+          form: filters.form,
+          visit: filters.visit,
+          visit_from: filters.visitFrom,
+          visit_to: filters.visitTo,
+          search: filters.search,
         },
       }),
     placeholderData: (previous) => previous,

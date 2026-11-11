@@ -223,7 +223,7 @@ def test_overview_tiles_sites_and_ageing(dm) -> None:  # type: ignore[no-untyped
     assert tiles["missing_items"] == 9 and tiles["pending_forms"] == 5
     sites = {s["site_code"]: s for s in body["sites"]}
     assert sites["102"]["open_at_site"] == 3 and sites["102"]["oldest_days"] == 40
-    assert body["sites"][0]["over_target"] >= body["sites"][-1]["over_target"]  # most overdue first
+    assert body["sites"][0]["overdue"] >= body["sites"][-1]["overdue"]  # most overdue first
     assert sum(b["open_at_site"] + b["awaiting_approval"] for b in body["ageing"]) == 11
 
 
@@ -435,3 +435,102 @@ def test_query_date_range(dm) -> None:  # type: ignore[no-untyped-def]
     bad = client.get(f"{API}/queries", params={"raised_from": str(t), "raised_to": str(t - td(days=1))})
     assert bad.status_code == 422
     assert client.get(f"{API}/queries", params={"raised_from": "not-a-date"}).status_code == 422
+
+
+# ---- SDV ----------------------------------------------------------------------------------------
+
+
+def test_sdv_read_from_the_export() -> None:
+    data = read_export(demo_export(TODAY))
+    forms = [f for f in data.forms if f.kind == "form"]
+    assert len(data.forms) == 72 and len(forms) == 54  # 18 subject-visits x (3 forms + the visit date)
+    assert sum(f.sdv_required for f in data.forms) == 360 and sum(f.sdv_done for f in data.forms) == 127
+    done = next(
+        f for f in forms if f.subject_id == "101-001" and f.event_id == "E01_SCR" and f.form_id == "VS"
+    )
+    assert (done.sdv_required, done.sdv_done, done.last_sdv_by) == (6, 6, "Demo CRA")
+    assert done.data_review_at and done.signed_at and done.locked_at
+
+
+def test_sdv_tab(dm) -> None:  # type: ignore[no-untyped-def]
+    client = dm()
+    body = client.get(f"{API}/sdv", params={"view": "all"}).json()
+    assert body["summary"] == {
+        "required": 360,
+        "done": 127,
+        "percent": 35.3,
+        "forms_total": 54,
+        "forms_complete": 15,
+    }
+    tiles = {t["key"]: t["value"] for t in body["tiles"]}
+    assert tiles["fields"] == 35 and tiles["forms_complete"] == 15 and tiles["waiting"] == 52
+    assert (tiles["data_review"], tiles["signed"], tiles["locked"]) == (28, 17, 6)  # 15, 9 and 3 of 54 forms
+    assert [(s["site_code"], s["percent"]) for s in body["sites"]] == [
+        ("201", 0.0),
+        ("102", 25.0),
+        ("101", 72.5),
+    ]
+    assert [(v["event_id"], v["percent"]) for v in body["visits"]] == [("E01_SCR", 55.6), ("E03_D1", 15.0)]
+    assert body["views"] == {"waiting": 52, "complete": 20, "all": 72}
+
+    waiting = client.get(f"{API}/sdv").json()  # default view: waiting for SDV, oldest visit first
+    assert waiting["total"] == 52 and all(f["status"] == "waiting" for f in waiting["forms"])
+    assert waiting["forms"][0]["days_since_visit"] >= waiting["forms"][-1]["days_since_visit"]
+    complete = client.get(f"{API}/sdv", params={"view": "complete"}).json()
+    assert complete["total"] == 20 and all(f["done"] == f["required"] for f in complete["forms"])
+
+    assert client.get(f"{API}/sdv", params={"site": "201"}).json()["total"] == 16  # 2 subjects x 2 visits x 4
+    dates = client.get(f"{API}/sdv", params={"form": "visit-date", "view": "all"}).json()
+    assert dates["total"] == 18 and {f["form_label"] for f in dates["forms"]} == {"Visit date (no form)"}
+    assert client.get(f"{API}/sdv", params={"visit": "E03_D1", "view": "all"}).json()["total"] == 36
+    assert client.get(f"{API}/sdv", params={"search": "101-001", "view": "all"}).json()["total"] == 8
+    assert (
+        client.get(f"{API}/sdv", params={"visit_from": "2026-12-01", "visit_to": "2026-11-01"}).status_code
+        == 422
+    )
+
+
+def test_overview_reports_sdv_completed_vs_required(dm) -> None:  # type: ignore[no-untyped-def]
+    body = dm().get(f"{API}/overview").json()
+    assert body["sdv"]["required"] == 360 and body["sdv"]["done"] == 127
+    tile = next(t for t in body["tiles"] if t["key"] == "sdv")
+    assert tile["value"] == 35 and tile["note"] == "127 of 360 fields verified"
+    sites = {s["site_code"]: (s["sdv_done"], s["sdv_required"]) for s in body["sites"]}
+    assert sites == {"101": (87, 120), "102": (40, 160), "201": (0, 80)}
+
+
+@pytest.mark.parametrize(("role", "code"), [(Role.CRA, 200), (Role.CTA, 403), (Role.VIEWER, 403)])
+def test_sdv_access(dm, role: Role, code: int) -> None:  # type: ignore[no-untyped-def]
+    assert dm(role).get(f"{API}/sdv").status_code == code
+
+
+def test_visit_dates_match_across_sdv_and_review_files() -> None:
+    """Visit-date rows: the review file uses a "$EVENT" form code where SDV.csv has none, and every visit
+    has the same event sequence number; each visit date must still be one row with its SDV field."""
+    from app.data_management.export_reader import REVIEW_COLUMNS, SDV_COLUMNS
+
+    def table(columns: list[str], rows: list[dict[str, str]]) -> str:
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+        return out.getvalue()
+
+    sc, rc = SDV_COLUMNS, REVIEW_COLUMNS
+    visits = [("E01", "2026-01-10", "1"), ("E02", "2026-02-10", "1")]  # same sequence number, as in Viedoc
+    sdv = [{sc["site_code"]: "01", sc["subject_id"]: "01-001", sc["event_id"]: e, sc["event_date"]: d,
+            sc["event_seq"]: "", sc["reviewed_item"]: "Event date"} for e, d, _ in visits]  # fmt: skip
+    review = [{rc["site_code"]: "01", rc["subject_id"]: "01-001", rc["event_id"]: e, rc["event_date"]: d,
+               rc["event_seq"]: seq, rc["form_id"]: "$EVENT", rc["reviewed_item"]: "Event date"}
+              for e, d, seq in visits]  # fmt: skip
+    queries = table(list(QUERY_COLUMNS.values()), [])
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("ST_20261111_010101_Queries.csv", queries)
+        z.writestr("ST_20261111_010101_SDV.csv", table(list(sc.values()), sdv))
+        z.writestr("ST_20261111_010101_Review_status.csv", table(list(rc.values()), review))
+    forms = read_export(archive.getvalue()).forms
+    assert sorted((f.event_id, f.sdv_required, f.kind) for f in forms) == [
+        ("E01", 1, "event_date"),
+        ("E02", 1, "event_date"),
+    ]

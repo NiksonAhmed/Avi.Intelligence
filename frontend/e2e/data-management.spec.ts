@@ -34,3 +34,23 @@ test('Data Management: overview, site drill-down and a query timeline', async ({
   await page.getByRole('button', { name: /Sync now/ }).click()
   await expect(page.getByText(/Synced: 14 queries/)).toBeVisible()
 })
+
+test('Data Management: SDV completed vs required, and the SDV tab', async ({ page }) => {
+  await page.goto('/data-management')
+  await expect(page.getByTestId('dm-tile-sdv')).toHaveText('35%')
+  await expect(page.getByTestId('dm-sdv-figure')).toHaveText('127 of 360')
+  await expect(page.getByTestId('dm-sdv-overview-site')).toHaveCount(3)
+
+  await page.getByRole('tab', { name: 'SDV' }).click()
+  await expect(page).toHaveURL(/tab=sdv/)
+  await expect(page.getByTestId('dm-sdv-tile-fields')).toHaveText('35%')
+  await expect(page.getByTestId('dm-sdv-tile-forms_complete')).toHaveText('15')
+  await expect(page.getByTestId('dm-sdv-view-waiting')).toContainText('52')
+  await expect(page.getByTestId('dm-sdv-site-row').first()).toContainText('201')
+
+  // Lowest site first: open site 201, where nothing has been verified yet.
+  await page.getByTestId('dm-sdv-site-row').first().getByRole('button').click()
+  await expect(page).toHaveURL(/ssite=201/)
+  await expect(page.getByTestId('dm-sdv-count')).toHaveText(/^16 forms/)
+  await expect(page.getByTestId('dm-sdv-active-filters')).toContainText('Site: 201 · Demo Clinic Auckland')
+})

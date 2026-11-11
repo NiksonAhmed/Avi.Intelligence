@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Flex, Skeleton, Table, Typography } from 'antd'
+import { Alert, Button, Card, Flex, Progress, Skeleton, Table, Typography } from 'antd'
 
 import { TONES } from '../../lib/studies'
 import type { DmOverview, DmStatus } from './api'
@@ -6,6 +6,8 @@ import { useDmOverview } from './api'
 
 interface Props {
   scope: string
+  /** Open the SDV tab (optionally for one site). */
+  onOpenSdv?: (site?: string) => void
   status: DmStatus
   /** Open the Queries tab with these filters. */
   onOpen: (filters: Record<string, string | undefined>) => void
@@ -13,17 +15,27 @@ interface Props {
 
 const INK = { good: '#1E7F4F', info: '#1F4E8C', warn: '#B26B00', bad: '#B42318', neutral: '#0A1F3C' }
 
-function Tiles({ tiles }: { tiles: DmOverview['tiles'] }) {
+/** Headline tiles; keys in `percentKeys` are shown with a % sign. */
+export function Tiles({
+  tiles,
+  percentKeys = [],
+  testIdPrefix = 'dm-tile',
+}: {
+  tiles: DmOverview['tiles']
+  percentKeys?: string[]
+  testIdPrefix?: string
+}) {
   return (
     <Flex gap={14} wrap>
       {tiles.map((t) => (
-        <Card key={t.key} size="small" style={{ flex: '1 1 190px', minWidth: 0 }} styles={{ body: { padding: '14px 18px' } }}>
+        <Card key={t.key} size="small" style={{ flex: '1 1 170px', minWidth: 0 }} styles={{ body: { padding: '14px 18px' } }}>
           <Flex vertical gap={4}>
             <Typography.Text type="secondary" style={{ fontSize: 13, fontWeight: 600 }}>
-              {t.label}
+              {t.label.replace(' (%)', '')}
             </Typography.Text>
-            <span data-testid={`dm-tile-${t.key}`} style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.15, color: INK[t.tone] }}>
+            <span data-testid={`${testIdPrefix}-${t.key}`} style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.15, color: INK[t.tone] }}>
               {t.value}
+              {percentKeys.includes(t.key) ? '%' : ''}
             </span>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {t.note}
@@ -44,7 +56,7 @@ function CountLink({ n, onClick, label, tone }: { n: number; onClick: () => void
   )
 }
 
-export function OverviewTab({ scope, status, onOpen }: Props) {
+export function OverviewTab({ scope, status, onOpen, onOpenSdv }: Props) {
   const { data, isLoading, isError, error } = useDmOverview(scope)
   if (isError) return <Alert type="error" showIcon title="Could not load the overview" description={error.message} />
   if (isLoading || !data) return <Skeleton active paragraph={{ rows: 8 }} />
@@ -53,7 +65,53 @@ export function OverviewTab({ scope, status, onOpen }: Props) {
   const siteId = (r: DmOverview['sites'][number]) => (data.multi ? `${r.connection}:${r.site_code}` : r.site_code)
   return (
     <Flex vertical gap={18}>
-      <Tiles tiles={data.tiles} />
+      <Tiles tiles={data.tiles} percentKeys={['sdv']} />
+
+      <Card
+        size="small"
+        title="SDV completed vs required"
+        extra={
+          onOpenSdv && (
+            <Button type="link" size="small" onClick={() => onOpenSdv()}>
+              Open SDV
+            </Button>
+          )
+        }
+      >
+        {data.sdv.required === 0 ? (
+          <Typography.Text type="secondary">No fields are set up for SDV in Viedoc for this selection.</Typography.Text>
+        ) : (
+          <Flex vertical gap={12}>
+            <Flex align="baseline" gap={10} wrap>
+              <span data-testid="dm-sdv-figure" style={{ fontSize: 26, fontWeight: 700 }}>
+                {data.sdv.done} of {data.sdv.required}
+              </span>
+              <Typography.Text type="secondary">
+                fields verified ({data.sdv.percent ?? 0}%) · {data.sdv.forms_complete} of {data.sdv.forms_total} forms fully verified
+              </Typography.Text>
+            </Flex>
+            <Progress percent={data.sdv.percent ?? 0} showInfo={false} strokeColor={INK.info} aria-label="SDV completed" />
+            {data.sites
+              .filter((r) => r.sdv_required > 0)
+              .map((r) => {
+                const pct = Math.round((r.sdv_done / r.sdv_required) * 1000) / 10
+                const site = data.multi ? `${r.connection}:${r.site_code}` : r.site_code
+                return (
+                  <Flex key={`${r.connection}:${r.site_code}`} align="center" gap={10} data-testid="dm-sdv-overview-site">
+                    <Button type="link" size="small" style={{ padding: 0, width: 220, justifyContent: 'flex-start' }} onClick={() => onOpenSdv?.(site)}>
+                      {data.multi ? `${r.study_code} · ` : ''}
+                      {r.site_code} · {r.site_name}
+                    </Button>
+                    <Progress percent={pct} size="small" showInfo={false} strokeColor={pct >= 100 ? INK.good : pct >= 50 ? INK.info : INK.warn} style={{ flex: 1, margin: 0 }} />
+                    <span style={{ width: 130, textAlign: 'right', fontSize: 12 }}>
+                      {r.sdv_done} / {r.sdv_required} ({pct}%)
+                    </span>
+                  </Flex>
+                )
+              })}
+          </Flex>
+        )}
+      </Card>
 
       <Card size="small" title="By site" styles={{ body: { padding: 0 } }}>
         <Table
@@ -93,6 +151,12 @@ export function OverviewTab({ scope, status, onOpen }: Props) {
             { title: 'Oldest open (days)', dataIndex: 'oldest_days', align: 'right', render: (v: number | null) => v ?? '—' },
             { title: 'Unconfirmed missing data', dataIndex: 'missing_items', align: 'right' },
             { title: 'Pending forms', dataIndex: 'pending_forms', align: 'right' },
+            {
+              title: 'SDV',
+              key: 'sdv',
+              align: 'right',
+              render: (_, r) => (r.sdv_required ? `${Math.round((r.sdv_done / r.sdv_required) * 100)}%` : '—'),
+            },
           ]}
         />
       </Card>

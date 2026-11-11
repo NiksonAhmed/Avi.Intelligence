@@ -810,11 +810,12 @@ async def sdv_view(
         v.percent = _pct(v.done, v.required)
 
     views = {"waiting": len(waiting_rows), "complete": len(rows) - len(waiting_rows), "all": len(rows)}
-    listed = (
-        waiting_rows
-        if view == "waiting"
-        else ([r for r in rows if r not in waiting_rows] if view == "complete" else rows)
-    )
+    if view == "waiting":
+        listed = list(waiting_rows)
+    elif view == "complete":
+        listed = [r for r in rows if r.sdv_done >= r.sdv_required]
+    else:
+        listed = list(rows)
     listed.sort(
         key=lambda r: (r.event_date or datetime.max.replace(tzinfo=UTC), r.subject_id, r.form_id or "")
     )
