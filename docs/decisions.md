@@ -27,11 +27,54 @@ A running log of design decisions, assumptions and known limitations. Newest fir
 - **Validation (GxP):** if the module is used to manage data queries in regulated studies, Quality may
   require computerised system validation. The boundary above lets the module be validated on its own;
   to be confirmed with Quality early.
-- **Build order:** Step 0 is a read-only test script against the Viedoc sandbox to learn what the API
-  returns (Viedoc's public pages don't list endpoints or sign-in). No screens until then.
-- **Open:** the six workflow questions on the plan page (first: who approves site answers, DM, CRA or
-  both, and how many days sites and the team each get); a sandbox API client in Viedoc API Manager
-  (client ID, secret and API address in `.env` by the user); confirming the sandbox holds only test data.
+- **Labels:** every item in the tab is labelled RECORD (from Viedoc), RULE FINDING (our check) or, later,
+  AI SUGGESTION (needs a human), so a check result is never mistaken for an EDC record. Every number links
+  back to the Viedoc records behind it.
+- **Query stages tracked:** Raised (edit check, DM or CRA) → Open at site (the site's clock) → Resolved by
+  site, waiting on approval (our clock) → Approved / Closed. A rejected answer goes back to Open at site and
+  counts as a re-open. Both clocks are reported. (In the sample export every row was waiting on approval.)
+- **Views:** Overview, Queries, Missing data, Labs, Deviations, Check quality (edit checks that fire often
+  and are always answered the same way, e.g. QRS → "NCS") and Site export. AI suggestions come later.
+- **Proposed access** (existing roles; nobody can change Viedoc data from here):
+
+  | Role | Data Management tab | Scope | Task / risk from a finding | Site Excel |
+  |---|---|---|---|---|
+  | Admin | Yes | All studies | Yes | Yes |
+  | Data Manager | Yes | Assigned studies | Yes | Yes |
+  | Project Manager | Yes | Their studies | Study tasks only | Yes |
+  | CRA | Yes | Their sites only | Own tasks only | Their sites |
+  | QA | Read-only | All studies | Risks only | No |
+  | CTA, Pharmacovigilance | No | — | — | — |
+
+  "Assigned studies" and "their sites" need study/site assignments, which Avi.Intelligence does not hold
+  yet (they arrive with Entra sign-in or a simple assignment list).
+
+### Build steps
+
+Each step is shown before it is committed, and pushed only when agreed. Work happens on
+`feature/data-management`.
+
+| Step | Delivers | Done when |
+|---|---|---|
+| **0. Sandbox API discovery** | The user creates a sandbox API client in Viedoc API Manager and puts its client ID, secret and API address in `.env`. A read-only probe script lists what comes back (queries with history, clinical data, visit schedule, lab ranges, deviation flags), recording field names, IDs and limits. | We know which views the API can feed, and the user has reviewed the findings. No screens before this. |
+| **1. Connector and Queries view** | `dm_` tables and migration; read-only hourly sync (connector in `app/connectors/viedoc/`); Overview and Queries views with ageing (0–7, 8–14, 15–30, 30+ days). | Sandbox query counts match Viedoc. |
+| **2. Site Excel export** | A per-site file for CRAs listing only actionable items (subject, visit, form, field, query text, days open; items waiting on our approval left out), with role and site filtering. | A CRA sees only their sites. |
+| **3. Missing data and Labs** | Expected forms not started or not submitted, overdue visits; out-of-range lab values, missing units or ranges, a field missing across many subjects (vendor issue). | Checked against known gaps in the sandbox. |
+| **4. Deviations and rules** | Viedoc deviation flags plus rule-based candidates (visit windows, ECG not done); per-study rule settings; turning a finding into a Task or a Risk under the existing rules. | Findings link to tasks and risks correctly. |
+| **5. Reports and tests** | A Data Management section in Reports and Insights; daily snapshots and trends; full tests and docs. | Full test suites pass; docs updated. |
+
+### Decisions needed before Step 1
+
+1. Who approves site answers in Viedoc: DM, CRA or both? This decides who owns the waiting-on-approval
+   backlog.
+2. Ageing targets: for example, sites answer within 5 working days and we approve within 3 (drives the
+   red/amber flags).
+3. Source of truth for protocol deviations: Viedoc, SimpleTrials or both (if both, match them)?
+4. Site Excel columns: confirm subject, visit, form, field, query text, raised date, days open. Should
+   missing forms be included too?
+5. Which sandbox study, and confirmation that it holds only test data. Production studies come later,
+   after Avion's data-protection sign-off.
+6. Sync frequency: hourly like SimpleTrials, or more often around database lock?
 
 ## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
 
