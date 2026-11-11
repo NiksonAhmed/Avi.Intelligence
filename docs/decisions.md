@@ -122,6 +122,28 @@ Each step is shown before it is committed, and pushed only when agreed. Work hap
 - First real sandbox sync: DEMO_IS, 314 validation queries (236 open at site, 26 awaiting approval, 52
   closed), 1,845 unconfirmed missing fields, 527 pending forms; all open queries over 30 days old.
 
+### Decisions answered (12 Nov 2026)
+
+1. **Who approves site answers:** both the Data Manager and the CRA, **in Viedoc**. Avi.Intelligence
+   stays read-only and only shows the "awaiting approval" backlog.
+2. **Ageing targets:** sites answer within **5** working days (agreed). Our approval target stays at
+   **3** working days until confirmed. Both are settings.
+3. **Before any live study:** query text is kept; people are shown by **role only, never by name**.
+   Staff names from Viedoc (query history, SDV, review, sign and lock "by") are no longer stored.
+   Dates are kept.
+4. **Protocol deviations:** the source is **SimpleTrials** (DM Step 4).
+5. **Access:** everyone can open Data Management, read-only (`dm.view` for all roles). Only **System
+   Admin and Data Manager** can download data or Excel files (`dm.export`); **CRAs cannot download**.
+   Avion's Quality and data-protection sign-off before live studies now also covers this wider read
+   access.
+6. **Sync now for everyone** (it is read-only towards Viedoc). Viedoc builds one export at a time per
+   study, so a second press while a sync is running is refused ("already running"), and a press within
+   2 minutes of a successful sync reuses it instead of asking Viedoc again. Every real sync is audited.
+7. **Excel downloads (DM Step 2, first part):** **Download Excel** on the Queries and SDV tabs, for
+   System Admin and Data Manager only. The file holds exactly the list on screen (same view and
+   filters, e.g. one site), plus an About sheet (study, filters, source and as-of time, targets, rules,
+   "subject IDs only, roles not names"). Every download is audited (`dm.exported`).
+
 ## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
 
 All three tabs follow Step 1's pattern: headline tiles, charts that state their rule, filters kept in the

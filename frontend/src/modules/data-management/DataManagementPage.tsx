@@ -177,7 +177,9 @@ export function DataManagementPage() {
             {
               key: 'sdv',
               label: 'SDV',
-              children: <SdvTab scope={scope.id} params={params} onChange={(changes) => update(changes)} />,
+              children: (
+                <SdvTab scope={scope.id} canExport={s.can_export} params={params} onChange={(changes) => update(changes)} />
+              ),
             },
           ]}
         />

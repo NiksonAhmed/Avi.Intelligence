@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -15,6 +16,7 @@ from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
+from app.reports.excel import Sheet, build_workbook
 from app.studies.clock import today
 
 from . import rules
@@ -34,6 +36,7 @@ Db = Annotated[Session, Depends(get_db)]
 Config = Annotated[Settings, Depends(enabled)]
 Viewer = Annotated[CurrentUser, Depends(require(Permission.DM_VIEW))]
 Syncer = Annotated[CurrentUser, Depends(require(Permission.DM_SYNC))]
+Exporter = Annotated[CurrentUser, Depends(require(Permission.DM_EXPORT))]
 State = Literal["open_at_site", "awaiting_approval", "closed", "not_closed"]
 
 
@@ -67,6 +70,7 @@ class StatusOut(BaseModel):
     scopes: list[ScopeOut]
     default_scope: str
     can_sync: bool
+    can_export: bool
     demo: bool
     site_answer_days: int
     approval_days: int
@@ -124,6 +128,7 @@ def status(db: Db, user: Viewer, settings: Config) -> StatusOut:
             for name, env in conns.items()
         ],
         can_sync=user.can(Permission.DM_SYNC),
+        can_export=user.can(Permission.DM_EXPORT),
         demo=is_demo(settings),
         site_answer_days=settings.dm_site_answer_days,
         approval_days=settings.dm_approval_days,
@@ -136,13 +141,34 @@ class SyncRequest(BaseModel):
     connection: str
 
 
+SYNC_REUSE = timedelta(minutes=2)
+"""A press of Sync now this soon after a successful sync reuses it instead of asking Viedoc again."""
+_SYNCING: set[tuple[str, str]] = set()
+"""(tenant, connection) syncs running now: Viedoc builds one export at a time per study."""
+
+
+def _aware(at: datetime) -> datetime:
+    return at if at.tzinfo else at.replace(tzinfo=UTC)
+
+
 @router.post("/sync", response_model=SyncRunOut)
 async def sync_now(body: SyncRequest, request: Request, db: Db, user: Syncer, settings: Config) -> SyncRunOut:
-    if body.connection.lower() not in connections(settings):
+    name = body.connection.lower()
+    if name not in connections(settings):
         raise HTTPException(404, "No such Viedoc connection.")
-    run = await sync_connection(
-        db, settings, tenant_id=user.tenant_id, name=body.connection, triggered_by=user.name
-    )
+    key = (user.tenant_id, name)
+    if key in _SYNCING:
+        raise HTTPException(409, "A sync of this study is already running. Try again in a minute.")
+    recent = last_success(db, user.tenant_id, name)
+    if recent and recent.finished_at and datetime.now(UTC) - _aware(recent.finished_at) < SYNC_REUSE:
+        reused = _run_out(recent)
+        assert reused is not None
+        return reused
+    _SYNCING.add(key)
+    try:
+        run = await sync_connection(db, settings, tenant_id=user.tenant_id, name=name, triggered_by=user.name)
+    finally:
+        _SYNCING.discard(key)
     record_event(
         db,
         user,
@@ -442,7 +468,6 @@ class QueryEventOut(BaseModel):
     viedoc_state: str
     at: datetime | None
     user_role: str | None
-    user_name: str | None
     resolution: str | None
 
 
@@ -584,6 +609,135 @@ async def list_queries(
     )
 
 
+# --- Excel downloads (System Admin and Data Manager only) ---
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+FLAG_LABELS = {"red": "Overdue", "amber": "Last day of target", "green": "Within target", "none": ""}
+
+
+def _day(at: datetime | None) -> date | None:
+    return at.date() if at else None
+
+
+def _filters_text(filters: dict[str, object]) -> str:
+    shown = [f"{k}: {v}" for k, v in filters.items() if v not in (None, "", False)]
+    return "; ".join(shown) or "None (everything in scope)"
+
+
+def _xlsx(
+    request: Request,
+    db: Session,
+    user: CurrentUser,
+    *,
+    report: str,
+    sc: Scope,
+    filters: dict[str, object],
+    sheets: list[Sheet],
+    about: list[tuple[str, str]],
+    rows: int,
+) -> Response:
+    codes = _study_codes(db, user.tenant_id, sc.names)
+    as_of = [
+        ok.finished_at for n in sc.names if (ok := last_success(db, user.tenant_id, n)) and ok.finished_at
+    ]
+    study = codes.get(sc.names[0], sc.names[0]) if len(sc.names) == 1 else sc.id
+    about = [
+        ("Report", f"Data Management: {report}"),
+        ("Study", study if len(sc.names) == 1 else ", ".join(codes.get(n, n) for n in sc.names)),
+        ("Environment", sc.environment),
+        ("Filters", _filters_text(filters)),
+        ("Rows", str(rows)),
+        (
+            "Source",
+            "Viedoc export (read-only copy)"
+            + (f", as of {min(_aware(a) for a in as_of):%d %b %Y %H:%M} UTC" if as_of else ""),
+        ),
+        *about,
+        ("Data protection", "Subject IDs only. Staff are shown by role, never by name."),
+        ("Changes", "Make any change in Viedoc; this file is a read-only copy."),
+        ("Exported", f"{datetime.now(UTC):%d %b %Y %H:%M} UTC"),
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="dm.exported",
+        entity_type="dm_report",
+        entity_id=report,
+        summary=f"Downloaded Data Management {report} to Excel ({study})",
+        details={
+            "format": "xlsx",
+            "scope": sc.id,
+            "rows": rows,
+            "filters": {k: str(v) for k, v in filters.items() if v},
+        },
+        request=request,
+    )
+    site = str(filters.get("site") or "").rpartition(":")[2]
+    name = re.sub(r"[^\w.\- ]+", " ", f"{study} {report}{f' site {site}' if site else ''} {today():%Y-%m-%d}")
+    return Response(
+        content,
+        media_type=XLSX,
+        headers={"Content-Disposition": f'attachment; filename="{name}.xlsx"', "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/queries/export.xlsx")
+async def export_queries(
+    request: Request,
+    db: Db,
+    user: Exporter,
+    settings: Config,
+    scope: Annotated[str | None, Query(max_length=64)] = None,
+    study: Annotated[str | None, Query(max_length=64)] = None,
+    state: State | None = None,
+    site: Annotated[str | None, Query(max_length=130)] = None,
+    form: Annotated[str | None, Query(max_length=64)] = None,
+    flag: Literal["red", "amber", "green"] | None = None,
+    reopened: bool = False,
+    raised_from: date | None = None,
+    raised_to: date | None = None,
+    search: Annotated[str | None, Query(max_length=100)] = None,
+) -> Response:
+    """The query list as on screen (same filters), for sending to a site or filing."""
+    sc = await _scope(db, user, settings, scope)
+    data = await list_queries(
+        db, user, settings, scope=sc.id, study=study, state=state, site=site, form=form, flag=flag,
+        reopened=reopened, raised_from=raised_from, raised_to=raised_to, search=search,
+        limit=10**7, offset=0,
+    )  # fmt: skip
+    headers = [
+        "Study", "Site", "Site name", "Subject", "Visit", "Form", "Field", "Query no.", "Query type",
+        "Edit check", "Query text", "State", "Raised", "Days open", "Working days on the clock",
+        "Target", "Times sent back", "Site answer",
+    ]  # fmt: skip
+    rows = [
+        [
+            q.study_code, q.site_code, q.site_name, q.subject_id, q.event_name, q.form_label, q.item_label,
+            q.query_number, q.query_type, q.edit_check, q.query_text, q.state_label, _day(q.raised_at),
+            q.age_days, q.clock_days, FLAG_LABELS.get(q.flag, ""), q.reopen_count, q.resolution,
+        ]
+        for q in data.queries
+    ]  # fmt: skip
+    filters: dict[str, object] = {
+        "study": study, "state": state, "site": site, "form": form, "target": flag and FLAG_LABELS[flag],
+        "sent back": reopened, "raised from": raised_from, "raised to": raised_to, "search": search,
+    }  # fmt: skip
+    about = [
+        (
+            "Targets",
+            f"Sites answer within {settings.dm_site_answer_days} working days; "
+            f"answers are approved within {settings.dm_approval_days}.",
+        ),
+        ("Clock", rules.RULES["clocks"]),
+        ("Order", "Overdue first, then longest waiting."),
+    ]
+    return _xlsx(
+        request, db, user, report="queries", sc=sc, filters=filters,
+        sheets=[Sheet("Queries", headers, rows)], about=about, rows=len(rows),
+    )  # fmt: skip
+
+
 @router.get("/queries/{query_id}", response_model=QueryDetailOut)
 def get_query(query_id: str, db: Db, user: Viewer, settings: Config) -> QueryOut:
     q = db.scalars(
@@ -638,7 +792,6 @@ class SdvFormRow(BaseModel):
     status: Literal["waiting", "complete"]
     days_since_visit: int | None
     last_sdv_at: datetime | None
-    last_sdv_by: str | None
     data_review_at: datetime | None
     signed_at: datetime | None
     locked_at: datetime | None
@@ -837,7 +990,6 @@ async def sdv_view(
             status="complete" if r.sdv_done >= r.sdv_required else "waiting",
             days_since_visit=rules.age_days(r.event_date, now),
             last_sdv_at=r.last_sdv_at,
-            last_sdv_by=r.last_sdv_by,
             data_review_at=r.data_review_at,
             signed_at=r.signed_at,
             locked_at=r.locked_at,
@@ -874,3 +1026,66 @@ async def sdv_view(
         visit_options=[{"id": eid, "label": name} for eid, name in visit_names],
         rules=SDV_RULES,
     )
+
+
+@router.get("/sdv/export.xlsx")
+async def export_sdv(
+    request: Request,
+    db: Db,
+    user: Exporter,
+    settings: Config,
+    scope: Annotated[str | None, Query(max_length=64)] = None,
+    study: Annotated[str | None, Query(max_length=64)] = None,
+    view: SdvView = "waiting",
+    site: Annotated[str | None, Query(max_length=130)] = None,
+    form: Annotated[str | None, Query(max_length=64)] = None,
+    visit: Annotated[str | None, Query(max_length=64)] = None,
+    visit_from: date | None = None,
+    visit_to: date | None = None,
+    search: Annotated[str | None, Query(max_length=100)] = None,
+) -> Response:
+    """The SDV list as on screen (same view and filters), with site and visit progress."""
+    sc = await _scope(db, user, settings, scope)
+    data = await sdv_view(
+        db, user, settings, scope=sc.id, study=study, view=view, site=site, form=form, visit=visit,
+        visit_from=visit_from, visit_to=visit_to, search=search, limit=10**7, offset=0,
+    )  # fmt: skip
+    forms = Sheet(
+        "SDV forms",
+        [
+            "Study", "Site", "Site name", "Subject", "Visit", "Visit date", "Form", "Fields verified",
+            "Fields needing SDV", "% verified", "Status", "Days since visit", "Last verified",
+            "Data reviewed", "Signed", "Locked",
+        ],
+        [
+            [
+                f.study_code, f.site_code, f.site_name, f.subject_id, f.event_name, _day(f.event_date),
+                f.form_label, f.done, f.required, f.percent,
+                "Complete" if f.status == "complete" else "Waiting",
+                f.days_since_visit, _day(f.last_sdv_at), _day(f.data_review_at), _day(f.signed_at),
+                _day(f.locked_at),
+            ]
+            for f in data.forms
+        ],
+    )  # fmt: skip
+    sites = Sheet(
+        "By site",
+        ["Study", "Site", "Site name", "Fields verified", "Fields needing SDV", "% verified", "Forms waiting",
+         "Oldest waiting (days)"],
+        [[r.study_code, r.site_code, r.site_name, r.done, r.required, r.percent, r.forms_waiting,
+          r.oldest_waiting_days] for r in data.sites],
+    )  # fmt: skip
+    visits = Sheet(
+        "By visit",
+        ["Visit", "Fields verified", "Fields needing SDV", "% verified"],
+        [[v.event_name, v.done, v.required, v.percent] for v in data.visits],
+    )
+    filters: dict[str, object] = {
+        "view": view, "study": study, "site": site, "form": form, "visit": visit, "visit from": visit_from,
+        "visit to": visit_to, "subject": search,
+    }  # fmt: skip
+    about = [("SDV", SDV_RULES["sdv"]), ("Review", SDV_RULES["review"])]
+    return _xlsx(
+        request, db, user, report="SDV", sc=sc, filters=filters, sheets=[forms, sites, visits],
+        about=about, rows=len(data.forms),
+    )  # fmt: skip

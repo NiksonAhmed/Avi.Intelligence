@@ -1,4 +1,4 @@
-import { FilterOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, FilterOutlined } from '@ant-design/icons'
 import { Alert, Badge, Button, DatePicker, Descriptions, Drawer, Flex, Input, Popover, Segmented, Select, Skeleton, Table, Tag, Timeline, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useState } from 'react'
@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { formatDateTime, formatDay } from '../../lib/format'
 import { TONES } from '../../lib/studies'
 import type { DmFlag, DmQuery, DmQueryFilters, DmState, DmStatus } from './api'
-import { useDmOverview, useDmQueries, useDmQuery } from './api'
+import { dmExportUrl, useDmOverview, useDmQueries, useDmQuery } from './api'
 
 interface Props {
   scope: string
@@ -82,7 +82,7 @@ function QueryDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                     <strong>{e.viedoc_state}</strong>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {e.at ? formatDateTime(e.at) : 'No date'} · {e.user_role ?? 'System'}
-                      {e.user_name ? ` (${e.user_name})` : ''}
+
                     </Typography.Text>
                     {e.resolution && <span style={{ fontSize: 13 }}>{e.resolution}</span>}
                   </Flex>
@@ -241,6 +241,26 @@ export function QueriesTab({ scope, status, params, onChange }: Props) {
             Filters{panelCount ? ` (${panelCount})` : ''}
           </Button>
         </Popover>
+        {status.can_export && (
+          <Button
+            icon={<FileExcelOutlined />}
+            data-testid="dm-queries-excel"
+            href={dmExportUrl('queries', {
+              scope: filters.scope,
+              study: filters.study,
+              state: filters.state,
+              site: filters.site,
+              form: filters.form,
+              flag: filters.flag,
+              reopened: filters.reopened ? 'true' : undefined,
+              raised_from: filters.raisedFrom,
+              raised_to: filters.raisedTo,
+              search: filters.search,
+            })}
+          >
+            Download Excel
+          </Button>
+        )}
       </Flex>
       {active.length > 0 && (
         <Flex gap={6} wrap align="center" data-testid="dm-active-filters">

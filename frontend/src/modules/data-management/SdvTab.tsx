@@ -1,15 +1,17 @@
-import { CheckCircleFilled, FilterOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, FileExcelOutlined, FilterOutlined } from '@ant-design/icons'
 import { Alert, Badge, Button, Card, DatePicker, Flex, Input, Popover, Progress, Segmented, Select, Skeleton, Table, Tag, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { HTMLAttributes } from 'react'
 
 import { formatDay } from '../../lib/format'
 import type { DmSdv, DmSdvFilters, DmSdvForm } from './api'
-import { useDmSdv } from './api'
+import { dmExportUrl, useDmSdv } from './api'
 import { Tiles } from './OverviewTab'
 
 interface Props {
   scope: string
+  /** Excel download: System Admin and Data Manager only. */
+  canExport: boolean
   params: URLSearchParams
   onChange: (changes: Record<string, string | undefined>) => void
 }
@@ -80,7 +82,7 @@ function SiteProgress({ data, onSite }: { data: DmSdv; onSite: (site: string) =>
   )
 }
 
-export function SdvTab({ scope, params, onChange }: Props) {
+export function SdvTab({ scope, canExport, params, onChange }: Props) {
   const view = (VIEWS.find((v) => v.key === params.get(P.view))?.key ?? 'waiting') as View
   const filters: DmSdvFilters = {
     scope,
@@ -195,6 +197,25 @@ export function SdvTab({ scope, params, onChange }: Props) {
         <Popover content={panel} title="Filters" trigger="click" placement="bottomLeft">
           <Button icon={<FilterOutlined />}>Filters{panelCount ? ` (${panelCount})` : ''}</Button>
         </Popover>
+        {canExport && (
+          <Button
+            icon={<FileExcelOutlined />}
+            data-testid="dm-sdv-excel"
+            href={dmExportUrl('sdv', {
+              scope: filters.scope,
+              study: filters.study,
+              view: filters.view,
+              site: filters.site,
+              form: filters.form,
+              visit: filters.visit,
+              visit_from: filters.visitFrom,
+              visit_to: filters.visitTo,
+              search: filters.search,
+            })}
+          >
+            Download Excel
+          </Button>
+        )}
       </Flex>
       {active.length > 0 && (
         <Flex gap={6} wrap align="center" data-testid="dm-sdv-active-filters">
@@ -238,7 +259,7 @@ export function SdvTab({ scope, params, onChange }: Props) {
             key: 'sdv',
             width: 170,
             render: (_, r) => (
-              <Flex align="center" gap={6} title={r.last_sdv_by ? `Last verified by ${r.last_sdv_by}` : undefined}>
+              <Flex align="center" gap={6} title={r.last_sdv_at ? `Last verified ${formatDay(r.last_sdv_at.slice(0, 10))}` : undefined}>
                 <Progress percent={r.percent ?? 0} size="small" showInfo={false} strokeColor={pctColour(r.percent)} style={{ width: 70, margin: 0 }} />
                 <span style={{ fontSize: 12 }}>
                   {r.done} / {r.required}

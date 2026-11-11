@@ -48,7 +48,9 @@ class Permission(StrEnum):
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
     DM_SYNC = "dm.sync"
-    """Run a Data Management sync from Viedoc now."""
+    """Run a Data Management sync from Viedoc now (everyone; read-only towards Viedoc)."""
+    DM_EXPORT = "dm.export"
+    """Download Data Management data (Excel files, exports): System Admin and Data Manager only."""
 
 
 ROLE_LABELS: dict[Role, str] = {
@@ -68,6 +70,8 @@ _ALL_STAFF = {
     Permission.ASSISTANT_USE,
     Permission.STUDY_READ,
     Permission.TASK_CREATE_OWN,
+    Permission.DM_VIEW,  # user decision: everyone may view Data Management (read-only)
+    Permission.DM_SYNC,  # user decision: everyone may press Sync now
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -82,9 +86,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DM_VIEW,
         }
     ),
-    Role.CRA: frozenset(_ALL_STAFF | {Permission.DM_VIEW}),
+    Role.CRA: frozenset(_ALL_STAFF),  # view only: CRAs do not download (user decision)
     Role.CTA: frozenset(_ALL_STAFF),
-    Role.DATA_MANAGER: frozenset(_ALL_STAFF | {Permission.DM_VIEW, Permission.DM_SYNC}),
+    Role.DATA_MANAGER: frozenset(_ALL_STAFF | {Permission.DM_EXPORT}),
     Role.SAFETY: frozenset(_ALL_STAFF),
     # QA assigns Procedures and SOPs, Vendor, Computer system and General tasks.
     Role.QA: frozenset(
@@ -98,7 +102,15 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DM_VIEW,
         }
     ),
-    Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE, Permission.STUDY_READ}),
+    Role.VIEWER: frozenset(
+        {
+            Permission.SOP_READ,
+            Permission.ASSISTANT_USE,
+            Permission.STUDY_READ,
+            Permission.DM_VIEW,
+            Permission.DM_SYNC,
+        }
+    ),
 }
 
 

@@ -321,7 +321,7 @@ def read_export(content: bytes) -> ExportData:
                     viedoc_state=state,
                     at=parse_time(_get(row, c["at"])),
                     user_role=_clean(_get(row, c["user_role"]), 100),
-                    user_name=_clean(_get(row, c["user_name"]), 255),
+                    user_name=None,  # roles only: staff names are never stored (user decision)
                     resolution=_clean(_get(row, c["resolution"]), 300),
                 )
             )
@@ -418,7 +418,7 @@ def _form_statuses(sdv_rows: list[dict[str, str]], review_rows: list[dict[str, s
         if done_at or _get(row, c["sdv_by"]):
             f.sdv_done += 1
             if done_at and (f.last_sdv_at is None or done_at > f.last_sdv_at):
-                f.last_sdv_at, f.last_sdv_by = done_at, _clean(_get(row, c["sdv_by"]), 255)
+                f.last_sdv_at = done_at
 
     r = REVIEW_COLUMNS
     for row in review_rows:
@@ -427,13 +427,9 @@ def _form_statuses(sdv_rows: list[dict[str, str]], review_rows: list[dict[str, s
         f = form_for(row)
         form_sdv_at = parse_time(_get(row, r["sdv_at"]))
         if form_sdv_at and (f.last_sdv_at is None or form_sdv_at > f.last_sdv_at):
-            f.last_sdv_at, f.last_sdv_by = form_sdv_at, _clean(_get(row, r["sdv_by"]), 255)
+            f.last_sdv_at = form_sdv_at
         f.data_review_at = parse_time(_get(row, r["data_at"]))
-        f.data_review_by = _clean(_get(row, r["data_by"]), 255)
         f.clinical_review_at = parse_time(_get(row, r["clinical_at"]))
-        f.clinical_review_by = _clean(_get(row, r["clinical_by"]), 255)
         f.signed_at = parse_time(_get(row, r["signed_at"]))
-        f.signed_by = _clean(_get(row, r["signed_by"]), 255)
         f.locked_at = parse_time(_get(row, r["lock_at"]))
-        f.locked_by = _clean(_get(row, r["lock_by"]), 255)
     return list(forms.values())

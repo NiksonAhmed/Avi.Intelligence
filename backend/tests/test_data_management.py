@@ -196,12 +196,12 @@ def test_hidden_unless_enabled(make_client) -> None:  # type: ignore[no-untyped-
     [
         (Role.ADMIN, 200, 200),
         (Role.DATA_MANAGER, 200, 200),
-        (Role.PROJECT_MANAGER, 200, 403),
-        (Role.CRA, 200, 403),
-        (Role.QA, 200, 403),
-        (Role.CTA, 403, 403),
-        (Role.SAFETY, 403, 403),
-        (Role.VIEWER, 403, 403),
+        (Role.PROJECT_MANAGER, 200, 200),  # everyone may view and sync (user decision)
+        (Role.CRA, 200, 200),
+        (Role.QA, 200, 200),
+        (Role.CTA, 200, 200),
+        (Role.SAFETY, 200, 200),
+        (Role.VIEWER, 200, 200),
     ],
 )
 def test_access_by_role(dm, role: Role, view: int, sync: int) -> None:  # type: ignore[no-untyped-def]
@@ -448,7 +448,7 @@ def test_sdv_read_from_the_export() -> None:
     done = next(
         f for f in forms if f.subject_id == "101-001" and f.event_id == "E01_SCR" and f.form_id == "VS"
     )
-    assert (done.sdv_required, done.sdv_done, done.last_sdv_by) == (6, 6, "Demo CRA")
+    assert (done.sdv_required, done.sdv_done, done.last_sdv_by) == (6, 6, None)  # names are never kept
     assert done.data_review_at and done.signed_at and done.locked_at
 
 
@@ -499,7 +499,7 @@ def test_overview_reports_sdv_completed_vs_required(dm) -> None:  # type: ignore
     assert sites == {"101": (87, 120), "102": (40, 160), "201": (0, 80)}
 
 
-@pytest.mark.parametrize(("role", "code"), [(Role.CRA, 200), (Role.CTA, 403), (Role.VIEWER, 403)])
+@pytest.mark.parametrize(("role", "code"), [(Role.CRA, 200), (Role.CTA, 200), (Role.VIEWER, 200)])
 def test_sdv_access(dm, role: Role, code: int) -> None:  # type: ignore[no-untyped-def]
     assert dm(role).get(f"{API}/sdv").status_code == code
 
@@ -534,3 +534,103 @@ def test_visit_dates_match_across_sdv_and_review_files() -> None:
         ("E01", 1, "event_date"),
         ("E02", 1, "event_date"),
     ]
+
+
+def test_download_only_for_admin_and_data_manager() -> None:
+    from app.auth.rbac import ROLE_PERMISSIONS, Permission
+
+    can_download = {role for role, perms in ROLE_PERMISSIONS.items() if Permission.DM_EXPORT in perms}
+    assert can_download == {Role.ADMIN, Role.DATA_MANAGER}  # never CRAs (user decision)
+    assert all(Permission.DM_VIEW in perms for perms in ROLE_PERMISSIONS.values())
+
+
+def test_staff_names_are_never_stored(db_session: Session) -> None:
+    """Roles only: Viedoc's user names (query history, SDV/review/sign/lock "by") are not kept."""
+    from app.data_management.models import DmFormStatus, DmQueryEvent
+
+    asyncio.run(sync_connection(db_session, _settings(), tenant_id="avion", name="demo", triggered_by="t"))
+    events = db_session.scalars(select(DmQueryEvent)).all()
+    assert events and all(e.user_name is None for e in events)
+    assert any(e.user_role == "Study Coordinator" for e in events)
+    forms = db_session.scalars(select(DmFormStatus)).all()
+    assert forms and all(
+        f.last_sdv_by is None and f.data_review_by is None and f.signed_by is None and f.locked_by is None
+        for f in forms
+    )
+    assert any(f.signed_at for f in forms)  # the dates are kept
+
+
+def test_sync_guard_reuses_a_fresh_sync_and_refuses_a_second_running_one(dm) -> None:  # type: ignore[no-untyped-def]
+    from app.data_management import api as dm_api
+
+    client = dm(Role.CRA)
+    first = client.post(f"{API}/sync", json={"connection": "demo"}).json()
+    again = client.post(f"{API}/sync", json={"connection": "demo"}).json()
+    assert (
+        first["ok"] and again["started_at"][:26] == first["started_at"][:26]
+    )  # reused: Viedoc not asked again
+    events = dm().get("/api/v1/audit-events").json()["items"]
+    assert sum(e["action"] == "dm.synced" for e in events) == 1
+    dm_api._SYNCING.add(("avion", "demo"))
+    try:
+        refused = client.post(f"{API}/sync", json={"connection": "demo"})
+        assert refused.status_code == 409 and "already running" in refused.json()["detail"]
+    finally:
+        dm_api._SYNCING.discard(("avion", "demo"))
+
+
+def _sheet(content: bytes, name: str) -> list[tuple[object, ...]]:
+    import io
+
+    from openpyxl import load_workbook
+
+    return list(load_workbook(io.BytesIO(content), read_only=True)[name].iter_rows(values_only=True))
+
+
+@pytest.mark.parametrize(
+    ("role", "code"),
+    [
+        (Role.ADMIN, 200),
+        (Role.DATA_MANAGER, 200),
+        (Role.CRA, 403),  # never CRAs (user decision)
+        (Role.PROJECT_MANAGER, 403),
+        (Role.QA, 403),
+        (Role.VIEWER, 403),
+    ],
+)
+def test_excel_download_only_for_admin_and_data_manager(dm, role: Role, code: int) -> None:  # type: ignore[no-untyped-def]
+    client = dm(role)
+    assert client.get(f"{API}/queries/export.xlsx").status_code == code
+    assert client.get(f"{API}/sdv/export.xlsx").status_code == code
+    assert client.get(f"{API}/status").json()["can_export"] is (code == 200)
+
+
+def test_queries_excel_matches_the_screen(dm) -> None:  # type: ignore[no-untyped-def]
+    client = dm(Role.DATA_MANAGER)
+    params = {"site": "102", "state": "not_closed"}
+    on_screen = client.get(f"{API}/queries", params=params).json()
+    res = client.get(f"{API}/queries/export.xlsx", params=params)
+    assert res.status_code == 200 and res.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert 'filename="DEMO_DM queries site 102' in res.headers["content-disposition"]
+    rows = _sheet(res.content, "Queries")
+    assert rows[0][:4] == ("Study", "Site", "Site name", "Subject") and "Query text" in rows[0]
+    assert len(rows) - 1 == on_screen["total"] and all(r[1] == "102" for r in rows[1:])
+    assert [r[7] for r in rows[1:]] == [q["query_number"] for q in on_screen["queries"]]  # same order
+    about = dict((r[0], r[1]) for r in _sheet(res.content, "About"))
+    assert "site: 102" in str(about["Filters"]) and "role" in str(about["Data protection"])
+    events = dm().get("/api/v1/audit-events").json()["items"]
+    assert any(e["action"] == "dm.exported" and e["entity_id"] == "queries" for e in events)
+
+
+def test_sdv_excel_matches_the_screen(dm) -> None:  # type: ignore[no-untyped-def]
+    client = dm()
+    on_screen = client.get(f"{API}/sdv", params={"view": "all"}).json()
+    res = client.get(f"{API}/sdv/export.xlsx", params={"view": "all"})
+    assert res.status_code == 200
+    forms = _sheet(res.content, "SDV forms")
+    assert len(forms) - 1 == on_screen["total"]
+    assert sum(r[8] for r in forms[1:]) == on_screen["summary"]["required"]  # type: ignore[misc]
+    assert len(_sheet(res.content, "By site")) - 1 == len(on_screen["sites"])
+    assert len(_sheet(res.content, "By visit")) - 1 == len(on_screen["visits"])

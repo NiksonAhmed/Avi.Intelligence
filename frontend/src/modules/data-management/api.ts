@@ -42,6 +42,8 @@ export interface DmStatus {
   scopes: DmScope[]
   default_scope: string
   can_sync: boolean
+  /** Excel downloads: System Admin and Data Manager only. */
+  can_export: boolean
   demo: boolean
   site_answer_days: number
   approval_days: number
@@ -113,7 +115,7 @@ export interface DmQueryDetail extends DmQuery {
   event_id: string | null
   item_id: string | null
   raised_on: string | null
-  events: { viedoc_state: string; at: string | null; user_role: string | null; user_name: string | null; resolution: string | null }[]
+  events: { viedoc_state: string; at: string | null; user_role: string | null; resolution: string | null }[]
 }
 
 export interface DmQueryList {
@@ -141,6 +143,14 @@ export interface DmQueryFilters {
 }
 
 const BASE = '/data-management'
+
+/** Excel download of the Queries or SDV list, with the same filters as on screen. */
+export function dmExportUrl(list: 'queries' | 'sdv', params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) if (value) search.set(key, value)
+  const query = search.toString()
+  return `/api/v1${BASE}/${list}/export.xlsx${query ? `?${query}` : ''}`
+}
 
 /** The module's status, or null when Data Management is switched off (the API answers 404). */
 export function useDmStatus(enabled = true) {
@@ -214,7 +224,6 @@ export interface DmSdvForm {
   status: 'waiting' | 'complete'
   days_since_visit: number | null
   last_sdv_at: string | null
-  last_sdv_by: string | null
   data_review_at: string | null
   signed_at: string | null
   locked_at: string | null

@@ -14,6 +14,7 @@ const status: DmStatus = {
   scopes: [{ id: 'sandbox', label: 'DEMO_IS · Sandbox', environment: 'sandbox', multi: false }],
   default_scope: 'sandbox',
   can_sync: true,
+  can_export: true,
   demo: false,
   site_answer_days: 5,
   approval_days: 3,
@@ -88,10 +89,10 @@ const detail: DmQueryDetail = {
   item_id: 'EGORRES_QRS',
   raised_on: 'Item',
   events: [
-    { viedoc_state: 'Query Raised', at: '2026-10-24T09:30:00Z', user_role: null, user_name: null, resolution: null },
-    { viedoc_state: 'Query Resolved', at: '2026-10-26T09:30:00Z', user_role: 'Study Coordinator', user_name: 'Demo Coordinator', resolution: 'Demo answer' },
-    { viedoc_state: 'Query Raised', at: '2026-11-01T09:30:00Z', user_role: 'Data Manager', user_name: 'Demo DM', resolution: null },
-    { viedoc_state: 'Query Resolved', at: '2026-11-07T09:30:00Z', user_role: 'Study Coordinator', user_name: 'Demo Coordinator', resolution: 'Demo answer' },
+    { viedoc_state: 'Query Raised', at: '2026-10-24T09:30:00Z', user_role: null, resolution: null },
+    { viedoc_state: 'Query Resolved', at: '2026-10-26T09:30:00Z', user_role: 'Study Coordinator', resolution: 'Demo answer' },
+    { viedoc_state: 'Query Raised', at: '2026-11-01T09:30:00Z', user_role: 'Data Manager', resolution: null },
+    { viedoc_state: 'Query Resolved', at: '2026-11-07T09:30:00Z', user_role: 'Study Coordinator', resolution: 'Demo answer' },
   ],
 }
 
@@ -117,7 +118,7 @@ const sdv: DmSdv = {
     {
       id: 'f1', connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre',
       subject_id: '102-003', event_name: 'Screening', event_date: '2026-09-12T00:00:00Z', form_label: 'ECG', kind: 'form',
-      required: 5, done: 2, percent: 40, status: 'waiting', days_since_visit: 60, last_sdv_at: null, last_sdv_by: null,
+      required: 5, done: 2, percent: 40, status: 'waiting', days_since_visit: 60, last_sdv_at: null,
       data_review_at: '2026-09-20T00:00:00Z', signed_at: null, locked_at: null,
     },
   ],
@@ -193,7 +194,8 @@ describe('Data Management', () => {
     await userEvent.click(row)
     expect(await screen.findByText('Query 8')).toBeInTheDocument()
     expect(screen.getAllByText('Query Resolved')).toHaveLength(2)
-    expect(screen.getByText(/Data Manager \(Demo DM\)/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Data Manager/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Demo DM/)).not.toBeInTheDocument() // roles only, never names
     expect(screen.getByText(/answer and approve queries in Viedoc/)).toBeInTheDocument()
   })
 
@@ -324,5 +326,29 @@ describe('Data Management', () => {
     await userEvent.click(within(screen.getAllByTestId('dm-sdv-visit-row')[1]!).getByRole('button', { name: 'Day 1' }))
     expect(router.state.location.search).toBe('?tab=sdv&sview=complete&svisit=E03_D1')
     expect(await screen.findByTestId('dm-sdv-active-filters')).toHaveTextContent('Visit: E03_D1')
+  })
+
+  it('offers Excel downloads of the filtered lists to Admin and Data Manager', async () => {
+    mockApi({ ...routes })
+    renderRoute('/data-management?tab=queries&view=open&site=102&from=2026-10-01')
+    const queries = await screen.findByTestId('dm-queries-excel')
+    expect(queries).toHaveTextContent('Download Excel')
+    expect(queries).toHaveAttribute(
+      'href',
+      '/api/v1/data-management/queries/export.xlsx?scope=sandbox&state=open_at_site&site=102&raised_from=2026-10-01',
+    )
+    await userEvent.click(screen.getByRole('tab', { name: 'SDV' }))
+    expect(await screen.findByTestId('dm-sdv-excel')).toHaveAttribute(
+      'href',
+      '/api/v1/data-management/sdv/export.xlsx?scope=sandbox&view=waiting',
+    )
+  })
+
+  it('hides Excel downloads from everyone else (for example CRAs)', async () => {
+    mockApi({ ...routes, '/data-management/status': { ...status, can_export: false } })
+    renderRoute('/data-management?tab=queries')
+    expect(await screen.findByTestId('dm-query-count')).toBeInTheDocument()
+    expect(screen.queryByTestId('dm-queries-excel')).not.toBeInTheDocument()
+    expect(screen.queryByText('Download Excel')).not.toBeInTheDocument()
   })
 })
