@@ -1,0 +1,246 @@
+"""Builds the knowledge index from Effective SOPs and serves a cached BM25 index per tenant."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import logging
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from threading import Lock
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.connectors.sharepoint.models import (
+    DocumentDetails,
+    DocumentKind,
+    SopConnector,
+    SopDocument,
+    SopStatus,
+)
+
+from .document_details import extract_details
+from .extraction import MAX_FILE_BYTES, UnsupportedDocument, chunk_sections, extract_sections
+from .models import KnowledgeChunk, KnowledgeDocument
+from .search import Bm25Index, Passage
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class IndexResult:
+    indexed: int = 0
+    unchanged: int = 0
+    removed: int = 0
+    failed: list[dict[str, str]] = field(default_factory=list)
+
+
+def _naive_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+
+async def _read_file(connector: SopConnector, sop: SopDocument) -> tuple[bytes, str, str]:
+    download = await connector.download(sop.id)
+    if download is None:
+        raise UnsupportedDocument("Document is no longer available.")
+    data = bytearray()
+    async for chunk in download.content:
+        data.extend(chunk)
+        if len(data) > MAX_FILE_BYTES:
+            raise UnsupportedDocument("File is larger than 25 MB.")
+    return bytes(data), download.file_name, download.content_type
+
+
+async def index_sops(db: Session, connector: SopConnector, tenant_id: str) -> IndexResult:
+    """Indexes Effective SOPs only. Drafts, in-review and superseded SOPs are never given to the AI,
+    nor are forms and templates (they hold blank fields, not procedures)."""
+    result = IndexResult()
+    source = "demo" if connector.info().mode == "mock" else "sharepoint"
+    listing = await connector.list_sops()
+    effective = {
+        d.id: d for d in listing.documents if d.status == SopStatus.EFFECTIVE and d.kind == DocumentKind.SOP
+    }
+
+    existing = {
+        d.external_id: d
+        for d in db.scalars(select(KnowledgeDocument).where(KnowledgeDocument.tenant_id == tenant_id))
+    }
+
+    for external_id, kd in existing.items():
+        if external_id not in effective or kd.source != source:
+            db.delete(kd)
+            result.removed += 1
+    db.flush()
+
+    for sop in effective.values():
+        current = existing.get(sop.id)
+        if (
+            current is not None
+            and current.source == source
+            and current.error is None
+            and current.details is not None  # indexed before document details were read
+            and current.version in {sop.version, current.details.get("version")}
+            and current.title == sop.title
+            and current.sop_number == sop.sop_number
+            and _naive_utc(current.source_modified_at) == _naive_utc(sop.modified_at)
+        ):
+            result.unchanged += 1
+            continue
+        if current is not None and current in db:
+            db.delete(current)
+            db.flush()
+
+        doc = KnowledgeDocument(
+            tenant_id=tenant_id,
+            source=source,
+            external_id=sop.id,
+            sop_number=sop.sop_number,
+            title=sop.title,
+            version=sop.version,
+            status=sop.status.value,
+            web_url=sop.web_url,
+            source_modified_at=sop.modified_at,
+        )
+        try:
+            data, file_name, content_type = await _read_file(connector, sop)
+            details = extract_details(data, file_name, content_type)
+            doc.details = details.model_dump(mode="json")
+            # The version written in the document wins over the file name (they can disagree).
+            doc.version = details.version or sop.version
+            chunks = chunk_sections(extract_sections(data, file_name, content_type))
+            doc.chunks = [
+                KnowledgeChunk(position=i, section=c.section, text=c.text) for i, c in enumerate(chunks)
+            ]
+            doc.chunk_count = len(chunks)
+            result.indexed += 1
+        except UnsupportedDocument as exc:
+            doc.error = str(exc)[:500]
+            result.failed.append({"sop": sop.sop_number or sop.title, "reason": str(exc)})
+        db.add(doc)
+        db.flush()
+
+    db.commit()
+    log.info(
+        "knowledge.indexed",
+        extra={
+            "indexed": result.indexed,
+            "unchanged": result.unchanged,
+            "removed": result.removed,
+            "failed": len(result.failed),
+            "tenant": tenant_id,
+        },
+    )
+    return result
+
+
+def _index_lock() -> asyncio.Lock:
+    """One index update at a time per event loop (questions and background refreshes share it)."""
+    loop = asyncio.get_running_loop()
+    return _locks.setdefault(id(loop), asyncio.Lock())
+
+
+_locks: dict[int, asyncio.Lock] = {}
+
+
+async def refresh_index(db: Session, connector: SopConnector, tenant_id: str) -> IndexResult:
+    """Brings the index in line with the current approved SOPs: reads new or changed files and drops
+    SOPs that are no longer approved. Unchanged SOPs are not downloaded again."""
+    async with _index_lock():
+        return await index_sops(db, connector, tenant_id)
+
+
+def is_current(stored_modified_at: datetime | None, sop: SopDocument) -> bool:
+    """True when what was read from the file was read from the file as it is now in SharePoint."""
+    return _naive_utc(stored_modified_at) == _naive_utc(sop.modified_at)
+
+
+def document_details_by_id(
+    db: Session, tenant_id: str, source: str
+) -> dict[str, tuple[DocumentDetails, datetime | None]]:
+    """Details read from inside each indexed document, with the file's modified time when it was read."""
+    rows = db.execute(
+        select(
+            KnowledgeDocument.external_id, KnowledgeDocument.details, KnowledgeDocument.source_modified_at
+        ).where(
+            KnowledgeDocument.tenant_id == tenant_id,
+            KnowledgeDocument.source == source,
+            KnowledgeDocument.details.is_not(None),
+        )
+    ).all()
+    return {
+        external_id: (DocumentDetails.model_validate(details), modified)
+        for external_id, details, modified in rows
+        if details
+    }
+
+
+@dataclass
+class IndexStats:
+    documents: int
+    passages: int
+    failed: int
+    last_indexed_at: datetime | None
+
+
+def index_stats(db: Session, tenant_id: str) -> IndexStats:
+    docs = db.execute(
+        select(
+            func.count(KnowledgeDocument.id),
+            func.coalesce(func.sum(KnowledgeDocument.chunk_count), 0),
+            func.max(KnowledgeDocument.indexed_at),
+        ).where(KnowledgeDocument.tenant_id == tenant_id)
+    ).one()
+    failed = db.scalar(
+        select(func.count(KnowledgeDocument.id)).where(
+            KnowledgeDocument.tenant_id == tenant_id, KnowledgeDocument.error.is_not(None)
+        )
+    )
+    return IndexStats(documents=docs[0], passages=int(docs[1]), failed=failed or 0, last_indexed_at=docs[2])
+
+
+_cache: dict[str, tuple[str, Bm25Index]] = {}
+_cache_lock = Lock()
+
+
+def _content_signature(db: Session, tenant_id: str) -> str:
+    """Changes whenever an SOP is added, re-read or removed: a re-read SOP is stored as a new row with a
+    new id. (A timestamp is not enough: two indexings within one clock tick would look the same.)"""
+    rows = db.execute(
+        select(KnowledgeDocument.id, KnowledgeDocument.chunk_count)
+        .where(KnowledgeDocument.tenant_id == tenant_id)
+        .order_by(KnowledgeDocument.id)
+    ).all()
+    return hashlib.sha256(repr([tuple(r) for r in rows]).encode()).hexdigest()
+
+
+def get_search_index(db: Session, tenant_id: str) -> Bm25Index:
+    """Returns a cached BM25 index, rebuilt whenever the tenant's indexed content changes."""
+    signature = _content_signature(db, tenant_id)
+    with _cache_lock:
+        cached = _cache.get(tenant_id)
+        if cached and cached[0] == signature:
+            return cached[1]
+    rows = db.execute(
+        select(KnowledgeChunk, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .where(KnowledgeDocument.tenant_id == tenant_id)
+    ).all()
+    passages = [
+        Passage(
+            chunk_id=chunk.id,
+            document_id=doc.id,
+            position=chunk.position,
+            section=chunk.section,
+            text=chunk.text,
+            title=doc.title,
+            sop_number=doc.sop_number,
+        )
+        for chunk, doc in rows
+    ]
+    index = Bm25Index(passages)
+    with _cache_lock:
+        _cache[tenant_id] = (signature, index)
+    return index

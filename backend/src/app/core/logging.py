@@ -1,0 +1,51 @@
+"""Structured (JSON lines) logging using only the standard library."""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import sys
+from datetime import UTC, datetime
+from typing import Any
+
+_RESERVED = set(vars(logging.makeLogRecord({})).keys()) | {"message", "asctime"}
+
+
+_SECRET_PARAMS = re.compile(r"((?:study|customer)_key=)[^&\s\"']+", re.IGNORECASE)
+
+
+def redact(text: str) -> str:
+    """Mask API keys that some services (SimpleTrials) take as URL query parameters."""
+    return _SECRET_PARAMS.sub(r"\1***", text)
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return redact(self._format(record))
+
+    def _format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        # Anything passed via `extra={...}` becomes a structured field.
+        for key, value in record.__dict__.items():
+            if key not in _RESERVED and not key.startswith("_"):
+                payload[key] = value
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def configure_logging(level: str = "INFO") -> None:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter())
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(level.upper())
+    # Keep third-party noise down; httpx logs full URLs at INFO.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

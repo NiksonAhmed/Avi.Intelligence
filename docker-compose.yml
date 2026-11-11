@@ -1,0 +1,44 @@
+# Reproducible local environment: PostgreSQL + API + web app.
+#   docker compose up --build      then open http://localhost:8080
+# Configuration comes from .env (copy .env.example). DATABASE_URL is overridden to use PostgreSQL.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: avi
+      POSTGRES_USER: avi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-avi-local-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avi -d avi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://avi:${POSTGRES_PASSWORD:-avi-local-only}@db:5432/avi
+      CORS_ORIGINS: http://localhost:8080
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata:
