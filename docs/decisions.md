@@ -20,6 +20,17 @@ A running log of design decisions, assumptions and known limitations. Newest fir
   - An on/off setting, `DATA_MANAGEMENT_ENABLED`, defaulting to off until the module is ready.
 - **Ground rules:** read-only towards Viedoc (nothing is written back; sites answer in Viedoc itself);
   tests never call the real Viedoc API; credentials only in `.env`.
+- **One API client per study (user's understanding; Step 0 confirms).** Viedoc API access is expected to be
+  set up per study, possibly also per environment (test and production). Avi.Intelligence therefore holds a
+  **list of Viedoc connections**, each with a name, a sandbox or live label, API address, client ID and
+  secret. Secrets stay in `.env`; a settings screen shows the connections, never the secrets. Adding a
+  study means adding one connection entry, with no code change. If one client turns out to cover several
+  studies, every study it can see is listed.
+- **Sandbox first, live later.** Every study and record keeps its sandbox or live label, shown clearly on
+  screen (as the SimpleTrials Sandbox is today). Sandbox and live data are never mixed in views, Reports or
+  exports. **Live connections are not read** unless `VIEDOC_ALLOW_LIVE=true` (off by default), which is only
+  turned on after Avion's data-protection and Quality sign-off, so a live key added by mistake reads
+  nothing. The same rules apply to live data: read-only, subject IDs only, no EDC data sent to AI.
 - **Exception to the "no patient-level data" rule:** EDC queries are subject-level by nature, so this
   module may store **subject IDs and query metadata only**: no names, initials, dates of birth or free
   text that could identify a patient. **No EDC data is ever sent to an AI model.** Pending Quality
@@ -56,7 +67,7 @@ Each step is shown before it is committed, and pushed only when agreed. Work hap
 
 | Step | Delivers | Done when |
 |---|---|---|
-| **0. Sandbox API discovery** | The user creates a sandbox API client in Viedoc API Manager and puts its client ID, secret and API address in `.env`. A read-only probe script lists what comes back (queries with history, clinical data, visit schedule, lab ranges, deviation flags), recording field names, IDs and limits. | We know which views the API can feed, and the user has reviewed the findings. No screens before this. |
+| **0. Sandbox API discovery** | The user creates a sandbox API client in Viedoc API Manager and puts its client ID, secret and API address in `.env`. A read-only probe script lists what comes back (queries with history, clinical data, visit schedule, lab ranges, deviation flags), recording field names, IDs and limits, and confirms how a client is scoped (one study or several, one environment or several). | We know which views the API can feed and how clients map to studies, and the user has reviewed the findings. No screens before this. |
 | **1. Connector and Queries view** | `dm_` tables and migration; read-only hourly sync (connector in `app/connectors/viedoc/`); Overview and Queries views with ageing (0–7, 8–14, 15–30, 30+ days). | Sandbox query counts match Viedoc. |
 | **2. Site Excel export** | A per-site file for CRAs listing only actionable items (subject, visit, form, field, query text, days open; items waiting on our approval left out), with role and site filtering. | A CRA sees only their sites. |
 | **3. Missing data and Labs** | Expected forms not started or not submitted, overdue visits; out-of-range lab values, missing units or ranges, a field missing across many subjects (vendor issue). | Checked against known gaps in the sandbox. |
@@ -75,6 +86,41 @@ Each step is shown before it is committed, and pushed only when agreed. Work hap
 5. Which sandbox study, and confirmation that it holds only test data. Production studies come later,
    after Avion's data-protection sign-off.
 6. Sync frequency: hourly like SimpleTrials, or more often around database lock?
+
+### Step 0 findings (Viedoc sandbox, 11 Nov 2026)
+
+- Sign-in: OAuth 2.0 client credentials against Viedoc's sign-in server, which sits on its own host next
+  to the API (`v4apitraining` → `v4ststraining`); the tool finds it from the API address. The client
+  first failed with `invalid_client` until it was saved with valid scopes. Granted scopes:
+  `viedoc.api.admin.sites.read` and `viedoc.api.clinic.export`.
+- API version 2022-01-01 (Swagger at `/swagger/index.html`): no direct query or form endpoints. Clinical
+  data and queries come only as an **export**: start → status → download → delete.
+- **Rule change (agreed):** "only GET" became "never change study data". Exactly two other calls are
+  allowed, both on our own export copy: starting an export and deleting that export file afterwards.
+  Every other write endpoint (sites, users, ePRO accounts) is refused in code.
+- The export (CSV, zip) holds one file per form plus `Queries.csv` (with history, edit check ID, type,
+  state, resolution, role and user), `Pending_forms.csv`, `Items.csv` and `CodeLists.csv`. Each CSV has
+  a second header row of column IDs. Query states: Query Raised → Query Resolved → Query Closed. Query
+  types: Validation, Unconfirmed missing data, Pending form upgrade. No protocol deviation file in this
+  study.
+
+### Step 1 (built, shown before committing)
+
+- Defaults agreed to start: query text and staff names kept (sandbox test data; to be decided again
+  before any live study); site answers shown with the role that acted; targets 5 working days (site)
+  and 3 (approval), both settings (`DM_SITE_ANSWER_DAYS`, `DM_APPROVAL_DAYS`).
+- Sync (hourly, `DATA_MANAGEMENT_SYNC_MINUTES`, plus **Sync now** for Admin and Data Manager): export →
+  read in memory → only the listed columns of Queries and Pending forms are kept (demographics and form
+  values are never stored) → the export file is deleted from Viedoc → the connection's rows are
+  replaced. If anything fails the previous copy stays and the error is shown. Syncs are audited
+  (`dm.synced`).
+- Each query's current state and timeline are rebuilt from its history rows: open at site (the site's
+  clock), answered awaiting approval (our clock), closed; an answer sent back counts as a re-open.
+- Data Management tab (menu entry for `dm.view`, only while the module is on): Overview (tiles, sites,
+  ageing, forms) and Queries (filters, worst first, timeline). Without a Viedoc connection, or with
+  `VIEDOC_MODE=mock` (always in tests and browser tests), a labelled demo study is used.
+- First real sandbox sync: DEMO_IS, 314 validation queries (236 open at site, 26 awaiting approval, 52
+  closed), 1,845 unconfirmed missing fields, 527 pending forms; all open queries over 30 days old.
 
 ## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
 

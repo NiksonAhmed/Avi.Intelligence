@@ -5,6 +5,7 @@ import { ComingSoon } from './components/ComingSoon'
 import { AppLayout } from './layout/AppLayout'
 import { NotFound } from './pages/NotFound'
 import { ConnectorsPage } from './pages/admin/ConnectorsPage'
+import { DataManagementPage } from './modules/data-management/DataManagementPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
       { path: 'documents/sops/:sopId', element: <SopDetailPage /> },
       { path: 'documents/ask', element: <AskPage /> },
       { path: 'reports', element: <ReportsPage /> },
+      { path: 'data-management', element: <DataManagementPage /> },
       { path: 'admin', element: <Navigate to="/admin/connectors" replace /> },
       { path: 'admin/connectors', element: <ConnectorsPage /> },
       { path: 'audit', element: <AuditTrailPage /> },

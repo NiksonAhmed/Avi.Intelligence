@@ -9,6 +9,7 @@ import pytest
 os.environ["APP_ENV"] = "test"
 os.environ["SHAREPOINT_MODE"] = "mock"
 os.environ["SIMPLETRIALS_MODE"] = "mock"  # tests never call the real SimpleTrials API
+os.environ["VIEDOC_MODE"] = "mock"  # ... nor a real Viedoc study (the demo study is used)
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["USE_SYSTEM_TRUST_STORE"] = "false"
@@ -24,6 +25,7 @@ from app.connectors.sharepoint import get_sop_connector  # noqa: E402
 from app.connectors.sharepoint.mock import MockSopConnector  # noqa: E402
 from app.connectors.simpletrials import get_study_connector  # noqa: E402
 from app.connectors.simpletrials.mock import MockStudyConnector  # noqa: E402
+from app.data_management import models as _dm_models  # noqa: E402,F401
 from app.db.session import Base, get_db  # noqa: E402
 from app.knowledge import models as _knowledge_models  # noqa: E402,F401
 from app.main import create_app  # noqa: E402

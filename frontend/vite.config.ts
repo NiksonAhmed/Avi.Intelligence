@@ -26,5 +26,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    // UI tests with Ant Design are slower when the whole suite runs in parallel; 5 s was too tight.
+    testTimeout: 15_000,
   },
 })

@@ -18,6 +18,8 @@ from app.api import admin, assistant, reports, sops, studies, work
 from app.connectors.sharepoint.graph_client import GraphError
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.data_management import api as data_management_api  # the module's single wiring point
+from app.data_management.sync import scheduler_loop as dm_scheduler_loop
 from app.reports.scheduler import scheduler_loop
 
 log = logging.getLogger("app")
@@ -40,12 +42,21 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        task: asyncio.Task[None] | None = None
+        tasks: list[asyncio.Task[None]] = []
         if settings.simpletrials_sync_minutes > 0 and settings.app_env != "test":
-            task = asyncio.create_task(scheduler_loop(settings.simpletrials_sync_minutes))
+            tasks.append(asyncio.create_task(scheduler_loop(settings.simpletrials_sync_minutes)))
             log.info("scheduler.started", extra={"interval_minutes": settings.simpletrials_sync_minutes})
+        if (
+            settings.data_management_enabled
+            and settings.data_management_sync_minutes > 0
+            and settings.app_env != "test"
+        ):
+            tasks.append(asyncio.create_task(dm_scheduler_loop(settings)))
+            log.info(
+                "dm_scheduler.started", extra={"interval_minutes": settings.data_management_sync_minutes}
+            )
         yield
-        if task:
+        for task in tasks:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -102,6 +113,8 @@ def create_app() -> FastAPI:
     app.include_router(studies.router, prefix="/api/v1")
     app.include_router(work.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
+    # Data Management: answers 404 unless DATA_MANAGEMENT_ENABLED=true.
+    app.include_router(data_management_api.router, prefix="/api/v1")
     return app
 
 

@@ -19,6 +19,7 @@ import { useMe } from '../api/hooks'
 import { BrandMark } from '../components/BrandMark'
 import { initials } from '../lib/format'
 import { brand } from '../theme'
+import { useDmStatus } from '../modules/data-management/api'
 import { NAV_ITEMS, activeNavKey } from './navigation'
 
 const { Sider, Header, Content } = Layout
@@ -88,6 +89,13 @@ export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [narrow, setNarrow] = useState(false)
   const { data: me } = useMe()
+  const canSeeDm = Boolean(me?.permissions.includes('dm.view'))
+  const dmStatus = useDmStatus(canSeeDm)
+  const navItems = NAV_ITEMS.filter(
+    (item) =>
+      (!item.permission || Boolean(me?.permissions.includes(item.permission))) &&
+      (item.module !== 'data-management' || Boolean(dmStatus.data)),
+  )
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -114,7 +122,7 @@ export function AppLayout() {
             theme="dark"
             mode="inline"
             selectedKeys={[activeNavKey(location.pathname)]}
-            items={NAV_ITEMS.map((item) => ({
+            items={navItems.map((item) => ({
               key: item.key,
               icon: item.icon,
               label: <Link to={item.path}>{item.label}</Link>,

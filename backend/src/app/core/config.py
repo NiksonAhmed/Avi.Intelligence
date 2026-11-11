@@ -5,8 +5,23 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ViedocConnectionSettings(BaseModel):
+    """One Viedoc API client. Viedoc links each client to one study (and each region has its own API),
+    so there is one of these per study. Set in `.env` as VIEDOC_CONNECTIONS__<NAME>__<FIELD>."""
+
+    api_url: str
+    """The API web address shown with the client in Viedoc (https://...viedoc.net/...)."""
+    client_id: str
+    client_secret: SecretStr
+    token_url: str | None = None
+    """OAuth token address; when blank it is looked up from the API's OpenID configuration."""
+    scope: str | None = None
+    environment: Literal["sandbox", "live"] = "sandbox"
+    """Live connections are never read unless VIEDOC_ALLOW_LIVE=true (after data-protection sign-off)."""
 
 
 class Settings(BaseSettings):
@@ -14,6 +29,7 @@ class Settings(BaseSettings):
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        env_nested_delimiter="__",
     )
 
     app_env: Literal["development", "test", "production"] = "development"
@@ -70,6 +86,18 @@ class Settings(BaseSettings):
     simpletrials_key_milestones: str = (
         "Protocol Finalized;First Ethics Approval;Database Hard Lock;Clinical Study Report Finalized"
     )
+
+    # --- Viedoc (EDC) for Data Management: read-only, one API client per study ---
+    # "mock" always uses the demo study and ignores configured connections (tests and browser tests).
+    viedoc_mode: Literal["auto", "mock"] = "auto"
+    viedoc_connections: dict[str, ViedocConnectionSettings] = Field(default_factory=dict)
+    viedoc_allow_live: bool = False
+    data_management_enabled: bool = False
+    # Hourly sync by default (0 = off; never runs in tests).
+    data_management_sync_minutes: int = Field(default=60, ge=0, le=1440)
+    # Ageing targets in working days (red when over, amber on the last day).
+    dm_site_answer_days: int = Field(default=5, ge=1, le=60)
+    dm_approval_days: int = Field(default=3, ge=1, le=60)
 
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None

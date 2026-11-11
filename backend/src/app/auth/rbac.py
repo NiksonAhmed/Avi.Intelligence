@@ -45,6 +45,10 @@ class Permission(StrEnum):
     """task.assign.<category>: create, assign to anyone, edit and cancel tasks of that category."""
     TASK_CREATE_OWN = "task.create_own"
     """Create tasks assigned only to yourself, for your own tracking (never Procedures and SOPs)."""
+    DM_VIEW = "dm.view"
+    """See the Data Management tab (Viedoc queries, missing data)."""
+    DM_SYNC = "dm.sync"
+    """Run a Data Management sync from Viedoc now."""
 
 
 ROLE_LABELS: dict[Role, str] = {
@@ -70,11 +74,17 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMIN: frozenset(Permission),
     # Project Managers assign Study and General tasks (not Procedures and SOPs).
     Role.PROJECT_MANAGER: frozenset(
-        _ALL_STAFF | {Permission.AUDIT_READ, Permission.TASK_ASSIGN_STUDY, Permission.TASK_ASSIGN_GENERAL}
+        _ALL_STAFF
+        | {
+            Permission.AUDIT_READ,
+            Permission.TASK_ASSIGN_STUDY,
+            Permission.TASK_ASSIGN_GENERAL,
+            Permission.DM_VIEW,
+        }
     ),
-    Role.CRA: frozenset(_ALL_STAFF),
+    Role.CRA: frozenset(_ALL_STAFF | {Permission.DM_VIEW}),
     Role.CTA: frozenset(_ALL_STAFF),
-    Role.DATA_MANAGER: frozenset(_ALL_STAFF),
+    Role.DATA_MANAGER: frozenset(_ALL_STAFF | {Permission.DM_VIEW, Permission.DM_SYNC}),
     Role.SAFETY: frozenset(_ALL_STAFF),
     # QA assigns Procedures and SOPs, Vendor, Computer system and General tasks.
     Role.QA: frozenset(
@@ -85,6 +95,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.TASK_ASSIGN_VENDOR,
             Permission.TASK_ASSIGN_SYSTEM,
             Permission.TASK_ASSIGN_GENERAL,
+            Permission.DM_VIEW,
         }
     ),
     Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE, Permission.STUDY_READ}),
