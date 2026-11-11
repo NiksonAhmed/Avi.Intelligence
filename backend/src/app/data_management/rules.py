@@ -3,7 +3,8 @@
 Two clocks (agreed in the plan): while a query is open at the site, the site's clock runs from the moment
 it was raised (or sent back); once the site has answered, our clock runs until it is approved or closed.
 Targets are in working days (Mon-Fri): DM_SITE_ANSWER_DAYS (default 5) and DM_APPROVAL_DAYS (default 3).
-Red = over target; amber = on the last day of the target. Ageing buckets use calendar days since raised.
+Overdue (red) = over target; amber = on the last day of the target.
+Ageing buckets use calendar days since raised.
 """
 
 from __future__ import annotations
@@ -17,6 +18,18 @@ STATE_LABELS = {
     "awaiting_approval": "Answered, awaiting approval",
     "closed": "Closed",
 }
+VISIT_DATE = "visit-date"
+"""Form filter value for queries raised on the visit (event) date itself rather than on a form field."""
+VISIT_DATE_LABEL = "Visit date (no form)"
+
+
+def form_label(form_id: str | None, form_name: str | None, raised_on: str | None) -> str:
+    """The form a query is on; queries raised on the visit date have no form."""
+    if form_id or form_name:
+        return form_name or form_id or ""
+    return VISIT_DATE_LABEL if (raised_on or "").lower() == "event date" else "No form recorded"
+
+
 BUCKETS = [("0-7", 0, 7), ("8-14", 8, 14), ("15-30", 15, 30), ("30+", 31, None)]
 
 RULES = {
@@ -26,8 +39,8 @@ RULES = {
         "approval (our clock, from the answer)."
     ),
     "targets": (
-        "Targets in working days (Monday to Friday): red when over target, amber on the last day of the "
-        "target."
+        "Targets in working days (Monday to Friday): overdue (red) when over target, amber on the last "
+        "day of the target."
     ),
     "ageing": "Ageing: calendar days since the query was first raised, for queries not yet closed.",
     "missing": (

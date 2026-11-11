@@ -212,7 +212,12 @@ def test_access_by_role(dm, role: Role, view: int, sync: int) -> None:  # type: 
 
 def test_overview_tiles_sites_and_ageing(dm) -> None:  # type: ignore[no-untyped-def]
     body = dm().get(f"{API}/overview").json()
-    assert body["connection"] == "demo" and body["environment"] == "demo" and body["study_code"] == "DEMO_DM"
+    assert (
+        body["scope"] == "demo"
+        and body["multi"] is False
+        and body["environment"] == "demo"
+        and body["study_code"] == "DEMO_DM"
+    )
     tiles = {t["key"]: t["value"] for t in body["tiles"]}
     assert tiles["open_at_site"] == 6 and tiles["awaiting_approval"] == 5
     assert tiles["missing_items"] == 9 and tiles["pending_forms"] == 5
@@ -231,6 +236,17 @@ def test_query_list_filters_and_detail(dm) -> None:  # type: ignore[no-untyped-d
         "closed": 3,
     }
     assert everything["queries"][0]["flag"] == "red"  # worst first
+    views = everything["views"]
+    assert (views["attention"], views["open"], views["awaiting"], views["sent_back"], views["closed"]) == (
+        11,
+        6,
+        5,
+        1,
+        3,
+    )
+    assert everything["views"]["overdue"] == len(
+        client.get(f"{API}/queries", params={"state": "not_closed", "flag": "red"}).json()["queries"]
+    )
     assert client.get(f"{API}/queries", params={"state": "not_closed"}).json()["total"] == 11
     assert client.get(f"{API}/queries", params={"site": "102"}).json()["total"] == 6
     assert client.get(f"{API}/queries", params={"reopened": "true"}).json()["total"] == 1
@@ -290,3 +306,132 @@ def test_mock_mode_ignores_real_connections() -> None:
     assert connections(_settings(viedoc_connections={"sandbox": conn}, viedoc_mode="auto")) == {
         "sandbox": "sandbox"
     }
+
+
+# ---- several studies ------------------------------------------------------------------------------
+
+
+def _many_studies(db_session: Session) -> Settings:
+    """Two sandbox studies and one live study (live allowed here, against a fake Viedoc only)."""
+
+    def conn(env: str) -> ViedocConnectionSettings:
+        return ViedocConnectionSettings(
+            api_url="https://v4apitraining.viedoc.net/",
+            client_id="c",
+            client_secret="s",
+            environment=env,  # type: ignore[arg-type]
+        )
+
+    settings = _settings(
+        viedoc_mode="auto",
+        viedoc_allow_live=True,
+        viedoc_connections={"onc": conn("sandbox"), "cv": conn("sandbox"), "neu": conn("live")},
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("openid-configuration"):
+            return httpx.Response(
+                200, json={"token_endpoint": "https://v4ststraining.viedoc.net/connect/token"}
+            )
+        if path == "/connect/token":
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 60})
+        if path.endswith("/start"):
+            return httpx.Response(200, json={"exportId": "e1"})
+        if path.endswith("/status"):
+            return httpx.Response(200, json={"exportStatus": "Ready"})
+        if path.endswith("/download"):
+            return httpx.Response(200, content=demo_export(TODAY))
+        return httpx.Response(200)
+
+    def factory(c: ViedocConnectionSettings, allow_live: bool) -> ViedocClient:
+        return ViedocClient(c, allow_live=allow_live, transport=httpx.MockTransport(handler))
+
+    for name in ("onc", "cv", "neu"):
+        run = asyncio.run(
+            sync_connection(
+                db_session, settings, tenant_id="avion", name=name, triggered_by="t", client_factory=factory
+            )
+        )
+        assert run.ok
+    return settings
+
+
+def test_scopes_combine_studies_but_never_sandbox_with_live(make_client, db_session: Session) -> None:  # type: ignore[no-untyped-def]
+    settings = _many_studies(db_session)
+    client = make_client(Role.ADMIN)
+    client.app.dependency_overrides[get_settings] = lambda: settings
+    status = client.get(f"{API}/status").json()
+    scopes = [(s["id"], s["label"], s["multi"]) for s in status["scopes"]]
+    # Only one live study, so no "All live studies"; two sandbox studies can be combined.
+    assert scopes[0] == ("all-sandbox", "All sandbox studies", True)
+    assert ("neu", "DEMO_DM · Live", False) in scopes and ("onc", "DEMO_DM · Sandbox", False) in scopes
+    assert status["default_scope"] == "all-sandbox"
+
+    combined = client.get(f"{API}/overview", params={"scope": "all-sandbox"}).json()
+    assert combined["multi"] is True and combined["study_code"] is None
+    assert {s["connection"] for s in combined["studies"]} == {"onc", "cv"}
+    assert {t["key"]: t["value"] for t in combined["tiles"]}["open_at_site"] == 12  # 6 + 6, live left out
+    # The same site code in two studies stays two rows.
+    assert sorted(
+        (s["connection"], s["site_code"]) for s in combined["sites"] if s["site_code"] == "102"
+    ) == [
+        ("cv", "102"),
+        ("onc", "102"),
+    ]
+    assert any(o["id"] == "onc:102" for o in combined["site_options"])
+
+    everything = client.get(f"{API}/queries", params={"scope": "all-sandbox"}).json()
+    assert everything["total"] == 28 and {q["connection"] for q in everything["queries"]} == {"onc", "cv"}
+    one_study = client.get(f"{API}/queries", params={"scope": "all-sandbox", "study": "cv"}).json()
+    assert one_study["total"] == 14
+    one_site = client.get(f"{API}/queries", params={"scope": "all-sandbox", "site": "onc:102"}).json()
+    assert one_site["total"] == 6 and {q["connection"] for q in one_site["queries"]} == {"onc"}
+
+    live = client.get(f"{API}/overview", params={"scope": "neu"}).json()
+    assert live["environment"] == "live" and live["multi"] is False
+    assert client.get(f"{API}/overview", params={"scope": "all-live"}).status_code == 200  # one live study
+    assert client.get(f"{API}/overview", params={"scope": "all-other"}).status_code == 404
+
+
+def test_queries_on_the_visit_date_are_labelled(dm, db_session: Session) -> None:  # type: ignore[no-untyped-def]
+    """Viedoc raises some queries on the visit (event) date itself: they have a visit but no form."""
+    assert rules.form_label(None, None, "Event date") == "Visit date (no form)"
+    assert rules.form_label("EG", "ECG", "Item") == "ECG"
+    client = dm()
+    client.get(f"{API}/overview")  # demo study synced on first use
+    db_session.add(
+        DmQuery(
+            tenant_id="avion", connection="demo", environment="demo", study_code="DEMO_DM", query_number="99",
+            site_code="101", site_name="Demo Hospital North", subject_id="101-009", event_id="E03_D1",
+            event_name="Day 1", form_id=None, query_type="Validation", raised_on="Event date",
+            state="open_at_site", viedoc_state="Query Raised", raised_at=datetime(2026, 11, 1, tzinfo=UTC),
+            state_since=datetime(2026, 11, 1, tzinfo=UTC),
+        )
+    )  # fmt: skip
+    db_session.commit()
+    body = client.get(f"{API}/overview").json()
+    assert {"form": "Visit date (no form)", "open": 1} in body["forms"]
+    assert {"id": "visit-date", "label": "Visit date (no form)"} in body["form_options"]
+    only = client.get(f"{API}/queries", params={"form": "visit-date"}).json()
+    assert only["total"] == 1 and only["queries"][0]["form_label"] == "Visit date (no form)"
+
+
+def test_query_date_range(dm) -> None:  # type: ignore[no-untyped-def]
+    from datetime import timedelta as td
+
+    from app.studies.clock import today as app_today
+
+    client = dm()
+    t = app_today()
+    # Demo queries were first raised 2, 3, 5, 6, 7, 9, 11, 12, 14, 18, 20, 25, 35 and 40 days ago.
+    recent = client.get(f"{API}/queries", params={"raised_from": str(t - td(days=10))}).json()
+    assert recent["total"] == 6
+    window = client.get(
+        f"{API}/queries", params={"raised_from": str(t - td(days=20)), "raised_to": str(t - td(days=11))}
+    ).json()
+    assert window["total"] == 5  # 11, 12, 14, 18 and 20 days ago
+    assert all(q["raised_at"] for q in window["queries"])
+    bad = client.get(f"{API}/queries", params={"raised_from": str(t), "raised_to": str(t - td(days=1))})
+    assert bad.status_code == 422
+    assert client.get(f"{API}/queries", params={"raised_from": "not-a-date"}).status_code == 422

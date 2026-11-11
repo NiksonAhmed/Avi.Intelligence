@@ -8,7 +8,11 @@ import type { DmOverview, DmQueryDetail, DmQueryList, DmStatus } from './api'
 const dmUser = { ...adminUser, permissions: [...adminUser.permissions, 'dm.view', 'dm.sync'] }
 
 const status: DmStatus = {
-  connections: [{ name: 'sandbox', environment: 'sandbox', last_run: null, last_success_at: '2026-11-11T05:00:00Z' }],
+  connections: [
+    { name: 'sandbox', environment: 'sandbox', study_code: 'DEMO_IS', last_run: null, last_success_at: '2026-11-11T05:00:00Z' },
+  ],
+  scopes: [{ id: 'sandbox', label: 'DEMO_IS · Sandbox', environment: 'sandbox', multi: false }],
+  default_scope: 'sandbox',
   can_sync: true,
   demo: false,
   site_answer_days: 5,
@@ -18,9 +22,11 @@ const status: DmStatus = {
 }
 
 const overview: DmOverview = {
-  connection: 'sandbox',
+  scope: 'sandbox',
+  multi: false,
   environment: 'sandbox',
   study_code: 'DEMO_IS',
+  studies: [{ connection: 'sandbox', study_code: 'DEMO_IS' }],
   as_of: '2026-11-11T05:00:00Z',
   tiles: [
     { key: 'open_at_site', label: 'Open at site', value: 314, note: '120 over 5 working days', tone: 'bad' },
@@ -28,7 +34,7 @@ const overview: DmOverview = {
     { key: 'missing_items', label: 'Unconfirmed missing data', value: 1845, note: 'Blank fields', tone: 'warn' },
   ],
   sites: [
-    { site_code: '102', site_name: 'Demo Cancer Centre', open_at_site: 3, awaiting_approval: 2, over_target: 2, oldest_days: 40, missing_items: 4, pending_forms: 3 },
+    { connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre', open_at_site: 3, awaiting_approval: 2, overdue: 2, oldest_days: 40, missing_items: 4, pending_forms: 3 },
   ],
   ageing: [
     { label: '0-7', open_at_site: 2, awaiting_approval: 1 },
@@ -40,7 +46,10 @@ const overview: DmOverview = {
 }
 
 const query = {
+  form_label: 'ECG',
   id: 'q8',
+  connection: 'sandbox',
+  study_code: 'DEMO_IS',
   query_number: '8',
   site_code: '102',
   site_name: 'Demo Cancer Centre',
@@ -64,7 +73,12 @@ const query = {
   resolution: 'Demo answer',
 }
 
-const list: DmQueryList = { queries: [query], total: 1, counts: { awaiting_approval: 1 } }
+const list: DmQueryList = {
+  queries: [query],
+  total: 1,
+  counts: { awaiting_approval: 1 },
+  views: { attention: 262, open: 236, awaiting: 26, overdue: 262, sent_back: 1, closed: 52 },
+}
 
 const detail: DmQueryDetail = {
   ...query,
@@ -117,11 +131,17 @@ describe('Data Management', () => {
 
     const row = screen.getByTestId('dm-site-row')
     expect(row).toHaveTextContent('102 · Demo Cancer Centre')
-    await userEvent.click(within(row).getByRole('button', { name: 'Over target 102' }))
-    expect(router.state.location.search).toBe('?tab=queries&site=102&flag=red')
+    await userEvent.click(within(row).getByRole('button', { name: 'Overdue 102' }))
+    expect(router.state.location.search).toBe('?tab=queries&site=102&view=overdue')
     expect(await screen.findByTestId('dm-query-count')).toHaveTextContent('1 query')
     expect(
-      fetchMock.mock.calls.some(([u]) => String(u).includes('/data-management/queries') && String(u).includes('site=102') && String(u).includes('flag=red')),
+      fetchMock.mock.calls.some(
+        ([u]) =>
+          String(u).includes('/data-management/queries') &&
+          String(u).includes('site=102') &&
+          String(u).includes('state=not_closed') &&
+          String(u).includes('flag=red'),
+      ),
     ).toBe(true)
   })
 
@@ -149,5 +169,89 @@ describe('Data Management', () => {
     expect(await screen.findByText('Synced: 316 queries')).toBeInTheDocument()
     const sync = fetchMock.mock.calls.find(([u]) => String(u).includes('/data-management/sync'))
     expect(JSON.parse(String((sync![1] as RequestInit).body))).toEqual({ connection: 'sandbox' })
+  })
+
+  it('chooses a study, and combines several studies of one environment', async () => {
+    const many: DmStatus = {
+      ...status,
+      connections: [
+        { name: 'onc', environment: 'sandbox', study_code: 'ONC_301', last_run: null, last_success_at: null },
+        { name: 'cv', environment: 'sandbox', study_code: 'CV_201', last_run: null, last_success_at: null },
+        { name: 'neu', environment: 'live', study_code: 'NEU_101', last_run: null, last_success_at: null },
+      ],
+      scopes: [
+        { id: 'all-sandbox', label: 'All sandbox studies', environment: 'sandbox', multi: true },
+        { id: 'onc', label: 'ONC_301 · Sandbox', environment: 'sandbox', multi: false },
+        { id: 'cv', label: 'CV_201 · Sandbox', environment: 'sandbox', multi: false },
+        { id: 'neu', label: 'NEU_101 · Live', environment: 'live', multi: false },
+      ],
+      default_scope: 'all-sandbox',
+    }
+    const combined: DmOverview = {
+      ...overview,
+      scope: 'all-sandbox',
+      multi: true,
+      study_code: null,
+      studies: [
+        { connection: 'onc', study_code: 'ONC_301' },
+        { connection: 'cv', study_code: 'CV_201' },
+      ],
+      sites: [
+        { ...overview.sites[0]!, connection: 'onc', study_code: 'ONC_301' },
+        { ...overview.sites[0]!, connection: 'cv', study_code: 'CV_201' },
+      ],
+    }
+    const fetchMock = mockApi({ ...routes, '/data-management/status': many, '/data-management/overview': combined })
+    const { router } = renderRoute('/data-management')
+    expect(await screen.findByTestId('dm-scope-title')).toHaveTextContent('All sandbox studies (2)')
+    expect(screen.getByRole('button', { name: /Sync all/ })).toBeInTheDocument()
+    const rows = await screen.findAllByTestId('dm-site-row')
+    expect(rows[0]).toHaveTextContent('ONC_301')
+    expect(rows[1]).toHaveTextContent('CV_201')
+
+    // A site in a combined view keeps its study.
+    await userEvent.click(within(rows[1]!).getByRole('button', { name: 'Overdue 102' }))
+    expect(router.state.location.search).toBe('?tab=queries&site=cv%3A102&view=overdue')
+
+    // Choosing one study narrows everything to it.
+    await userEvent.click(screen.getByRole('combobox', { name: 'Study' }))
+    await userEvent.click(await screen.findByTitle('NEU_101 · Live'))
+    expect(router.state.location.search).toBe('?tab=queries&view=overdue&scope=neu')
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/data-management/overview?scope=neu'))).toBe(true)
+  })
+
+  it('filters queries by the date they were raised', async () => {
+    const fetchMock = mockApi({ ...routes })
+    renderRoute('/data-management?tab=queries&from=2026-10-01&to=2026-10-31')
+    expect(await screen.findByTestId('dm-active-filters')).toHaveTextContent('Raised: 01 Oct 2026 – 31 Oct 2026 (UTC)')
+    expect(
+      fetchMock.mock.calls.some(
+        ([u]) => String(u).includes('raised_from=2026-10-01') && String(u).includes('raised_to=2026-10-31'),
+      ),
+    ).toBe(true)
+    expect(await screen.findByTestId('dm-query-row')).toHaveTextContent('24 Oct 2026')
+  })
+
+  it('switches quick views with counts, and shows active filters as removable tags', async () => {
+    const fetchMock = mockApi({ ...routes })
+    const { router } = renderRoute('/data-management?tab=queries&site=102&q=QRS')
+    await screen.findByTestId('dm-query-count') // counts appear once the list has loaded
+    expect(screen.getByTestId('dm-view-attention')).toHaveTextContent('Needs attention262')
+    expect(screen.getByTestId('dm-view-open')).toHaveTextContent('Open at site236')
+    const tags = screen.getByTestId('dm-active-filters')
+    expect(tags).toHaveTextContent('Site: 102 · Demo Cancer Centre')
+    expect(tags).toHaveTextContent('Search: “QRS”')
+    expect(screen.getByRole('button', { name: /Filters \(1\)/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('dm-view-awaiting'))
+    expect(router.state.location.search).toBe('?tab=queries&site=102&q=QRS&view=awaiting')
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('state=awaiting_approval'))).toBe(true)
+
+    // Removing one tag keeps the rest; "Clear all" removes every filter but keeps the view.
+    await userEvent.click(within(tags).getAllByLabelText(/close/i)[0]!)
+    expect(router.state.location.search).toBe('?tab=queries&q=QRS&view=awaiting')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(router.state.location.search).toBe('?tab=queries&view=awaiting')
+    expect(screen.queryByTestId('dm-active-filters')).not.toBeInTheDocument()
   })
 })

@@ -14,15 +14,14 @@ test('Data Management: overview, site drill-down and a query timeline', async ({
   // Open site 102's queries that are open at the site.
   const site = page.getByTestId('dm-site-row').filter({ hasText: '102 · Demo Cancer Centre' })
   await site.getByRole('button', { name: 'Open at site 102' }).click()
-  await expect(page).toHaveURL(/tab=queries.*site=102.*state=open_at_site|tab=queries.*state=open_at_site.*site=102/)
+  await expect(page).toHaveURL(/view=open/)
+  await expect(page).toHaveURL(/site=102/)
   await expect(page.getByTestId('dm-query-row')).toHaveCount(3)
+  await expect(page.getByTestId('dm-active-filters')).toContainText('Site: 102 · Demo Cancer Centre')
 
-  // A query answered, sent back and answered again: its full history.
-  await page.getByRole('combobox', { name: 'Query state' }).click()
-  await page.getByTitle('Not closed (open or awaiting)').click()
-  await expect(page).not.toHaveURL(/state=open_at_site/)
-  await page.getByText('Sent back at least once', { exact: true }).click()
-  await expect(page).toHaveURL(/reopened=true/)
+  // A query answered, sent back and answered again: one click on the "Sent back" view.
+  await page.getByTestId('dm-view-sent_back').click()
+  await expect(page).toHaveURL(/view=sent_back/)
   await expect(page.getByTestId('dm-query-row')).toHaveCount(1)
   await page.getByTestId('dm-query-row').click()
   const drawer = page.getByRole('dialog')

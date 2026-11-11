@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 
 from app.studies.clock import today as app_today
 
-from .export_reader import PENDING_COLUMNS, QUERY_COLUMNS
+from .export_reader import PENDING_COLUMNS, QUERY_COLUMNS, REVIEW_COLUMNS, SDV_COLUMNS
 
 STUDY_CODE = "DEMO_DM"
 _SITES = [("101", "Demo Hospital North"), ("102", "Demo Cancer Centre"), ("201", "Demo Clinic Auckland")]
@@ -51,6 +51,21 @@ _MISSING = [(0, 1, 0, 1), (0, 2, 0, 1), (0, 2, 1, 2), (1, 1, 0, 0), (1, 2, 0, 1)
             (2, 1, 1, 1), (2, 2, 0, 2)]  # fmt: skip
 # (site index, subject number, form index, event index, days pending)
 _PENDING = [(0, 3, 1, 2, 4), (1, 1, 0, 2, 21), (1, 4, 1, 1, 9), (1, 4, 2, 1, 9), (2, 2, 3, 2, 2)]
+
+
+# SDV demo: subjects per site, two visits, three forms (fields needing SDV) plus each visit date.
+_SDV_SUBJECTS = {0: [1, 2, 3], 1: [1, 2, 3, 4], 2: [1, 2]}
+_SDV_VISITS = [("E01_SCR", "Screening", 60), ("E03_D1", "Day 1", 30)]
+_SDV_FORMS = [("VS", "Vital signs", 6), ("EG", "ECG", 5), ("LBCC", "Clinical chemistry", 8)]
+
+
+def _sdv_done(site: int, subject: int, visit: int, fields: int) -> int:
+    """Site 101: screening fully verified, Day 1 half; site 102: screening for subjects 1-2; 201: none."""
+    if site == 0:
+        return fields if visit == 0 else fields // 2
+    if site == 1 and visit == 0 and subject <= 2:
+        return fields
+    return 0
 
 
 def _subject(site: int, n: int) -> str:
@@ -135,10 +150,70 @@ def demo_export(today: date | None = None) -> bytes:
         }
         for s, n, f, e, days in _PENDING
     ]
+    sdv_rows: list[dict[str, str]] = []
+    review_rows: list[dict[str, str]] = []
+    sc, rc = SDV_COLUMNS, REVIEW_COLUMNS
+    for s, subjects in _SDV_SUBJECTS.items():
+        for n in subjects:
+            for v, (event_id, event_name, days_ago) in enumerate(_SDV_VISITS):
+                visit_date = (t - timedelta(days=days_ago)).isoformat()
+                base = {
+                    sc["site_name"]: _SITES[s][1],
+                    sc["site_code"]: _SITES[s][0],
+                    sc["subject_id"]: _subject(s, n),
+                    sc["event_seq"]: str(v + 1),
+                    sc["event_id"]: event_id,
+                    sc["event_name"]: event_name,
+                    sc["event_date"]: visit_date,
+                }
+                parts: list[tuple[str | None, str | None, int, str]] = [
+                    (None, None, 1, "Event date"),
+                    *[(f, nm, k, "Item") for f, nm, k in _SDV_FORMS],
+                ]
+                for seq, (sdv_form, sdv_form_name, fields, reviewed) in enumerate(parts):
+                    done = (
+                        _sdv_done(s, n, v, fields) if sdv_form else (1 if _sdv_done(s, n, v, 2) == 2 else 0)
+                    )
+                    form = {
+                        **base,
+                        sc["form_id"]: sdv_form or "",
+                        sc["form_name"]: sdv_form_name or "",
+                        sc["form_seq"]: str(seq) if sdv_form else "",
+                    }
+                    for i in range(fields):
+                        verified = i < done
+                        sdv_rows.append(
+                            {
+                                **form,
+                                "Item Id": f"{sdv_form or 'EVENTDATE'}_{i + 1}",
+                                sc["reviewed_item"]: reviewed,
+                                sc["sdv_by"]: "Demo CRA" if verified else "",
+                                sc["sdv_at"]: _stamp(t, days_ago - 5) if verified else "",
+                            }
+                        )
+                    complete = done == fields
+                    review_rows.append(
+                        {
+                            **form,
+                            rc["reviewed_item"]: "Form" if sdv_form else "Event date",
+                            rc["data_by"]: "Demo DM" if complete else "",
+                            rc["data_at"]: _stamp(t, days_ago - 6) if complete else "",
+                            rc["sdv_by"]: "Demo CRA" if complete else "",
+                            rc["sdv_at"]: _stamp(t, days_ago - 5) if complete else "",
+                            rc["signed_by"]: "Demo Investigator" if complete and s == 0 else "",
+                            rc["signed_at"]: _stamp(t, days_ago - 7) if complete and s == 0 else "",
+                            rc["lock_by"]: "Demo DM" if complete and s == 0 and n == 1 else "",
+                            rc["lock_at"]: _stamp(t, days_ago - 8) if complete and s == 0 and n == 1 else "",
+                        }
+                    )
     stamp = datetime(t.year, t.month, t.day).strftime("%Y%m%d_%H%M%S")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
         archive.writestr(f"{STUDY_CODE}_{stamp}_Queries.csv", _csv(list(qc.values()), query_rows))
         archive.writestr(f"{STUDY_CODE}_{stamp}_Pending_forms.csv", _csv(list(pc.values()), pending_rows))
+        archive.writestr(f"{STUDY_CODE}_{stamp}_SDV.csv", _csv([*SDV_COLUMNS.values(), "Item Id"], sdv_rows))
+        archive.writestr(
+            f"{STUDY_CODE}_{stamp}_Review_status.csv", _csv(list(REVIEW_COLUMNS.values()), review_rows)
+        )
         archive.writestr(f"{STUDY_CODE}_{stamp}_README.txt", b"Demo export: fictional data.")
     return buf.getvalue()

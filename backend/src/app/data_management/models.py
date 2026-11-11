@@ -133,3 +133,38 @@ class DmPendingForm(Base):
     form_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     form_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     pending_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DmFormStatus(Base):
+    """One form at one visit (or the visit date itself): SDV progress (counted per field) and review,
+    sign and lock status, from Viedoc's SDV and review status export files."""
+
+    __tablename__ = "dm_form_status"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(64), index=True)
+    connection: Mapped[str] = mapped_column(String(64), index=True)
+    environment: Mapped[str] = mapped_column(String(16))
+    study_code: Mapped[str] = mapped_column(String(100))
+    site_code: Mapped[str] = mapped_column(String(64))
+    site_name: Mapped[str] = mapped_column(String(300))
+    subject_id: Mapped[str] = mapped_column(String(64), index=True)
+    event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    form_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    form_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    form_seq: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16))  # form | event_date
+    sdv_required: Mapped[int] = mapped_column(Integer, default=0)
+    sdv_done: Mapped[int] = mapped_column(Integer, default=0)
+    last_sdv_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sdv_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    data_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_review_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clinical_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    clinical_review_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

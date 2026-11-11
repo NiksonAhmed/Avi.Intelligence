@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.studies.clock import today
 
 from . import rules
-from .models import DmMissingItem, DmPendingForm, DmQuery
+from .models import DmFormStatus, DmMissingItem, DmPendingForm, DmQuery
 from .sync import DEMO_CONNECTION, connections, is_demo, last_runs, last_success, sync_connection
 
 
@@ -49,12 +49,23 @@ class SyncRunOut(BaseModel):
 class ConnectionOut(BaseModel):
     name: str
     environment: str
+    study_code: str | None
     last_run: SyncRunOut | None
     last_success_at: datetime | None
 
 
+class ScopeOut(BaseModel):
+    id: str
+    """A connection name, or "all-live" / "all-sandbox" (all studies of one environment)."""
+    label: str
+    environment: str
+    multi: bool
+
+
 class StatusOut(BaseModel):
     connections: list[ConnectionOut]
+    scopes: list[ScopeOut]
+    default_scope: str
     can_sync: bool
     demo: bool
     site_answer_days: int
@@ -67,15 +78,46 @@ def _run_out(run: object | None) -> SyncRunOut | None:
     return SyncRunOut.model_validate(run, from_attributes=True) if run is not None else None
 
 
+ENV_LABELS = {"live": "Live", "sandbox": "Sandbox", "demo": "Demo"}
+
+
+def _study_codes(db: Session, tenant_id: str, names: list[str]) -> dict[str, str]:
+    codes: dict[str, str] = {}
+    for name in names:
+        ok = last_success(db, tenant_id, name)
+        if ok and ok.counts.get("study"):
+            codes[name] = str(ok.counts["study"])
+    return codes
+
+
+def _scopes(settings: Settings, codes: dict[str, str]) -> list[ScopeOut]:
+    """All live studies, all sandbox studies (only when there are two or more), then each study.
+    Live and sandbox studies are never combined."""
+    conns = connections(settings)
+    out: list[ScopeOut] = []
+    for env in ("live", "sandbox"):
+        if sum(e == env for e in conns.values()) >= 2:
+            out.append(ScopeOut(id=f"all-{env}", label=f"All {env} studies", environment=env, multi=True))
+    for name, env in conns.items():
+        label = f"{codes.get(name, name)} · {ENV_LABELS.get(env, env)}"
+        out.append(ScopeOut(id=name, label=label, environment=env, multi=False))
+    return out
+
+
 @router.get("/status", response_model=StatusOut)
 def status(db: Db, user: Viewer, settings: Config) -> StatusOut:
     runs = last_runs(db, user.tenant_id)
     conns = connections(settings)
+    codes = _study_codes(db, user.tenant_id, list(conns))
+    scopes = _scopes(settings, codes)
     return StatusOut(
+        scopes=scopes,
+        default_scope=scopes[0].id,
         connections=[
             ConnectionOut(
                 name=name,
                 environment=env,
+                study_code=codes.get(name),
                 last_run=_run_out(runs.get(name)),
                 last_success_at=(ok.finished_at if (ok := last_success(db, user.tenant_id, name)) else None),
             )
@@ -116,17 +158,33 @@ async def sync_now(body: SyncRequest, request: Request, db: Db, user: Syncer, se
     return out
 
 
-async def _connection(db: Session, user: CurrentUser, settings: Settings, name: str | None) -> str:
+class Scope(BaseModel):
+    id: str
+    names: list[str]
+    environment: str
+    multi: bool
+
+
+async def _scope(db: Session, user: CurrentUser, settings: Settings, scope: str | None) -> Scope:
+    """One study, or all studies of one environment ("all-live", "all-sandbox"); never a mix."""
     conns = connections(settings)
-    chosen = (name or next(iter(conns))).lower()
-    if chosen not in conns:
+    chosen = (scope or _scopes(settings, {})[0].id).lower()
+    if chosen.startswith("all-"):
+        env = chosen[4:]
+        names = [n for n, e in conns.items() if e == env]
+        if not names:
+            raise HTTPException(404, "No studies in that environment.")
+        result = Scope(id=chosen, names=names, environment=env, multi=True)
+    elif chosen in conns:
+        result = Scope(id=chosen, names=[chosen], environment=conns[chosen], multi=False)
+    else:
         raise HTTPException(404, "No such Viedoc connection.")
     # The demo study syncs itself on first use; real Viedoc studies wait for "Sync now" or the schedule.
-    if chosen == DEMO_CONNECTION and last_success(db, user.tenant_id, chosen) is None:
+    if DEMO_CONNECTION in result.names and last_success(db, user.tenant_id, DEMO_CONNECTION) is None:
         await sync_connection(
-            db, settings, tenant_id=user.tenant_id, name=chosen, triggered_by="system (first use)"
+            db, settings, tenant_id=user.tenant_id, name=DEMO_CONNECTION, triggered_by="system (first use)"
         )
-    return chosen
+    return result
 
 
 class Tile(BaseModel):
@@ -138,14 +196,41 @@ class Tile(BaseModel):
 
 
 class SiteRow(BaseModel):
+    connection: str
+    study_code: str
     site_code: str
     site_name: str
     open_at_site: int
     awaiting_approval: int
-    over_target: int
+    overdue: int
     oldest_days: int | None
     missing_items: int
     pending_forms: int
+    sdv_required: int = 0
+    sdv_done: int = 0
+
+
+class SdvSummary(BaseModel):
+    """SDV completed vs required, counted per field (only fields set up for SDV in Viedoc)."""
+
+    required: int
+    done: int
+    percent: float | None
+    forms_total: int
+    forms_complete: int
+
+
+def sdv_summary(rows: list[DmFormStatus]) -> SdvSummary:
+    required = sum(r.sdv_required for r in rows)
+    done = sum(r.sdv_done for r in rows)
+    forms = [r for r in rows if r.kind == "form" and r.sdv_required]
+    return SdvSummary(
+        required=required,
+        done=done,
+        percent=round(done / required * 100, 1) if required else None,
+        forms_total=len(forms),
+        forms_complete=sum(r.sdv_done >= r.sdv_required for r in forms),
+    )
 
 
 class BucketRow(BaseModel):
@@ -160,11 +245,15 @@ class FormRow(BaseModel):
 
 
 class OverviewOut(BaseModel):
-    connection: str
+    scope: str
+    multi: bool
     environment: str
     study_code: str | None
+    """The study's code for a single study; None for all studies."""
+    studies: list[dict[str, str]]
     as_of: datetime | None
     tiles: list[Tile]
+    sdv: SdvSummary
     sites: list[SiteRow]
     ageing: list[BucketRow]
     forms: list[FormRow]
@@ -177,24 +266,35 @@ async def overview(
     db: Db,
     user: Viewer,
     settings: Config,
-    connection: Annotated[str | None, Query(max_length=64)] = None,
+    scope: Annotated[str | None, Query(max_length=64)] = None,
 ) -> OverviewOut:
-    name = await _connection(db, user, settings, connection)
+    sc = await _scope(db, user, settings, scope)
     now = today()
     queries = db.scalars(
-        select(DmQuery).where(DmQuery.tenant_id == user.tenant_id, DmQuery.connection == name)
+        select(DmQuery).where(DmQuery.tenant_id == user.tenant_id, DmQuery.connection.in_(sc.names))
     ).all()
     missing = db.scalars(
         select(DmMissingItem).where(
-            DmMissingItem.tenant_id == user.tenant_id, DmMissingItem.connection == name
+            DmMissingItem.tenant_id == user.tenant_id, DmMissingItem.connection.in_(sc.names)
         )
     ).all()
     pending = db.scalars(
         select(DmPendingForm).where(
-            DmPendingForm.tenant_id == user.tenant_id, DmPendingForm.connection == name
+            DmPendingForm.tenant_id == user.tenant_id, DmPendingForm.connection.in_(sc.names)
         )
     ).all()
+    statuses = list(
+        db.scalars(
+            select(DmFormStatus).where(
+                DmFormStatus.tenant_id == user.tenant_id, DmFormStatus.connection.in_(sc.names)
+            )
+        )
+    )
+    codes = _study_codes(db, user.tenant_id, sc.names)
+    for q in queries:
+        codes.setdefault(q.connection, q.study_code)
     sa, ap = settings.dm_site_answer_days, settings.dm_approval_days
+    sdv = sdv_summary(statuses)
 
     def flag_of(q: DmQuery) -> str:
         return rules.flag(q.state, rules.clock_days(q.state, q.state_since, now), sa, ap)
@@ -211,10 +311,10 @@ async def overview(
     unconfirmed = [m for m in missing if m.query_type.lower() == "unconfirmed missing data"]
     tiles = [
         Tile(key="open_at_site", label="Open at site", value=len(open_q),
-             note=f"{red_open} over {sa} working days" if red_open else f"None over {sa} working days",
+             note=f"{red_open} overdue (over {sa} working days)" if red_open else "None overdue",
              tone="bad" if red_open else "neutral"),
         Tile(key="awaiting_approval", label="Answered, awaiting approval", value=len(awaiting),
-             note=f"{red_wait} over {ap} working days" if red_wait else f"None over {ap} working days",
+             note=f"{red_wait} overdue (over {ap} working days)" if red_wait else "None overdue",
              tone="bad" if red_wait else ("warn" if awaiting else "good")),
         Tile(key="closed_30", label="Closed in the last 30 days", value=len(closed_recent),
              note=f"{reopened} queries were sent back at least once", tone="info"),
@@ -222,36 +322,47 @@ async def overview(
              note="Blank fields not yet confirmed by the site", tone="warn" if unconfirmed else "good"),
         Tile(key="pending_forms", label="Pending forms", value=len(pending),
              note="Expected but not completed", tone="warn" if pending else "good"),
+        Tile(key="sdv", label="SDV completed (%)", value=round(sdv.percent or 0),
+             note=f"{sdv.done} of {sdv.required} fields verified" if sdv.required else "No SDV fields",
+             tone="good" if sdv.required and sdv.done == sdv.required else "info"),
     ]  # fmt: skip
 
-    site_names: dict[str, str] = {}
+    # Sites are kept apart per study: the same site code can exist in two studies.
+    site_names: dict[tuple[str, str], str] = {}
     for q in queries:
-        site_names.setdefault(q.site_code, q.site_name)
+        site_names.setdefault((q.connection, q.site_code), q.site_name)
     for p in pending:
-        site_names.setdefault(p.site_code, p.site_name)
+        site_names.setdefault((p.connection, p.site_code), p.site_name)
     for m in missing:
-        site_names.setdefault(m.site_code, m.site_code)
-    by_site: dict[str, SiteRow] = {
-        code: SiteRow(site_code=code, site_name=nm, open_at_site=0, awaiting_approval=0, over_target=0,
-                      oldest_days=None, missing_items=0, pending_forms=0)
-        for code, nm in site_names.items()
+        site_names.setdefault((m.connection, m.site_code), m.site_code)
+    for st in statuses:
+        site_names.setdefault((st.connection, st.site_code), st.site_name)
+    by_site: dict[tuple[str, str], SiteRow] = {
+        key: SiteRow(connection=key[0], study_code=codes.get(key[0], key[0]), site_code=key[1], site_name=nm,
+                     open_at_site=0, awaiting_approval=0, overdue=0, oldest_days=None, missing_items=0,
+                     pending_forms=0)
+        for key, nm in site_names.items()
     }  # fmt: skip
     for q in open_q + awaiting:
-        row = by_site[q.site_code]
+        row = by_site[(q.connection, q.site_code)]
         if q.state == "open_at_site":
             row.open_at_site += 1
         else:
             row.awaiting_approval += 1
-        row.over_target += flag_of(q) == "red"
+        row.overdue += flag_of(q) == "red"
         age = rules.age_days(q.raised_at, now)
         if age is not None and (row.oldest_days is None or age > row.oldest_days):
             row.oldest_days = age
     for m in unconfirmed:
-        by_site[m.site_code].missing_items += 1
+        by_site[(m.connection, m.site_code)].missing_items += 1
     for p in pending:
-        by_site[p.site_code].pending_forms += 1
+        by_site[(p.connection, p.site_code)].pending_forms += 1
+    for st in statuses:
+        row = by_site[(st.connection, st.site_code)]
+        row.sdv_required += st.sdv_required
+        row.sdv_done += st.sdv_done
     sites = sorted(
-        by_site.values(), key=lambda r: (-r.over_target, -(r.open_at_site + r.awaiting_approval), r.site_code)
+        by_site.values(), key=lambda r: (-r.overdue, -(r.open_at_site + r.awaiting_approval), r.site_code)
     )
 
     ageing = {
@@ -264,30 +375,46 @@ async def overview(
                 ageing[b].open_at_site += 1
             else:
                 ageing[b].awaiting_approval += 1
-    form_counts = Counter(q.form_name or q.form_id or "—" for q in open_q + awaiting)
-    success = last_success(db, user.tenant_id, name)
-    env = connections(settings)[name]
+    form_counts = Counter(rules.form_label(q.form_id, q.form_name, q.raised_on) for q in open_q + awaiting)
+    successes = [ok for n in sc.names if (ok := last_success(db, user.tenant_id, n))]
     forms_seen = sorted({(q.form_id or "", q.form_name or q.form_id or "") for q in queries if q.form_id})
     return OverviewOut(
-        connection=name,
-        environment=env,
-        study_code=queries[0].study_code
-        if queries
-        else (str(success.counts.get("study")) if success else None),
-        as_of=success.finished_at if success else None,
+        scope=sc.id,
+        multi=sc.multi,
+        environment=sc.environment,
+        study_code=None if sc.multi else codes.get(sc.names[0]),
+        studies=[{"connection": n, "study_code": codes.get(n, n)} for n in sc.names],
+        # The oldest of the studies' last syncs, so "as of" is never more recent than any part.
+        as_of=min((ok.finished_at for ok in successes if ok.finished_at), default=None),
         tiles=tiles,
+        sdv=sdv,
         sites=sites,
         ageing=list(ageing.values()),
         forms=[FormRow(form=f, open=n) for f, n in form_counts.most_common()],
-        site_options=[{"id": code, "label": f"{code} · {nm}"} for code, nm in sorted(site_names.items())],
+        site_options=[
+            {
+                "id": f"{conn}:{code}" if sc.multi else code,
+                "label": f"{codes.get(conn, conn)} · {code} · {nm}" if sc.multi else f"{code} · {nm}",
+            }
+            for (conn, code), nm in sorted(site_names.items())
+        ],
         form_options=[
-            {"id": fid, "label": f"{fid} · {fname}" if fname != fid else fid} for fid, fname in forms_seen
+            *({"id": fid, "label": f"{fid} · {fname}" if fname != fid else fid} for fid, fname in forms_seen),
+            *(
+                [{"id": rules.VISIT_DATE, "label": rules.VISIT_DATE_LABEL}]
+                if any(not q.form_id and (q.raised_on or "").lower() == "event date" for q in queries)
+                else []
+            ),
         ],
     )
 
 
 class QueryOut(BaseModel):
+    form_label: str
+    """The form, or "Visit date (no form)" for queries raised on the visit date."""
     id: str
+    connection: str
+    study_code: str
     query_number: str
     site_code: str
     site_name: str
@@ -331,6 +458,8 @@ class QueryListOut(BaseModel):
     total: int
     counts: dict[str, int]
     """By state, over the filtered set before paging."""
+    views: dict[str, int]
+    """How many each quick view would show (attention, open, awaiting, overdue, sent_back, closed)."""
 
 
 def _query_out(q: DmQuery, now: date, settings: Settings, cls: type[QueryOut] = QueryOut) -> QueryOut:
@@ -344,7 +473,10 @@ def _query_out(q: DmQuery, now: date, settings: Settings, cls: type[QueryOut] = 
             "events": [QueryEventOut.model_validate(e, from_attributes=True) for e in q.events],
         }
     return cls(
+        form_label=rules.form_label(q.form_id, q.form_name, q.raised_on),
         id=q.id,
+        connection=q.connection,
+        study_code=q.study_code,
         query_number=q.query_number,
         site_code=q.site_code,
         site_name=q.site_name,
@@ -375,25 +507,44 @@ async def list_queries(
     db: Db,
     user: Viewer,
     settings: Config,
-    connection: Annotated[str | None, Query(max_length=64)] = None,
+    scope: Annotated[str | None, Query(max_length=64)] = None,
+    study: Annotated[
+        str | None, Query(max_length=64, description="One study within an all-studies scope")
+    ] = None,
     state: State | None = None,
     site: Annotated[str | None, Query(max_length=64)] = None,
     form: Annotated[str | None, Query(max_length=64)] = None,
     flag: Literal["red", "amber", "green"] | None = None,
     reopened: bool = False,
+    raised_from: Annotated[date | None, Query(description="Raised on or after this day (UTC)")] = None,
+    raised_to: Annotated[date | None, Query(description="Raised on or before this day (UTC)")] = None,
     search: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> QueryListOut:
-    name = await _connection(db, user, settings, connection)
+    if raised_from and raised_to and raised_from > raised_to:
+        raise HTTPException(422, "The start of the date range is after its end.")
+    sc = await _scope(db, user, settings, scope)
     now = today()
-    stmt = select(DmQuery).where(DmQuery.tenant_id == user.tenant_id, DmQuery.connection == name)
+    names = [n for n in sc.names if not study or n == study.lower()]
+    stmt = select(DmQuery).where(DmQuery.tenant_id == user.tenant_id, DmQuery.connection.in_(names))
     if site:
-        stmt = stmt.where(DmQuery.site_code == site)
-    if form:
+        # "connection:site" in an all-studies scope (the same site code can exist in two studies)
+        conn, _, code = site.rpartition(":")
+        stmt = stmt.where(DmQuery.site_code == code)
+        if conn:
+            stmt = stmt.where(DmQuery.connection == conn)
+    if form == rules.VISIT_DATE:
+        stmt = stmt.where(DmQuery.form_id.is_(None), DmQuery.raised_on == "Event date")
+    elif form:
         stmt = stmt.where(DmQuery.form_id == form)
-    if reopened:
-        stmt = stmt.where(DmQuery.reopen_count > 0)
+    # Viedoc's query dates are UTC: a day runs from 00:00 to the next 00:00 UTC.
+    if raised_from:
+        stmt = stmt.where(DmQuery.raised_at >= datetime.combine(raised_from, time.min, tzinfo=UTC))
+    if raised_to:
+        stmt = stmt.where(
+            DmQuery.raised_at < datetime.combine(raised_to + timedelta(days=1), time.min, tzinfo=UTC)
+        )
     if search:
         like = f"%{search}%"
         stmt = stmt.where(
@@ -409,6 +560,17 @@ async def list_queries(
     counts: dict[str, int] = defaultdict(int)
     for r in rows:
         counts[r.state] += 1
+    # How many each quick view would show, given the other filters (search, site, form, dates).
+    views = {
+        "attention": sum(r.state != "closed" for r in rows),
+        "open": counts["open_at_site"],
+        "awaiting": counts["awaiting_approval"],
+        "overdue": sum(r.state != "closed" and r.flag == "red" for r in rows),
+        "sent_back": sum(r.reopen_count > 0 for r in rows),
+        "closed": counts["closed"],
+    }
+    if reopened:
+        rows = [r for r in rows if r.reopen_count > 0]
     if state == "not_closed":
         rows = [r for r in rows if r.state != "closed"]
     elif state:
@@ -417,7 +579,9 @@ async def list_queries(
         rows = [r for r in rows if r.flag == flag]
     order = {"red": 0, "amber": 1, "green": 2, "none": 3}
     rows.sort(key=lambda r: (order.get(r.flag, 9), -(r.clock_days or 0), -(r.age_days or 0), r.query_number))
-    return QueryListOut(queries=rows[offset : offset + limit], total=len(rows), counts=dict(counts))
+    return QueryListOut(
+        queries=rows[offset : offset + limit], total=len(rows), counts=dict(counts), views=views
+    )
 
 
 @router.get("/queries/{query_id}", response_model=QueryDetailOut)
@@ -430,3 +594,282 @@ def get_query(query_id: str, db: Db, user: Viewer, settings: Config) -> QueryOut
     if q is None:
         raise HTTPException(404, "Query not found.")
     return _query_out(q, today(), settings, QueryDetailOut)
+
+
+# --- SDV (source data verification) ---
+
+SdvView = Literal["waiting", "complete", "all"]
+
+
+class SdvSiteRow(BaseModel):
+    connection: str
+    study_code: str
+    site_code: str
+    site_name: str
+    required: int
+    done: int
+    percent: float | None
+    forms_waiting: int
+    oldest_waiting_days: int | None
+
+
+class SdvVisitRow(BaseModel):
+    event_id: str
+    event_name: str
+    required: int
+    done: int
+    percent: float | None
+
+
+class SdvFormRow(BaseModel):
+    id: str
+    connection: str
+    study_code: str
+    site_code: str
+    site_name: str
+    subject_id: str
+    event_name: str | None
+    event_date: datetime | None
+    form_label: str
+    kind: str
+    required: int
+    done: int
+    percent: float | None
+    status: Literal["waiting", "complete"]
+    days_since_visit: int | None
+    last_sdv_at: datetime | None
+    last_sdv_by: str | None
+    data_review_at: datetime | None
+    signed_at: datetime | None
+    locked_at: datetime | None
+
+
+class SdvOut(BaseModel):
+    scope: str
+    multi: bool
+    environment: str
+    tiles: list[Tile]
+    summary: SdvSummary
+    sites: list[SdvSiteRow]
+    visits: list[SdvVisitRow]
+    forms: list[SdvFormRow]
+    total: int
+    views: dict[str, int]
+    studies: list[dict[str, str]]
+    site_options: list[dict[str, str]]
+    form_options: list[dict[str, str]]
+    visit_options: list[dict[str, str]]
+    rules: dict[str, str]
+
+
+SDV_RULES = {
+    "sdv": (
+        "SDV is counted per field: only fields set up for SDV in Viedoc are counted (so a risk-based SDV "
+        "plan is respected), and a form or visit date is fully verified when all of its fields are."
+    ),
+    "review": (
+        "Data review, signed and locked: the share of forms with that step recorded in Viedoc. "
+        "Age: days since the visit date."
+    ),
+}
+
+
+def _pct(part: int, whole: int) -> float | None:
+    return round(part / whole * 100, 1) if whole else None
+
+
+@router.get("/sdv", response_model=SdvOut)
+async def sdv_view(
+    db: Db,
+    user: Viewer,
+    settings: Config,
+    scope: Annotated[str | None, Query(max_length=64)] = None,
+    study: Annotated[str | None, Query(max_length=64)] = None,
+    view: SdvView = "waiting",
+    site: Annotated[str | None, Query(max_length=130)] = None,
+    form: Annotated[str | None, Query(max_length=64)] = None,
+    visit: Annotated[str | None, Query(max_length=64)] = None,
+    visit_from: Annotated[date | None, Query(description="Visit on or after this day")] = None,
+    visit_to: Annotated[date | None, Query(description="Visit on or before this day")] = None,
+    search: Annotated[str | None, Query(max_length=100, description="Subject ID")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> SdvOut:
+    if visit_from and visit_to and visit_from > visit_to:
+        raise HTTPException(422, "The start of the date range is after its end.")
+    sc = await _scope(db, user, settings, scope)
+    now = today()
+    rows_all = list(
+        db.scalars(
+            select(DmFormStatus).where(
+                DmFormStatus.tenant_id == user.tenant_id, DmFormStatus.connection.in_(sc.names)
+            )
+        )
+    )
+    codes = _study_codes(db, user.tenant_id, sc.names)
+    for r in rows_all:
+        codes.setdefault(r.connection, r.study_code)
+
+    # Options come from everything in scope, so they do not shrink as filters are applied.
+    site_names = sorted({(r.connection, r.site_code, r.site_name) for r in rows_all})
+    form_names = sorted({(r.form_id or "", r.form_name or r.form_id or "") for r in rows_all if r.form_id})
+    visit_names = sorted(
+        {(r.event_id or "", r.event_name or r.event_id or "") for r in rows_all if r.event_id}
+    )
+
+    rows = [r for r in rows_all if r.sdv_required > 0]
+    if study:
+        rows = [r for r in rows if r.connection == study.lower()]
+    if site:
+        conn, _, code = site.rpartition(":")
+        rows = [r for r in rows if r.site_code == code and (not conn or r.connection == conn)]
+    if form == rules.VISIT_DATE:
+        rows = [r for r in rows if r.kind == "event_date"]
+    elif form:
+        rows = [r for r in rows if r.form_id == form]
+    if visit:
+        rows = [r for r in rows if r.event_id == visit]
+    if visit_from:
+        rows = [r for r in rows if r.event_date and r.event_date.date() >= visit_from]
+    if visit_to:
+        rows = [r for r in rows if r.event_date and r.event_date.date() <= visit_to]
+    if search:
+        rows = [r for r in rows if search.lower() in r.subject_id.lower()]
+
+    summary = sdv_summary(rows)
+    forms_only = [r for r in rows_all if r.kind == "form"]
+    if study:
+        forms_only = [r for r in forms_only if r.connection == study.lower()]
+    waiting_rows = [r for r in rows if r.sdv_done < r.sdv_required]
+    oldest = max((rules.age_days(r.event_date, now) or 0 for r in waiting_rows if r.event_date), default=None)
+    reviewed = sum(bool(r.data_review_at) for r in forms_only)
+    signed = sum(bool(r.signed_at) for r in forms_only)
+    locked = sum(bool(r.locked_at) for r in forms_only)
+    n_forms = len(forms_only)
+    tiles = [
+        Tile(key="fields", label="Fields verified", value=round(summary.percent or 0),
+             note=f"{summary.done} of {summary.required} fields (%)", tone="info"),
+        Tile(key="forms_complete", label="Forms fully verified", value=summary.forms_complete,
+             note=f"of {summary.forms_total} forms needing SDV", tone="good" if summary.forms_total and
+             summary.forms_complete == summary.forms_total else "neutral"),
+        Tile(key="waiting", label="Waiting for SDV", value=len(waiting_rows),
+             note=f"Oldest visit {oldest} days ago" if oldest is not None else "Nothing waiting",
+             tone="warn" if waiting_rows else "good"),
+        Tile(key="data_review", label="Data reviewed", value=round(_pct(reviewed, n_forms) or 0),
+             note=f"{reviewed} of {n_forms} forms (%)", tone="neutral"),
+        Tile(key="signed", label="Signed", value=round(_pct(signed, n_forms) or 0),
+             note=f"{signed} of {n_forms} forms (%)", tone="neutral"),
+        Tile(key="locked", label="Locked", value=round(_pct(locked, n_forms) or 0),
+             note=f"{locked} of {n_forms} forms (%)", tone="neutral"),
+    ]  # fmt: skip
+
+    by_site: dict[tuple[str, str], SdvSiteRow] = {}
+    for r in rows:
+        key = (r.connection, r.site_code)
+        row = by_site.setdefault(
+            key,
+            SdvSiteRow(
+                connection=r.connection,
+                study_code=codes.get(r.connection, r.connection),
+                site_code=r.site_code,
+                site_name=r.site_name,
+                required=0,
+                done=0,
+                percent=None,
+                forms_waiting=0,
+                oldest_waiting_days=None,
+            ),
+        )
+        row.required += r.sdv_required
+        row.done += r.sdv_done
+        if r.sdv_done < r.sdv_required:
+            row.forms_waiting += 1
+            age = rules.age_days(r.event_date, now)
+            if age is not None and (row.oldest_waiting_days is None or age > row.oldest_waiting_days):
+                row.oldest_waiting_days = age
+    for row in by_site.values():
+        row.percent = _pct(row.done, row.required)
+    sites = sorted(by_site.values(), key=lambda x: (x.percent if x.percent is not None else 101, x.site_code))
+
+    by_visit: dict[str, SdvVisitRow] = {}
+    for r in rows:
+        visit_key = r.event_id or ""
+        v = by_visit.setdefault(
+            visit_key,
+            SdvVisitRow(
+                event_id=visit_key,
+                event_name=r.event_name or visit_key or "—",
+                required=0,
+                done=0,
+                percent=None,
+            ),
+        )
+        v.required += r.sdv_required
+        v.done += r.sdv_done
+    for v in by_visit.values():
+        v.percent = _pct(v.done, v.required)
+
+    views = {"waiting": len(waiting_rows), "complete": len(rows) - len(waiting_rows), "all": len(rows)}
+    listed = (
+        waiting_rows
+        if view == "waiting"
+        else ([r for r in rows if r not in waiting_rows] if view == "complete" else rows)
+    )
+    listed.sort(
+        key=lambda r: (r.event_date or datetime.max.replace(tzinfo=UTC), r.subject_id, r.form_id or "")
+    )
+    out_rows = [
+        SdvFormRow(
+            id=r.id,
+            connection=r.connection,
+            study_code=codes.get(r.connection, r.connection),
+            site_code=r.site_code,
+            site_name=r.site_name,
+            subject_id=r.subject_id,
+            event_name=r.event_name,
+            event_date=r.event_date,
+            form_label=r.form_name or r.form_id or rules.VISIT_DATE_LABEL,
+            kind=r.kind,
+            required=r.sdv_required,
+            done=r.sdv_done,
+            percent=_pct(r.sdv_done, r.sdv_required),
+            status="complete" if r.sdv_done >= r.sdv_required else "waiting",
+            days_since_visit=rules.age_days(r.event_date, now),
+            last_sdv_at=r.last_sdv_at,
+            last_sdv_by=r.last_sdv_by,
+            data_review_at=r.data_review_at,
+            signed_at=r.signed_at,
+            locked_at=r.locked_at,
+        )
+        for r in listed[offset : offset + limit]
+    ]
+    return SdvOut(
+        scope=sc.id,
+        multi=sc.multi,
+        environment=sc.environment,
+        tiles=tiles,
+        summary=summary,
+        sites=sites,
+        visits=sorted(by_visit.values(), key=lambda v: v.event_id),
+        forms=out_rows,
+        total=len(listed),
+        views=views,
+        studies=[{"connection": n, "study_code": codes.get(n, n)} for n in sc.names],
+        site_options=[
+            {
+                "id": f"{conn}:{code}" if sc.multi else code,
+                "label": f"{codes.get(conn, conn)} · {code} · {nm}" if sc.multi else f"{code} · {nm}",
+            }
+            for conn, code, nm in site_names
+        ],
+        form_options=[
+            *({"id": fid, "label": f"{fid} · {fname}" if fname != fid else fid} for fid, fname in form_names),
+            *(
+                [{"id": rules.VISIT_DATE, "label": "Visit date"}]
+                if any(r.kind == "event_date" for r in rows_all)
+                else []
+            ),
+        ],
+        visit_options=[{"id": eid, "label": name} for eid, name in visit_names],
+        rules=SDV_RULES,
+    )

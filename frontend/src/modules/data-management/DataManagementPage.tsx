@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router'
 
 import { PageHeader } from '../../components/PageHeader'
 import { formatDateTime } from '../../lib/format'
-import type { DmConnection, DmStatus } from './api'
+import type { DmScope, DmStatus } from './api'
 import { useDmOverview, useDmStatus, useDmSync } from './api'
 import { OverviewTab } from './OverviewTab'
 import { QueriesTab } from './QueriesTab'
@@ -16,20 +16,26 @@ const ENV_TAG: Record<string, { color: string; label: string }> = {
   live: { color: 'red', label: 'Live study' },
 }
 
-function SourceBar({ status, connection }: { status: DmStatus; connection: DmConnection }) {
+function SourceBar({ status, scope }: { status: DmStatus; scope: DmScope }) {
   const { message } = App.useApp()
   const sync = useDmSync()
-  const overview = useDmOverview(connection.name)
-  const env = ENV_TAG[connection.environment] ?? { color: 'default', label: connection.environment }
-  const last = connection.last_run
-  const asOf = overview.data?.as_of ?? connection.last_success_at
+  const overview = useDmOverview(scope.id)
+  const env = ENV_TAG[scope.environment] ?? { color: 'default', label: scope.environment }
+  // The studies in view: for "All sandbox/live studies", every study of that environment.
+  const names = scope.multi
+    ? status.connections.filter((c) => c.environment === scope.environment).map((c) => c.name)
+    : [scope.id]
+  const failed = status.connections.filter((c) => names.includes(c.name) && c.last_run && !c.last_run.ok)
+  const asOf = overview.data?.as_of
   return (
     <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
       <Flex gap={12} wrap align="center">
         <Tag color={env.color} data-testid="dm-environment">
           {env.label}
         </Tag>
-        <Typography.Text strong>{overview.data?.study_code ?? connection.name}</Typography.Text>
+        <Typography.Text strong data-testid="dm-scope-title">
+          {scope.multi ? `${scope.label} (${names.length})` : (overview.data?.study_code ?? scope.label)}
+        </Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           Source: Viedoc export (read-only copy) · {asOf ? `As of ${formatDateTime(asOf)}` : 'Not synced yet'}
           {status.sync_minutes > 0 ? ` · syncs every ${status.sync_minutes} minutes` : ''}
@@ -39,28 +45,32 @@ function SourceBar({ status, connection }: { status: DmStatus; connection: DmCon
             icon={<SyncOutlined />}
             loading={sync.isPending}
             style={{ marginLeft: 'auto' }}
+            disabled={names.length === 0}
             onClick={() =>
-              sync.mutate(connection.name, {
-                onSuccess: (run) =>
-                  run.ok
-                    ? void message.success(`Synced: ${run.counts.queries ?? 0} queries`)
-                    : void message.error(`Sync failed: ${run.error ?? 'unknown error'}`),
+              sync.mutate(names, {
+                onSuccess: (runs) => {
+                  const bad = runs.filter((r) => !r.ok)
+                  const total = runs.reduce((n, r) => n + Number(r.counts.queries ?? 0), 0)
+                  if (bad.length) void message.error(`Sync failed for ${bad.length} of ${runs.length}: ${bad[0]?.error ?? ''}`)
+                  else void message.success(`Synced: ${total} queries${runs.length > 1 ? ` from ${runs.length} studies` : ''}`)
+                },
               })
             }
           >
-            Sync now
+            {scope.multi ? 'Sync all' : 'Sync now'}
           </Button>
         )}
       </Flex>
-      {last && !last.ok && (
+      {failed.map((c) => (
         <Alert
+          key={c.name}
           type="error"
           showIcon
           style={{ marginTop: 10 }}
-          title="The last sync failed; the previous copy is shown"
-          description={last.error}
+          title={`The last sync of ${c.study_code ?? c.name} failed; the previous copy is shown`}
+          description={c.last_run?.error}
         />
-      )}
+      ))}
     </Card>
   )
 }
@@ -97,8 +107,8 @@ export function DataManagementPage() {
     )
   }
   const s = status.data
-  const connection = s.connections.find((c) => c.name === params.get('connection')) ?? s.connections[0]
-  if (!connection) return <Empty description="No Viedoc connection configured." />
+  const scope = s.scopes.find((c) => c.id === params.get('scope')) ?? s.scopes.find((c) => c.id === s.default_scope)
+  if (!scope) return <Empty description="No Viedoc connection configured." />
   const tab = params.get('tab') === 'queries' ? 'queries' : 'overview'
 
   return (
@@ -108,15 +118,23 @@ export function DataManagementPage() {
         subtitle="Viedoc queries and missing data: who is waiting on whom, and for how long."
       />
       <Flex vertical gap={16}>
-        {s.connections.length > 1 && (
+        <Flex gap={8} align="center" wrap>
+          <label htmlFor="dm-study" style={{ fontWeight: 600 }}>
+            Study
+          </label>
           <Select
-            aria-label="Viedoc study"
-            value={connection.name}
-            onChange={(v: string) => update({ connection: v, site: undefined, form: undefined })}
-            options={s.connections.map((c) => ({ value: c.name, label: `${c.name} (${c.environment})` }))}
-            style={{ width: 280 }}
+            id="dm-study"
+            aria-label="Study"
+            value={scope.id}
+            onChange={(v: string) => update({ scope: v, site: undefined, form: undefined, study: undefined })}
+            options={s.scopes.map((c) => ({ value: c.id, label: c.label }))}
+            style={{ width: 320, maxWidth: '100%' }}
+            popupMatchSelectWidth={false}
           />
-        )}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Live and sandbox studies are never combined.
+          </Typography.Text>
+        </Flex>
         {s.demo && (
           <Alert
             type="warning"
@@ -125,18 +143,18 @@ export function DataManagementPage() {
             description="Add a Viedoc API connection in .env to see a real (sandbox) study."
           />
         )}
-        <SourceBar status={s} connection={connection} />
+        <SourceBar status={s} scope={scope} />
         <Tabs
           activeKey={tab}
           onChange={(key) => update({ tab: key === 'overview' ? undefined : key })}
           items={[
-            { key: 'overview', label: 'Overview', children: <OverviewTab connection={connection.name} status={s} onOpen={(f) => update({ tab: 'queries', ...f })} /> },
+            { key: 'overview', label: 'Overview', children: <OverviewTab scope={scope.id} status={s} onOpen={(f) => update({ tab: 'queries', ...f })} /> },
             {
               key: 'queries',
               label: 'Queries',
               children: (
                 <QueriesTab
-                  connection={connection.name}
+                  scope={scope.id}
                   status={s}
                   params={params}
                   onChange={(changes) => update(changes)}

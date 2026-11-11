@@ -24,7 +24,7 @@ from app.db.session import new_session
 
 from .demo import demo_export
 from .export_reader import ExportData, read_export
-from .models import DmMissingItem, DmPendingForm, DmQuery, DmQueryEvent, DmSyncRun
+from .models import DmFormStatus, DmMissingItem, DmPendingForm, DmQuery, DmQueryEvent, DmSyncRun
 
 log = logging.getLogger("data_management.sync")
 
@@ -35,6 +35,11 @@ EXPORT_OPTIONS: dict[str, Any] = {
     "includeQueries": True,
     "includeQueryHistory": True,
     "includePendingForms": True,
+    # SDV (fields set up for SDV, done or pending) and review/sign/lock status per form.
+    "includeSdv": True,
+    "includeSDVPending": True,
+    "includeSDVPerformedOrNA": True,
+    "includeReviewStatus": True,
 }
 
 ClientFactory = Callable[[ViedocConnectionSettings, bool], ViedocClient]
@@ -66,6 +71,9 @@ def _store(db: Session, tenant_id: str, name: str, environment: str, data: Expor
     )
     db.execute(
         delete(DmPendingForm).where(DmPendingForm.tenant_id == tenant_id, DmPendingForm.connection == name)
+    )
+    db.execute(
+        delete(DmFormStatus).where(DmFormStatus.tenant_id == tenant_id, DmFormStatus.connection == name)
     )
     db.flush()
     for r in data.queries:
@@ -123,6 +131,37 @@ def _store(db: Session, tenant_id: str, name: str, environment: str, data: Expor
                 query_type=m.query_type,
             )
         )
+    for f in data.forms:
+        db.add(
+            DmFormStatus(
+                tenant_id=tenant_id,
+                connection=name,
+                environment=environment,
+                study_code=data.study_code,
+                site_code=f.site_code,
+                site_name=f.site_name,
+                subject_id=f.subject_id,
+                event_id=f.event_id,
+                event_name=f.event_name,
+                event_date=f.event_date,
+                form_id=f.form_id,
+                form_name=f.form_name,
+                form_seq=f.form_seq,
+                kind=f.kind,
+                sdv_required=f.sdv_required,
+                sdv_done=f.sdv_done,
+                last_sdv_at=f.last_sdv_at,
+                last_sdv_by=f.last_sdv_by,
+                data_review_at=f.data_review_at,
+                data_review_by=f.data_review_by,
+                clinical_review_at=f.clinical_review_at,
+                clinical_review_by=f.clinical_review_by,
+                signed_at=f.signed_at,
+                signed_by=f.signed_by,
+                locked_at=f.locked_at,
+                locked_by=f.locked_by,
+            )
+        )
     for p in data.pending:
         db.add(
             DmPendingForm(
@@ -173,6 +212,9 @@ async def sync_connection(
             "closed": sum(q.state == "closed" for q in data.queries),
             "missing_items": len(data.missing),
             "pending_forms": len(data.pending),
+            "sdv_required": sum(f.sdv_required for f in data.forms),
+            "sdv_done": sum(f.sdv_done for f in data.forms),
+            "forms_with_status": len(data.forms),
         }
     except Exception as exc:  # shown on screen; the previous copy is kept
         db.rollback()

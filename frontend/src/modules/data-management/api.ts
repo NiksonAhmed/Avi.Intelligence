@@ -24,12 +24,23 @@ export interface DmConnection {
   name: string
   /** sandbox, live or demo */
   environment: string
+  study_code: string | null
   last_run: DmSyncRun | null
   last_success_at: string | null
 }
 
+/** One study, or all studies of one environment (live and sandbox are never combined). */
+export interface DmScope {
+  id: string
+  label: string
+  environment: string
+  multi: boolean
+}
+
 export interface DmStatus {
   connections: DmConnection[]
+  scopes: DmScope[]
+  default_scope: string
   can_sync: boolean
   demo: boolean
   site_answer_days: number
@@ -39,17 +50,22 @@ export interface DmStatus {
 }
 
 export interface DmOverview {
-  connection: string
+  scope: string
+  multi: boolean
   environment: string
+  /** The study's code for a single study; null for all studies. */
   study_code: string | null
+  studies: { connection: string; study_code: string }[]
   as_of: string | null
   tiles: { key: string; label: string; value: number; note: string; tone: Tone }[]
   sites: {
+    connection: string
+    study_code: string
     site_code: string
     site_name: string
     open_at_site: number
     awaiting_approval: number
-    over_target: number
+    overdue: number
     oldest_days: number | null
     missing_items: number
     pending_forms: number
@@ -61,7 +77,11 @@ export interface DmOverview {
 }
 
 export interface DmQuery {
+  /** The form, or "Visit date (no form)" for queries raised on the visit date. */
+  form_label: string
   id: string
+  connection: string
+  study_code: string
   query_number: string
   site_code: string
   site_name: string
@@ -96,15 +116,23 @@ export interface DmQueryList {
   queries: DmQuery[]
   total: number
   counts: Partial<Record<DmState, number>>
+  /** How many each quick view would show, given the other filters. */
+  views: Record<'attention' | 'open' | 'awaiting' | 'overdue' | 'sent_back' | 'closed', number>
 }
 
 export interface DmQueryFilters {
-  connection?: string
+  scope?: string
+  /** One study within an all-studies scope. */
+  study?: string
   state?: DmState | 'not_closed'
   site?: string
   form?: string
   flag?: 'red' | 'amber' | 'green'
   reopened?: boolean
+  /** Raised on or after this day (YYYY-MM-DD, UTC). */
+  raisedFrom?: string
+  /** Raised on or before this day (YYYY-MM-DD, UTC). */
+  raisedTo?: string
   search?: string
 }
 
@@ -127,10 +155,10 @@ export function useDmStatus(enabled = true) {
   })
 }
 
-export function useDmOverview(connection?: string) {
+export function useDmOverview(scope?: string) {
   return useQuery({
-    queryKey: ['dm', 'overview', connection ?? null],
-    queryFn: () => apiRequest<DmOverview>(`${BASE}/overview`, { params: { connection } }),
+    queryKey: ['dm', 'overview', scope ?? null],
+    queryFn: () => apiRequest<DmOverview>(`${BASE}/overview`, { params: { scope } }),
   })
 }
 
@@ -140,12 +168,15 @@ export function useDmQueries(filters: DmQueryFilters) {
     queryFn: () =>
       apiRequest<DmQueryList>(`${BASE}/queries`, {
         params: {
-          connection: filters.connection,
+          scope: filters.scope,
+          study: filters.study,
           state: filters.state,
           site: filters.site,
           form: filters.form,
           flag: filters.flag,
           reopened: filters.reopened ? 'true' : undefined,
+          raised_from: filters.raisedFrom,
+          raised_to: filters.raisedTo,
           search: filters.search,
           limit: '500',
         },
@@ -162,15 +193,23 @@ export function useDmQuery(id: string | null) {
   })
 }
 
+/** Syncs each study one after the other (Viedoc builds one export at a time per study). */
 export function useDmSync() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (connection: string) =>
-      apiRequest<DmSyncRun>(`${BASE}/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connection }),
-      }),
+    mutationFn: async (connections: string[]) => {
+      const runs: DmSyncRun[] = []
+      for (const connection of connections) {
+        runs.push(
+          await apiRequest<DmSyncRun>(`${BASE}/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection }),
+          }),
+        )
+      }
+      return runs
+    },
     onSuccess: () => void client.invalidateQueries({ queryKey: ['dm'] }),
   })
 }

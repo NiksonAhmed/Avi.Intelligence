@@ -1,7 +1,8 @@
 """Reads a Viedoc export (zip of CSV files) into Data Management records, keeping only what is needed.
 
-Only Queries.csv and Pending_forms.csv are read, and only the columns listed below; the form files
-(demographics, clinical values) in the same export are ignored. Viedoc's CSVs carry a second header row
+Only Queries.csv, Pending_forms.csv, SDV.csv and Review_status.csv are read, and only the columns listed
+below; the form files (demographics, clinical values) in the same export are ignored.
+Viedoc's CSVs carry a second header row
 of column IDs (e.g. "QueryState"), which is skipped.
 
 Query history: with query history included, each Validation query has one row per state change
@@ -59,6 +60,67 @@ PENDING_COLUMNS = {
     "form_name": "Form name",
     "pending_since": "Pending since",
 }
+
+
+SDV_COLUMNS = {
+    "site_name": "Site name",
+    "site_code": "Site code",
+    "subject_id": "Subject Id",
+    "event_seq": "Event sequence number",
+    "event_id": "Event Id",
+    "event_name": "Event name",
+    "event_date": "Event date",
+    "form_id": "Form Id",
+    "form_name": "Form name",
+    "form_seq": "Subject form sequence number",
+    "reviewed_item": "Reviewed item",
+    "sdv_by": "SDV by",
+    "sdv_at": "SDV date (UTC)",
+}
+REVIEW_COLUMNS = {
+    **{k: v for k, v in SDV_COLUMNS.items() if k not in ("sdv_by", "sdv_at")},
+    "clinical_by": "Clinical review by",
+    "clinical_at": "Clinical review date (UTC)",
+    "data_by": "Data review by",
+    "data_at": "Data review date (UTC)",
+    "sdv_by": "SDV by",
+    "sdv_at": "SDV date (UTC)",
+    "signed_by": "Signed by",
+    "signed_at": "Signed date (UTC)",
+    "lock_by": "Lock by",
+    "lock_at": "Lock date (UTC)",
+}
+
+
+@dataclass
+class FormStatus:
+    """One form at one visit (or the visit date itself): SDV progress and review, sign and lock status.
+
+    SDV is counted per field: `sdv_required` fields need SDV (Viedoc lists only fields set up for SDV,
+    so a risk-based plan is respected) and `sdv_done` of them have been verified."""
+
+    site_code: str
+    site_name: str
+    subject_id: str
+    event_id: str | None
+    event_name: str | None
+    event_date: datetime | None
+    form_id: str | None
+    form_name: str | None
+    form_seq: str | None
+    kind: str  # "form" | "event_date"
+    sdv_required: int = 0
+    sdv_done: int = 0
+    last_sdv_at: datetime | None = None
+    last_sdv_by: str | None = None
+    data_review_at: datetime | None = None
+    data_review_by: str | None = None
+    clinical_review_at: datetime | None = None
+    clinical_review_by: str | None = None
+    signed_at: datetime | None = None
+    signed_by: str | None = None
+    locked_at: datetime | None = None
+    locked_by: str | None = None
 
 
 @dataclass
@@ -155,6 +217,7 @@ class ExportData:
     queries: list[QueryRecord]
     missing: list[MissingItem]
     pending: list[PendingForm]
+    forms: list[FormStatus] = field(default_factory=list)
 
 
 class ExportFormatError(Exception):
@@ -209,6 +272,8 @@ def read_export(content: bytes) -> ExportData:
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         query_file, query_rows = _rows(archive, "_Queries.csv")
         _pending_file, pending_rows = _rows(archive, "_Pending_forms.csv")
+        _sdv_file, sdv_rows = _rows(archive, "_SDV.csv")
+        _review_file, review_rows = _rows(archive, "_Review_status.csv")
     if query_file is None:
         raise ExportFormatError("The Viedoc export has no Queries file (was includeQueries set?).")
     match = re.match(r"(.+?)_\d{8}_\d{6}_", query_file.rsplit("/", 1)[-1])
@@ -278,4 +343,76 @@ def read_export(content: bytes) -> ExportData:
         for row in pending_rows
         if _get(row, p["subject_id"])
     ]
-    return ExportData(study_code=study_code, queries=list(grouped.values()), missing=missing, pending=pending)
+    return ExportData(
+        study_code=study_code,
+        queries=list(grouped.values()),
+        missing=missing,
+        pending=pending,
+        forms=_form_statuses(sdv_rows, review_rows),
+    )
+
+
+def _form_key(row: dict[str, str]) -> tuple[str, str, str, str]:
+    c = SDV_COLUMNS
+    return (
+        _get(row, c["subject_id"]),
+        _get(row, c["event_seq"]),
+        _get(row, c["form_id"]),
+        _get(row, c["form_seq"]),
+    )
+
+
+def _form_statuses(sdv_rows: list[dict[str, str]], review_rows: list[dict[str, str]]) -> list[FormStatus]:
+    """One row per form at a visit (or visit date), from field-level SDV and form-level review rows."""
+    c = SDV_COLUMNS
+    forms: dict[tuple[str, str, str, str], FormStatus] = {}
+
+    def form_for(row: dict[str, str]) -> FormStatus:
+        key = _form_key(row)
+        found = forms.get(key)
+        if found is None:
+            is_visit_date = _get(row, c["reviewed_item"]).lower() == "event date" or not _get(
+                row, c["form_id"]
+            )
+            found = forms[key] = FormStatus(
+                site_code=_get(row, c["site_code"]),
+                site_name=_clean(_get(row, c["site_name"]), 300) or "",
+                subject_id=_get(row, c["subject_id"]),
+                event_id=_clean(_get(row, c["event_id"]), 64),
+                event_name=_clean(_get(row, c["event_name"]), 200),
+                event_date=parse_time(_get(row, c["event_date"])),
+                form_id=_clean(_get(row, c["form_id"]), 64),
+                form_name=_clean(_get(row, c["form_name"]), 200),
+                form_seq=_clean(_get(row, c["form_seq"]), 32),
+                kind="event_date" if is_visit_date else "form",
+            )
+        return found
+
+    for row in sdv_rows:
+        if not _get(row, c["subject_id"]):
+            continue
+        f = form_for(row)
+        f.sdv_required += 1
+        done_at = parse_time(_get(row, c["sdv_at"]))
+        if done_at or _get(row, c["sdv_by"]):
+            f.sdv_done += 1
+            if done_at and (f.last_sdv_at is None or done_at > f.last_sdv_at):
+                f.last_sdv_at, f.last_sdv_by = done_at, _clean(_get(row, c["sdv_by"]), 255)
+
+    r = REVIEW_COLUMNS
+    for row in review_rows:
+        if not _get(row, r["subject_id"]):
+            continue
+        f = form_for(row)
+        form_sdv_at = parse_time(_get(row, r["sdv_at"]))
+        if form_sdv_at and (f.last_sdv_at is None or form_sdv_at > f.last_sdv_at):
+            f.last_sdv_at, f.last_sdv_by = form_sdv_at, _clean(_get(row, r["sdv_by"]), 255)
+        f.data_review_at = parse_time(_get(row, r["data_at"]))
+        f.data_review_by = _clean(_get(row, r["data_by"]), 255)
+        f.clinical_review_at = parse_time(_get(row, r["clinical_at"]))
+        f.clinical_review_by = _clean(_get(row, r["clinical_by"]), 255)
+        f.signed_at = parse_time(_get(row, r["signed_at"]))
+        f.signed_by = _clean(_get(row, r["signed_by"]), 255)
+        f.locked_at = parse_time(_get(row, r["lock_at"]))
+        f.locked_by = _clean(_get(row, r["lock_by"]), 255)
+    return list(forms.values())

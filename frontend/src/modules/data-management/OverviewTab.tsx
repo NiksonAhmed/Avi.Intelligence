@@ -5,7 +5,7 @@ import type { DmOverview, DmStatus } from './api'
 import { useDmOverview } from './api'
 
 interface Props {
-  connection: string
+  scope: string
   status: DmStatus
   /** Open the Queries tab with these filters. */
   onOpen: (filters: Record<string, string | undefined>) => void
@@ -44,11 +44,13 @@ function CountLink({ n, onClick, label, tone }: { n: number; onClick: () => void
   )
 }
 
-export function OverviewTab({ connection, status, onOpen }: Props) {
-  const { data, isLoading, isError, error } = useDmOverview(connection)
+export function OverviewTab({ scope, status, onOpen }: Props) {
+  const { data, isLoading, isError, error } = useDmOverview(scope)
   if (isError) return <Alert type="error" showIcon title="Could not load the overview" description={error.message} />
   if (isLoading || !data) return <Skeleton active paragraph={{ rows: 8 }} />
   const maxBucket = Math.max(1, ...data.ageing.map((b) => b.open_at_site + b.awaiting_approval))
+  // With several studies, a site is "study:site" (the same site code can exist in two studies).
+  const siteId = (r: DmOverview['sites'][number]) => (data.multi ? `${r.connection}:${r.site_code}` : r.site_code)
   return (
     <Flex vertical gap={18}>
       <Tiles tiles={data.tiles} />
@@ -56,19 +58,20 @@ export function OverviewTab({ connection, status, onOpen }: Props) {
       <Card size="small" title="By site" styles={{ body: { padding: 0 } }}>
         <Table
           size="small"
-          rowKey="site_code"
+          rowKey={(r) => `${r.connection}:${r.site_code}`}
           pagination={false}
           dataSource={data.sites}
           scroll={{ x: 760 }}
           onRow={() => ({ 'data-testid': 'dm-site-row' }) as React.HTMLAttributes<HTMLElement>}
           columns={[
+            ...(data.multi ? [{ title: 'Study', dataIndex: 'study_code', key: 'study' }] : []),
             { title: 'Site', key: 'site', render: (_, r) => <strong>{r.site_code} · {r.site_name}</strong> },
             {
               title: 'Open at site',
               key: 'open',
               align: 'right',
               render: (_, r) => (
-                <CountLink n={r.open_at_site} label={`Open at site ${r.site_code}`} onClick={() => onOpen({ site: r.site_code, state: 'open_at_site' })} />
+                <CountLink n={r.open_at_site} label={`Open at site ${r.site_code}`} onClick={() => onOpen({ site: siteId(r), view: 'open' })} />
               ),
             },
             {
@@ -76,15 +79,15 @@ export function OverviewTab({ connection, status, onOpen }: Props) {
               key: 'awaiting',
               align: 'right',
               render: (_, r) => (
-                <CountLink n={r.awaiting_approval} label={`Awaiting approval ${r.site_code}`} onClick={() => onOpen({ site: r.site_code, state: 'awaiting_approval' })} />
+                <CountLink n={r.awaiting_approval} label={`Awaiting approval ${r.site_code}`} onClick={() => onOpen({ site: siteId(r), view: 'awaiting' })} />
               ),
             },
             {
-              title: 'Over target',
+              title: 'Overdue',
               key: 'red',
               align: 'right',
               render: (_, r) => (
-                <CountLink n={r.over_target} tone="bad" label={`Over target ${r.site_code}`} onClick={() => onOpen({ site: r.site_code, flag: 'red' })} />
+                <CountLink n={r.overdue} tone="bad" label={`Overdue ${r.site_code}`} onClick={() => onOpen({ site: siteId(r), view: 'overdue' })} />
               ),
             },
             { title: 'Oldest open (days)', dataIndex: 'oldest_days', align: 'right', render: (v: number | null) => v ?? '—' },
