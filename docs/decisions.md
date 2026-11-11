@@ -2,6 +2,37 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-11: Data Management (Viedoc) as a self-contained module (agreed before any code)
+
+- User decision: build Data Management **inside Avi.Intelligence**, not as separate software, but keep its
+  code self-contained so it could be split out later. Workflow plan: Viedoc sandbox → read-only connector
+  → checks → Data Management tab → per-site Excel for CRAs → sites answer in Viedoc → next sync picks up
+  the answers (map: https://claude.ai/artifact/KTaxiayBgygwhSbsgCLf4w).
+- **Module boundary:**
+  - Backend code lives in `app/data_management/`, with the connector in `app/connectors/viedoc/`.
+  - **One-way dependency:** the module may use the shared foundations (auth and roles, audit, database
+    session, the study list), but nothing outside it imports from it. An automated test enforces this.
+  - Its own tables with a `dm_` prefix, linked to studies by study id only, so they could move to a
+    separate database.
+  - Its own API section (`/api/v1/data-management/...`) and permissions (`dm.view`, `dm.approve`,
+    `dm.export`), granted to existing roles.
+  - Frontend in `src/modules/data-management/` (own pages, hooks and types), reached by one menu entry.
+  - An on/off setting, `DATA_MANAGEMENT_ENABLED`, defaulting to off until the module is ready.
+- **Ground rules:** read-only towards Viedoc (nothing is written back; sites answer in Viedoc itself);
+  tests never call the real Viedoc API; credentials only in `.env`.
+- **Exception to the "no patient-level data" rule:** EDC queries are subject-level by nature, so this
+  module may store **subject IDs and query metadata only**: no names, initials, dates of birth or free
+  text that could identify a patient. **No EDC data is ever sent to an AI model.** Pending Quality
+  sign-off.
+- **Validation (GxP):** if the module is used to manage data queries in regulated studies, Quality may
+  require computerised system validation. The boundary above lets the module be validated on its own;
+  to be confirmed with Quality early.
+- **Build order:** Step 0 is a read-only test script against the Viedoc sandbox to learn what the API
+  returns (Viedoc's public pages don't list endpoints or sign-in). No screens until then.
+- **Open:** the six workflow questions on the plan page (first: who approves site answers, DM, CRA or
+  both, and how many days sites and the team each get); a sandbox API client in Viedoc API Manager
+  (client ID, secret and API address in `.env` by the user); confirming the sandbox holds only test data.
+
 ## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
 
 All three tabs follow Step 1's pattern: headline tiles, charts that state their rule, filters kept in the
