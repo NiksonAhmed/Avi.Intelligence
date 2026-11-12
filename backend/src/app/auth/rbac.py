@@ -45,6 +45,8 @@ class Permission(StrEnum):
     """task.assign.<category>: create, assign to anyone, edit and cancel tasks of that category."""
     TASK_CREATE_OWN = "task.create_own"
     """Create tasks assigned only to yourself, for your own tracking (never Procedures and SOPs)."""
+    STUDY_SYNC = "study.sync"
+    """Press Sync now to refresh the SimpleTrials copy (everyone; read-only towards SimpleTrials)."""
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
     DM_SYNC = "dm.sync"
@@ -72,6 +74,7 @@ _ALL_STAFF = {
     Permission.TASK_CREATE_OWN,
     Permission.DM_VIEW,  # user decision: everyone may view Data Management (read-only)
     Permission.DM_SYNC,  # user decision: everyone may press Sync now
+    Permission.STUDY_SYNC,  # user decision: everyone may sync SimpleTrials from a report
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -109,6 +112,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.STUDY_READ,
             Permission.DM_VIEW,
             Permission.DM_SYNC,
+            Permission.STUDY_SYNC,
         }
     ),
 }

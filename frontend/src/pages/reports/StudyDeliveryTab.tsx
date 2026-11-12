@@ -217,6 +217,7 @@ export function StudyDeliveryTab({ filters, onFilters }: Props) {
           },
         ]}
         source={data.source}
+        sync="simpletrials"
         excelUrl={reportExportUrl('study-delivery', { study_id: filters.study_id, site_id: filters.site_id })}
       />
       <div className="print-only">

@@ -173,6 +173,20 @@ export function useSyncSimpleTrials() {
   })
 }
 
+/** Sync now for everyone (study.sync): refreshes the SimpleTrials copy and every report built on it. */
+export function useStudiesSync() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<StudySource>('/studies/sync', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['reports'] })
+      await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
+      await queryClient.invalidateQueries({ queryKey: ['studies'] })
+      await queryClient.invalidateQueries({ queryKey: ['study'] })
+    },
+  })
+}
+
 export function usePeople() {
   return useQuery({
     queryKey: ['people'],

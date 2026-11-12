@@ -171,6 +171,7 @@ export function DeviationsTab({ filters, onFilters }: Props) {
         ]}
         source={data.source}
         excelUrl={reportExportUrl('deviations', { study_id: filters.study_id, site_id: filters.site_id })}
+        sync="simpletrials"
       />
       <div className="print-only">
         <Typography.Title level={2} style={{ margin: 0 }}>
@@ -194,7 +195,7 @@ export function DeviationsTab({ filters, onFilters }: Props) {
           type="info"
           showIcon
           title="No protocol deviations recorded in SimpleTrials yet"
-          description="Deviations appear here after the next SimpleTrials sync once they are entered in SimpleTrials."
+          description="Once deviations are entered in SimpleTrials, press Sync now (or wait for the hourly sync) to see them here."
         />
       )}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>

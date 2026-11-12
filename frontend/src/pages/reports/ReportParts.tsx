@@ -1,7 +1,9 @@
-import { FilePdfOutlined, FileExcelOutlined } from '@ant-design/icons'
-import { Button, Card, Flex, Select, Typography } from 'antd'
-import type { ReactNode } from 'react'
+import { FileExcelOutlined, FilePdfOutlined, SyncOutlined } from '@ant-design/icons'
+import { useQueryClient } from '@tanstack/react-query'
+import { App, Button, Card, Flex, Select, Typography } from 'antd'
+import { useState, type ReactNode } from 'react'
 
+import { useHasPermission, useRefreshSops, useStudiesSync } from '../../api/hooks'
 import type { ReportOption, ReportSource, ReportTile } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { INK } from '../../lib/reports'
@@ -142,6 +144,54 @@ interface ToolbarProps {
   /** Overrides the "As of … · Source …" line. */
   sourceText?: string
   excelUrl: string
+  /** Where Sync now pulls from: SimpleTrials, the SharePoint SOP library, or live app data (re-read). */
+  sync: ReportSync
+}
+
+export type ReportSync = 'simpletrials' | 'sharepoint' | 'live'
+
+/** Sync now for every report (everyone; read-only towards the source). */
+function SyncButton({ kind }: { kind: ReportSync }) {
+  const { message } = App.useApp()
+  const queryClient = useQueryClient()
+  const canSyncStudies = useHasPermission('study.sync')
+  const studies = useStudiesSync()
+  const sops = useRefreshSops()
+  const [refreshing, setRefreshing] = useState(false)
+  if (kind === 'simpletrials' && !canSyncStudies) return null
+
+  const fail = (e: Error) => void message.error(e.message)
+  const onClick = () => {
+    if (kind === 'simpletrials') {
+      studies.mutate(undefined, {
+        onSuccess: (s) =>
+          s.last_sync?.ok
+            ? void message.success('Synced from SimpleTrials')
+            : void message.error(s.last_sync?.error ?? 'Sync failed'),
+        onError: fail,
+      })
+    } else if (kind === 'sharepoint') {
+      sops.mutate(undefined, {
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({ queryKey: ['reports'] })
+          void message.success('Synced from SharePoint')
+        },
+        onError: fail,
+      })
+    } else {
+      setRefreshing(true)
+      void queryClient
+        .invalidateQueries({ queryKey: ['reports'] })
+        .then(() => void message.success('Figures refreshed'))
+        .finally(() => setRefreshing(false))
+    }
+  }
+  const loading = kind === 'simpletrials' ? studies.isPending : kind === 'sharepoint' ? sops.isPending : refreshing
+  return (
+    <Button icon={<SyncOutlined />} loading={loading} onClick={onClick}>
+      Sync now
+    </Button>
+  )
 }
 
 /** Filters, "as of" line and exports (Excel download; PDF via the browser's Save as PDF). */
@@ -174,6 +224,7 @@ export function ReportToolbar(p: ToolbarProps) {
             }`}
         </Typography.Text>
         <Flex gap={8}>
+          <SyncButton kind={p.sync} />
           <Button icon={<FileExcelOutlined />} href={p.excelUrl}>
             Excel
           </Button>

@@ -157,4 +157,12 @@ describe('Work management report', () => {
     expect(screen.getByText('Nobody has open tasks in this selection.')).toBeInTheDocument()
     expect(screen.getByText('No open risks or issues.')).toBeInTheDocument()
   })
+
+  it('refreshes the live figures with Sync now', async () => {
+    mockApi({ '/me': viewerUser, '/reports/work-management': report() })
+    renderRoute('/reports?tab=work')
+    await screen.findByTestId('tile-overdue')
+    await userEvent.click(screen.getByRole('button', { name: /Sync now/ }))
+    expect(await screen.findByText('Figures refreshed')).toBeInTheDocument()
+  })
 })

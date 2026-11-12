@@ -66,6 +66,13 @@ describe('Protocol deviations report', () => {
     expect(row).toHaveTextContent('11 days open')
   })
 
+  it('hides Sync now without the permission', async () => {
+    mockApi({ '/me': viewerUser, '/reports/deviations': report() })
+    renderRoute('/reports?tab=deviations')
+    await screen.findByTestId('tile-open')
+    expect(screen.queryByRole('button', { name: /Sync now/ })).not.toBeInTheDocument()
+  })
+
   it('filters by study, in the URL and the Excel link', async () => {
     mockApi({ '/me': viewerUser, '/reports/deviations': report() })
     const { router } = renderRoute('/reports?tab=deviations')
@@ -77,6 +84,20 @@ describe('Protocol deviations report', () => {
       'href',
       '/api/v1/reports/deviations/export.xlsx?study_id=11111111-1111-1111-1111-111111111111',
     )
+  })
+
+  it('lets everyone press Sync now', async () => {
+    const viewer = { ...viewerUser, permissions: [...viewerUser.permissions, 'study.sync'] }
+    const fetchMock = mockApi({
+      '/me': viewer,
+      '/reports/deviations': report(),
+      '/studies/sync': { connector: { mode: 'api' }, last_sync: { ok: true }, last_successful_sync_at: null },
+    })
+    renderRoute('/reports?tab=deviations')
+    await userEvent.click(await screen.findByRole('button', { name: /Sync now/ }))
+    expect(await screen.findByText('Synced from SimpleTrials')).toBeInTheDocument()
+    const posted = fetchMock.mock.calls.some(([u, i]) => String(u).includes('/studies/sync') && i?.method === 'POST')
+    expect(posted).toBe(true)
   })
 
   it('explains when SimpleTrials has no deviations yet', async () => {

@@ -130,4 +130,13 @@ describe('Quality (SOPs) report', () => {
     renderRoute('/reports?tab=quality&months=3')
     expect(await screen.findByText('No changes in the last 3 months.')).toBeInTheDocument()
   })
+
+  it('syncs the SOP library from SharePoint for everyone', async () => {
+    const fetchMock = mockApi({ '/me': viewerUser, '/reports/quality': report(), '/sops/refresh': null })
+    renderRoute('/reports?tab=quality')
+    await screen.findByTestId('tile-review_overdue')
+    await userEvent.click(screen.getByRole('button', { name: /Sync now/ }))
+    expect(await screen.findByText('Synced from SharePoint')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([u, i]) => String(u).includes('/sops/refresh') && i?.method === 'POST')).toBe(true)
+  })
 })

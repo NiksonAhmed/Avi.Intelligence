@@ -216,6 +216,7 @@ export function QualityTab({ filters, onFilters }: Props) {
           },
         ]}
         sourceText={`As of ${formatDateTime(data.fetched_at)} · ${live ? 'Source: SharePoint SOP library (approved documents)' : 'Source: demo data'}`}
+        sync="sharepoint"
         excelUrl={reportExportUrl('quality', {
           department: filters.department,
           months: filters.months ? String(filters.months) : undefined,

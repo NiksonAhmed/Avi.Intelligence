@@ -214,6 +214,7 @@ export function EtmfTab({ filters, onFilters }: Props) {
           },
         ]}
         source={data.source}
+        sync="simpletrials"
         excelUrl={reportExportUrl('etmf', { study_id: filters.study_id, site_id: filters.site_id })}
       />
       <div className="print-only">

@@ -146,6 +146,16 @@ class TestStudyApi:
         assert viewer.get("/api/v1/studies").status_code == 200
         assert viewer.post("/api/v1/connectors/simpletrials/sync").status_code == 403
 
+    def test_everyone_can_sync_now_and_recent_syncs_are_reused(self, make_client) -> None:  # type: ignore[no-untyped-def]
+        viewer = make_client(Role.VIEWER)
+        first = viewer.post("/api/v1/studies/sync")
+        assert first.status_code == 200
+        assert first.json()["last_sync"]["ok"] is True
+        again = viewer.post("/api/v1/studies/sync").json()
+        assert again["last_sync"]["started_at"].rstrip("Z") == first.json()["last_sync"]["started_at"].rstrip(
+            "Z"
+        )
+
     def test_admin_sync_is_audited(self, client: TestClient) -> None:
         body = client.post("/api/v1/connectors/simpletrials/sync").json()
         assert body["last_sync"]["ok"] is True

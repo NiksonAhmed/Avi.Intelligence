@@ -271,6 +271,7 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
           },
         ]}
         sourceText="Live figures · Source: Avi.Intelligence tasks, risks and issues"
+        sync="live"
         excelUrl={reportExportUrl('work-management', { study_id: filters.study_id, category: filters.category })}
       />
       <div className="print-only">
