@@ -145,7 +145,7 @@ export interface DmQueryFilters {
 const BASE = '/data-management'
 
 /** Excel download of the Queries or SDV list, with the same filters as on screen. */
-export function dmExportUrl(list: 'queries' | 'sdv', params: Record<string, string | undefined>): string {
+export function dmExportUrl(list: 'queries' | 'sdv' | 'missing' | 'labs', params: Record<string, string | undefined>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) if (value) search.set(key, value)
   const query = search.toString()
@@ -316,5 +316,197 @@ export function useDmSync() {
       return runs
     },
     onSuccess: () => void client.invalidateQueries({ queryKey: ['dm'] }),
+  })
+}
+
+type Option = { id: string; label: string }
+type DmTile = { key: string; label: string; value: number; note: string; tone: Tone }
+
+export type DmMissingView = 'fields' | 'overdue' | 'pending' | 'upgrade'
+
+export interface DmMissingRow {
+  id: string
+  kind: 'field' | 'pending' | 'upgrade'
+  connection: string
+  study_code: string
+  site_code: string
+  site_name: string
+  subject_id: string
+  event_id: string | null
+  event_name: string | null
+  event_date: string | null
+  form_id: string | null
+  form_label: string
+  item_label: string | null
+  /** When the field was saved blank, or the form became pending. */
+  since: string | null
+  days: number | null
+  working_days: number | null
+  flag: DmFlag
+}
+
+export interface DmMissing {
+  scope: string
+  multi: boolean
+  environment: string
+  tiles: DmTile[]
+  sites: {
+    connection: string
+    study_code: string
+    site_code: string
+    site_name: string
+    fields: number
+    overdue: number
+    pending_forms: number
+    upgrades: number
+    oldest_days: number | null
+  }[]
+  visits: { id: string; label: string; fields: number; pending_forms: number }[]
+  forms: { id: string; label: string; fields: number; pending_forms: number }[]
+  /** The fields left blank for the most subjects. */
+  top_fields: { form_label: string; item_label: string; subjects: number }[]
+  /** Subjects with the most gaps. */
+  subjects: { connection: string; study_code: string; site_code: string; subject_id: string; fields: number; pending_forms: number; oldest_days: number | null }[]
+  items: DmMissingRow[]
+  total: number
+  views: Record<DmMissingView, number>
+  studies: { connection: string; study_code: string }[]
+  site_options: Option[]
+  form_options: Option[]
+  visit_options: Option[]
+  target_days: number
+  rules: Record<string, string>
+}
+
+export interface DmMissingFilters {
+  scope?: string
+  study?: string
+  view?: DmMissingView
+  site?: string
+  form?: string
+  visit?: string
+  sinceFrom?: string
+  sinceTo?: string
+  search?: string
+}
+
+export function missingParams(f: DmMissingFilters): Record<string, string | undefined> {
+  return {
+    scope: f.scope,
+    study: f.study,
+    view: f.view,
+    site: f.site,
+    form: f.form,
+    visit: f.visit,
+    since_from: f.sinceFrom,
+    since_to: f.sinceTo,
+    search: f.search,
+  }
+}
+
+export function useDmMissing(filters: DmMissingFilters) {
+  return useQuery({
+    queryKey: ['dm', 'missing', filters],
+    queryFn: () => apiRequest<DmMissing>(`${BASE}/missing`, { params: missingParams(filters) }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export type DmLabView = 'flagged' | 'out_of_range' | 'clin_sig' | 'missing' | 'no_evaluation' | 'no_unit' | 'no_range' | 'all'
+
+/** One expected lab result, as flags only: no values are kept in Avi.Intelligence. */
+export interface DmLabRow {
+  id: string
+  connection: string
+  study_code: string
+  site_code: string
+  site_name: string
+  subject_id: string
+  event_id: string | null
+  event_name: string | null
+  event_date: string | null
+  form_id: string
+  form_label: string
+  analyte: string
+  status: 'reported' | 'missing' | 'not_done'
+  out_of_range: 'high' | 'low' | null
+  evaluation: string | null
+  evaluation_label: string | null
+  issues: string[]
+}
+
+export interface DmLabs {
+  scope: string
+  multi: boolean
+  environment: string
+  tiles: DmTile[]
+  analytes: {
+    form_label: string
+    analyte: string
+    expected: number
+    reported: number
+    missing: number
+    not_done: number
+    out_of_range: number
+    clin_sig: number
+    no_range: number
+    no_unit: number
+    missing_percent: number | null
+  }[]
+  sites: {
+    connection: string
+    study_code: string
+    site_code: string
+    site_name: string
+    reported: number
+    missing: number
+    out_of_range: number
+    clin_sig: number
+    flagged: number
+  }[]
+  results: DmLabRow[]
+  total: number
+  views: Record<DmLabView, number>
+  studies: { connection: string; study_code: string }[]
+  site_options: Option[]
+  form_options: Option[]
+  visit_options: Option[]
+  analyte_options: Option[]
+  rules: Record<string, string>
+}
+
+export interface DmLabFilters {
+  scope?: string
+  study?: string
+  view?: DmLabView
+  site?: string
+  form?: string
+  visit?: string
+  analyte?: string
+  visitFrom?: string
+  visitTo?: string
+  search?: string
+}
+
+export function labParams(f: DmLabFilters): Record<string, string | undefined> {
+  return {
+    scope: f.scope,
+    study: f.study,
+    view: f.view,
+    site: f.site,
+    form: f.form,
+    visit: f.visit,
+    analyte: f.analyte,
+    visit_from: f.visitFrom,
+    visit_to: f.visitTo,
+    search: f.search,
+  }
+}
+
+export function useDmLabs(filters: DmLabFilters) {
+  return useQuery({
+    queryKey: ['dm', 'labs', filters],
+    queryFn: () => apiRequest<DmLabs>(`${BASE}/labs`, { params: labParams(filters) }),
+    placeholderData: (previous) => previous,
   })
 }

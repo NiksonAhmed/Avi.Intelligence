@@ -25,6 +25,7 @@ _FORMS = [
     ("AE", "Adverse events", "AESTDAT", "Start date", "AE_DATE_CHECK"),
 ]
 _EVENTS = [("E01_SCR", "Screening"), ("E03_D1", "Day 1"), ("E07_D7", "Day 7")]
+_EVENT_DAYS_AGO = [60, 30, 23]
 
 # (site index, subject number, form index, event index, history), history = (state, days ago, role)
 _QUERIES: list[tuple[int, int, int, int, list[tuple[str, int, str]]]] = [
@@ -46,9 +47,27 @@ _QUERIES: list[tuple[int, int, int, int, list[tuple[str, int, str]]]] = [
     (2, 2, 2, 2, [("Query Raised", 11, ""), ("Query Resolved", 9, "Study Coordinator"),
                   ("Query Closed", 8, "")]),
 ]  # fmt: skip
-# (site index, subject number, form index, event index) of unconfirmed missing data
-_MISSING = [(0, 1, 0, 1), (0, 2, 0, 1), (0, 2, 1, 2), (1, 1, 0, 0), (1, 2, 0, 1), (1, 3, 1, 1), (1, 4, 2, 0),
-            (2, 1, 1, 1), (2, 2, 0, 2)]  # fmt: skip
+# (site index, subject number, form index, event index, days since saved blank) of unconfirmed missing
+# data; the last two are forms waiting for a design upgrade.
+_MISSING = [(0, 1, 0, 1, 2), (0, 2, 0, 1, 3), (0, 2, 1, 2, 9), (1, 1, 0, 0, 40), (1, 2, 0, 1, 12),
+            (1, 3, 1, 1, 6), (1, 4, 2, 0, 1), (2, 1, 1, 1, 8), (2, 2, 0, 2, 20)]  # fmt: skip
+_UPGRADES = [(1, 2, 3, 1, 5), (2, 1, 3, 2, 3)]
+
+# Labs (fictional). Haematology at screening for every SDV subject, in Viedoc's repeating layout:
+# analyte, unit, normal range and a value inside it. Overrides make each kind of finding appear once.
+_HM = [("Haemoglobin", "g/L", 120, 160), ("WBC", "10^9/L", 4, 11), ("Platelets", "10^9/L", 150, 400)]
+_HM_OVERRIDES: dict[tuple[int, int], dict[str, object]] = {
+    (0, 2): {"WBC": {"value": "14", "eval": "Abnormal - NCS"}},  # high, not clinically significant
+    (1, 1): {"Haemoglobin": {"value": "95", "eval": "Abnormal - CS"}},  # low, CS, no AE/MH reference
+    (1, 2): {"Platelets": {"value": "", "eval": ""}},  # result missing
+    (1, 3): {"perf": "No"},  # sample not collected
+    (1, 4): {"no_range": True},  # no normal range entered
+    (2, 1): {"WBC": {"value": "12", "eval": "Normal"}, "Haemoglobin": {"unit": ""}},  # high but "Normal"
+    (2, 2): {"Platelets": {"nd": "Not done"}, "Haemoglobin": {"eval": ""}},  # not done; no evaluation
+}
+# Day 1 CRP in Viedoc's one-column-set-per-analyte layout: (site, subject, available, value, evaluation, ref)
+_CRP = [(0, 1, "Yes", "25", "Abnormal - CS", "AE 1"), (0, 2, "Yes", "4", "Normal", ""),
+        (1, 1, "No", "", "", ""), (2, 1, "Yes", "", "", "")]  # fmt: skip
 # (site index, subject number, form index, event index, days pending)
 _PENDING = [(0, 3, 1, 2, 4), (1, 1, 0, 2, 21), (1, 4, 1, 1, 9), (1, 4, 2, 1, 9), (2, 2, 3, 2, 2)]
 
@@ -120,22 +139,26 @@ def demo_export(today: date | None = None) -> bytes:
                     qc["user_role"]: role,
                 }
             )
-    for s, n, f, e in _MISSING:
-        form_id, form_name, item_id, item_label, _check = _FORMS[f]
-        query_rows.append(
-            {
-                qc["site_name"]: _SITES[s][1],
-                qc["site_code"]: _SITES[s][0],
-                qc["subject_id"]: _subject(s, n),
-                qc["event_id"]: _EVENTS[e][0],
-                qc["event_name"]: _EVENTS[e][1],
-                qc["form_id"]: form_id,
-                qc["form_name"]: form_name,
-                qc["item_id"]: item_id,
-                qc["item_label"]: item_label,
-                qc["query_type"]: "Unconfirmed missing data",
-            }
-        )
+    for kind, rows in (("Unconfirmed missing data", _MISSING), ("Pending form upgrade", _UPGRADES)):
+        for s, n, f, e, days in rows:
+            form_id, form_name, item_id, item_label, _check = _FORMS[f]
+            upgrade = kind == "Pending form upgrade"
+            query_rows.append(
+                {
+                    qc["site_name"]: _SITES[s][1],
+                    qc["site_code"]: _SITES[s][0],
+                    qc["subject_id"]: _subject(s, n),
+                    qc["event_id"]: _EVENTS[e][0],
+                    qc["event_name"]: _EVENTS[e][1],
+                    qc["event_date"]: (t - timedelta(days=_EVENT_DAYS_AGO[e])).isoformat(),
+                    qc["form_id"]: form_id,
+                    qc["form_name"]: form_name,
+                    qc["item_id"]: "" if upgrade else item_id,
+                    qc["item_label"]: "" if upgrade else item_label,
+                    qc["query_type"]: kind,
+                    qc["at"]: _stamp(t, days),
+                }
+            )
     pc = PENDING_COLUMNS
     pending_rows = [
         {
@@ -215,5 +238,104 @@ def demo_export(today: date | None = None) -> bytes:
         archive.writestr(
             f"{STUDY_CODE}_{stamp}_Review_status.csv", _csv(list(REVIEW_COLUMNS.values()), review_rows)
         )
+        archive.writestr(f"{STUDY_CODE}_{stamp}_LBHM.csv", _haematology(t))
+        archive.writestr(f"{STUDY_CODE}_{stamp}_D1_LB.csv", _day1_crp(t))
         archive.writestr(f"{STUDY_CODE}_{stamp}_README.txt", b"Demo export: fictional data.")
     return buf.getvalue()
+
+
+_STANDARD = [("Site name", "SiteName"), ("Site code", "SiteCode"), ("Subject Id", "SubjectId"),
+             ("Event Id", "EventId"), ("Event name", "EventName"), ("Event date", "EventDate")]  # fmt: skip
+
+
+def _form_csv(columns: list[tuple[str, str]], rows: list[dict[str, str]]) -> bytes:
+    """A form file as Viedoc writes it: labels, then item IDs (labels repeat, so rows are keyed by ID)."""
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow([label for label, _ in columns])
+    writer.writerow([oid for _, oid in columns])
+    for row in rows:
+        writer.writerow([row.get(oid, "") for _, oid in columns])
+    return out.getvalue().encode("utf-8-sig")
+
+
+def _standard(s: int, n: int, event: int, t: date) -> dict[str, str]:
+    return {
+        "SiteName": _SITES[s][1],
+        "SiteCode": _SITES[s][0],
+        "SubjectId": _subject(s, n),
+        "EventId": _EVENTS[event][0],
+        "EventName": _EVENTS[event][1],
+        "EventDate": (t - timedelta(days=_EVENT_DAYS_AGO[event])).isoformat(),
+    }
+
+
+def _haematology(t: date) -> bytes:
+    columns = [*_STANDARD, ("Was the sample collected?", "HMLBPERF")]
+    for k in range(1, len(_HM) + 1):
+        columns += [
+            ("Analyte", f"LBHMTEST${k}"),
+            ("HM range =/>/<", f"LBHMRANGE${k}"),
+            ("result in original units", f"LBHMORRES${k}"),
+            ("unit", f"LBHMORRESU${k}"),
+            ("HM normal range (Lower limit)", f"LBHMORNR${k}_Lower"),
+            ("HM normal range (Upper limit)", f"LBHMORNR${k}_Upper"),
+            ("Evaluation", f"LBHMCLSIG${k}"),
+            ("CS Reference (AE/MH Number)", f"LBHMCSREF${k}"),
+            ("", f"LBHM_ND${k}"),
+        ]
+    rows: list[dict[str, str]] = []
+    for s, subjects in _SDV_SUBJECTS.items():
+        for n in subjects:
+            change: dict[str, object] = _HM_OVERRIDES.get((s, n), {})
+            row = {**_standard(s, n, 0, t), "HMLBPERF": str(change.get("perf", "Yes"))}
+            for k, (analyte, unit, low, high) in enumerate(_HM, start=1):
+                own = change.get(analyte, {})
+                assert isinstance(own, dict)
+                value = str(own.get("value", (low + high) // 2))
+                row |= {
+                    f"LBHMTEST${k}": analyte,
+                    f"LBHMRANGE${k}": "=" if value else "",
+                    f"LBHMORRES${k}": "" if own.get("nd") else value,
+                    f"LBHMORRESU${k}": str(own.get("unit", unit)) if value else "",
+                    f"LBHMORNR${k}_Lower": "" if change.get("no_range") else str(low),
+                    f"LBHMORNR${k}_Upper": "" if change.get("no_range") else str(high),
+                    f"LBHMCLSIG${k}": str(own.get("eval", "Normal")) if value else "",
+                    f"LBHM_ND${k}": str(own.get("nd", "")),
+                }
+            if change.get("perf") == "No":
+                row = {**_standard(s, n, 0, t), "HMLBPERF": "No"} | {f"LBHMTEST${k}": a for k, (a, *_r) in
+                                                                      enumerate(_HM, start=1)}  # fmt: skip
+            rows.append(row)
+    return _form_csv(columns, rows)
+
+
+def _day1_crp(t: date) -> bytes:
+    columns = [
+        *_STANDARD,
+        ("Are infection-related laboratory results available?", "D1_LBYN"),
+        ("Analyte", "D1_LB_CRP"),
+        ("CRP =/>/<", "D1_LBCRP_LBRANGE"),
+        ("CRP result in original units", "D1_LBCRP_LBORRES"),
+        ("CRP original units", "D1_LBCRP_LBORRESU"),
+        ("CRP normal range (Lower limit)", "D1_LBCRP_LBORNR_Lower"),
+        ("CRP normal range (Upper limit)", "D1_LBCRP_LBORNR_Upper"),
+        ("Evaluation", "D1_LBCRP_LBCLSIG"),
+        ("CS Reference (AE/MH Number)", "D1_LBCRPCSREF"),
+    ]
+    rows = [
+        {
+            **_standard(s, n, 1, t),
+            "D1_LBYN": available,
+            "D1_LB_CRP": "CRP",
+            "D1_LBCRP_LBRANGE": "=" if value else "",
+            "D1_LBCRP_LBORRES": value,
+            "D1_LBCRP_LBORRESU": "mg/L" if value else "",
+            "D1_LBCRP_LBORNR_Lower": "0" if value else "",
+            "D1_LBCRP_LBORNR_Upper": "10" if value else "",
+            "D1_LBCRP_LBCLSIG": evaluation,
+            "D1_LBCRPCSREF": ref,
+        }
+        for s, n, available, value, evaluation, ref in _CRP
+    ]
+    return _form_csv(columns, rows)

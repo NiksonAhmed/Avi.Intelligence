@@ -102,7 +102,8 @@ class DmQueryEvent(Base):
 
 
 class DmMissingItem(Base):
-    """A field left blank and not yet confirmed as missing by the site (Viedoc: unconfirmed missing data)."""
+    """A field left blank and not yet confirmed as missing by the site (Viedoc: unconfirmed missing data),
+    or a form waiting for a design upgrade (query type "Pending form upgrade")."""
 
     __tablename__ = "dm_missing_items"
 
@@ -110,11 +111,18 @@ class DmMissingItem(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), index=True)
     connection: Mapped[str] = mapped_column(String(64), index=True)
     site_code: Mapped[str] = mapped_column(String(64))
+    site_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     subject_id: Mapped[str] = mapped_column(String(64))
     event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     form_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    form_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     item_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    item_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
     query_type: Mapped[str] = mapped_column(String(64))
+    saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    """When the form was saved with the field blank (the site's clock starts here)."""
 
 
 class DmPendingForm(Base):
@@ -168,3 +176,32 @@ class DmFormStatus(Base):
     signed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     locked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class DmLabResult(Base):
+    """One expected lab result (analyte) on a lab form at one visit, kept as flags only (user decision):
+    no result values and no normal-range numbers are stored, only what Data Management acts on."""
+
+    __tablename__ = "dm_lab_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(64), index=True)
+    connection: Mapped[str] = mapped_column(String(64), index=True)
+    environment: Mapped[str] = mapped_column(String(16))
+    study_code: Mapped[str] = mapped_column(String(100))
+    site_code: Mapped[str] = mapped_column(String(64))
+    site_name: Mapped[str] = mapped_column(String(300))
+    subject_id: Mapped[str] = mapped_column(String(64), index=True)
+    event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    form_id: Mapped[str] = mapped_column(String(64))
+    form_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    analyte: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16))  # reported | missing | not_done
+    out_of_range: Mapped[str | None] = mapped_column(String(8), nullable=True)  # high | low
+    unit_missing: Mapped[bool] = mapped_column(Boolean, default=False)
+    range_missing: Mapped[bool] = mapped_column(Boolean, default=False)
+    evaluation: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """normal | abnormal_ncs | abnormal_cs | other | missing; None when the form has no evaluation."""
+    cs_reference_missing: Mapped[bool] = mapped_column(Boolean, default=False)

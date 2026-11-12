@@ -52,7 +52,7 @@ def dm(make_client):  # type: ignore[no-untyped-def]
 def test_demo_export_is_read_like_a_real_one() -> None:
     data = read_export(demo_export(TODAY))
     assert data.study_code == "DEMO_DM"
-    assert len(data.queries) == 14 and len(data.missing) == 9 and len(data.pending) == 5
+    assert len(data.queries) == 14 and len(data.missing) == 11 and len(data.pending) == 5  # 9 + 2 upgrades
     by_number = {q.number: q for q in data.queries}
     assert by_number["1"].state == "open_at_site" and by_number["3"].state == "awaiting_approval"
     assert by_number["4"].state == "closed" and by_number["4"].closed_at is not None
@@ -131,7 +131,7 @@ def test_demo_sync_replaces_rows(db_session: Session) -> None:
         )
     assert run.ok and run.counts["queries"] == 14 and run.environment == "demo"
     assert len(db_session.scalars(select(DmQuery)).all()) == 14
-    assert len(db_session.scalars(select(DmMissingItem)).all()) == 9
+    assert len(db_session.scalars(select(DmMissingItem)).all()) == 11
     assert len(db_session.scalars(select(DmPendingForm)).all()) == 5
 
 
@@ -634,3 +634,157 @@ def test_sdv_excel_matches_the_screen(dm) -> None:  # type: ignore[no-untyped-de
     assert sum(r[8] for r in forms[1:]) == on_screen["summary"]["required"]  # type: ignore[misc]
     assert len(_sheet(res.content, "By site")) - 1 == len(on_screen["sites"])
     assert len(_sheet(res.content, "By visit")) - 1 == len(on_screen["visits"])
+
+
+# ---- Step 3: missing data and labs ----------------------------------------------------------------
+
+
+def test_missing_rows_keep_their_dates_and_labels() -> None:
+    data = read_export(demo_export(TODAY))
+    kinds = [m.query_type for m in data.missing]
+    assert kinds.count("Unconfirmed missing data") == 9 and kinds.count("Pending form upgrade") == 2
+    first = data.missing[0]
+    assert first.saved_at == datetime(2026, 11, 9, 9, 30, tzinfo=UTC)  # 2 days before TODAY
+    assert first.item_label == "ALT result" and first.event_name == "Day 1" and first.site_name
+    assert first.event_date is not None and first.event_date.date() == date(2026, 10, 12)
+
+
+def test_lab_forms_are_read_as_flags() -> None:
+    from collections import Counter
+
+    labs = read_export(demo_export(TODAY)).labs
+    assert len(labs) == 31 and Counter(r.status for r in labs) == {
+        "reported": 24,
+        "not_done": 5,
+        "missing": 2,
+    }
+    by = {(r.subject_id, r.form_id, r.analyte): r for r in labs}
+    wbc = by[("101-002", "LBHM", "WBC")]
+    assert (wbc.out_of_range, wbc.evaluation) == ("high", "abnormal_ncs")
+    hb = by[("102-001", "LBHM", "Haemoglobin")]
+    assert (hb.out_of_range, hb.evaluation, hb.cs_reference_missing) == ("low", "abnormal_cs", True)
+    assert by[("102-002", "LBHM", "Platelets")].status == "missing"
+    assert {r.status for k, r in by.items() if k[0] == "102-003"} == {"not_done"}  # sample not collected
+    assert all(r.range_missing for k, r in by.items() if k[0] == "102-004")
+    assert by[("201-001", "LBHM", "Haemoglobin")].unit_missing
+    assert by[("201-001", "LBHM", "WBC")].out_of_range == "high"  # but evaluated "Normal"
+    assert by[("201-002", "LBHM", "Platelets")].status == "not_done"
+    assert by[("201-002", "LBHM", "Haemoglobin")].evaluation == "missing"
+    crp = by[("101-001", "D1_LB", "CRP")]  # one-column-set-per-analyte layout; analyte from the label
+    assert (crp.out_of_range, crp.evaluation, crp.cs_reference_missing) == ("high", "abnormal_cs", False)
+    assert by[("102-001", "D1_LB", "CRP")].status == "not_done"  # "results available?" = No
+    assert by[("201-001", "D1_LB", "CRP")].status == "missing"
+
+
+def test_lab_rules() -> None:
+    from app.data_management.labs import evaluation_of, out_of_range
+
+    assert out_of_range(12, "=", 4, 11) == "high" and out_of_range(3.9, "", 4, 11) == "low"
+    assert out_of_range(11, "=", 4, 11) is None  # the limits are inside the range
+    assert out_of_range(5, "<", 5, None) == "low" and out_of_range(5, "<", 4, None) is None
+    assert out_of_range(100, ">", None, 100) == "high" and out_of_range(90, ">", None, 100) is None
+    assert out_of_range(50, "=", None, None) is None
+    assert evaluation_of("Normal") == "normal"
+    assert evaluation_of("Abnormal - NCS") == "abnormal_ncs"
+    assert evaluation_of("Abnormal, not clinically significant") == "abnormal_ncs"
+    assert evaluation_of("Abnormal - CS") == "abnormal_cs"
+    assert evaluation_of("Abnormal, clinically significant") == "abnormal_cs"
+
+
+def test_no_lab_values_are_stored(db_session: Session) -> None:
+    """Flags only (user decision): no column can hold a result or normal-range number."""
+    from app.data_management.models import DmLabResult
+
+    asyncio.run(sync_connection(db_session, _settings(), tenant_id="avion", name="demo", triggered_by="t"))
+    rows = db_session.scalars(select(DmLabResult)).all()
+    assert len(rows) == 31
+    text_columns = ["analyte", "status", "out_of_range", "evaluation", "form_id", "form_name"]
+    for r in rows:
+        for name in text_columns:
+            value = getattr(r, name)
+            assert not (isinstance(value, str) and re.fullmatch(r"[<>=]?\s*\d+([.,]\d+)?", value)), name
+    assert {c.name for c in DmLabResult.__table__.columns}.isdisjoint({"value", "result", "lower", "upper"})
+
+
+def test_missing_data_view(dm) -> None:  # type: ignore[no-untyped-def]
+    client = dm()
+    body = client.get(f"{API}/missing").json()
+    assert body["views"]["fields"] == 9 and body["views"]["pending"] == 5 and body["views"]["upgrade"] == 2
+    tiles = {t["key"]: t["value"] for t in body["tiles"]}
+    assert tiles["fields"] == 9 and tiles["pending"] == 5 and tiles["upgrades"] == 2
+    assert tiles["overdue"] == body["views"]["overdue"] >= 1  # the 40-day-old blank field at least
+    assert body["total"] == 9 and body["items"][0]["flag"] == "red"  # overdue first
+    first = body["items"][0]
+    assert first["subject_id"] == "102-001" and first["days"] == 40 and first["item_label"] == "ALT result"
+    assert body["target_days"] == 5
+    assert sum(s["fields"] for s in body["sites"]) == 9
+    assert body["top_fields"][0]["subjects"] >= body["top_fields"][-1]["subjects"]
+    worst = body["subjects"][0]
+    assert worst["fields"] + worst["pending_forms"] >= 2
+    site = client.get(f"{API}/missing", params={"site": "102"}).json()
+    assert site["views"] == {**site["views"], "fields": 4, "pending": 3, "upgrade": 1}
+    pending = client.get(f"{API}/missing", params={"view": "pending"}).json()
+    assert pending["total"] == 5 and all(i["kind"] == "pending" for i in pending["items"])
+    upgrades = client.get(f"{API}/missing", params={"view": "upgrade"}).json()["items"]
+    assert len(upgrades) == 2 and all(i["item_label"] is None for i in upgrades)
+    assert client.get(f"{API}/missing", params={"search": "201-002"}).json()["total"] == 1
+
+
+def test_labs_view(dm) -> None:  # type: ignore[no-untyped-def]
+    client = dm(Role.CRA)  # everyone may view
+    body = client.get(f"{API}/labs").json()
+    assert body["views"] == {
+        "flagged": 11,
+        "out_of_range": 4,
+        "clin_sig": 2,
+        "missing": 2,
+        "no_evaluation": 1,
+        "no_unit": 1,
+        "no_range": 3,
+        "all": 31,
+    }
+    tiles = {t["key"]: t for t in body["tiles"]}
+    assert tiles["reported"]["value"] == 92 and "24 of 26 expected · 5 not done" in tiles["reported"]["note"]
+    assert tiles["out_of_range"]["note"] == "3 high · 1 low"
+    assert tiles["clin_sig"]["value"] == 2 and tiles["clin_sig"]["note"] == "1 without AE/MH reference"
+    assert tiles["checks"]["value"] == 2  # one not evaluated, one out of range but "Normal"
+    assert body["results"][0]["evaluation"] == "abnormal_cs"  # clinically significant first
+    hb = next(r for r in body["results"] if r["subject_id"] == "102-001" and r["analyte"] == "Haemoglobin")
+    assert hb["issues"] == ["Out of range (low)", "Clinically significant", "No AE/MH reference"]
+    odd = next(r for r in body["results"] if r["subject_id"] == "201-001" and r["analyte"] == "WBC")
+    assert "Out of range but evaluated normal" in odd["issues"]
+    platelets = next(a for a in body["analytes"] if a["analyte"] == "Platelets")
+    assert (platelets["expected"], platelets["missing"], platelets["not_done"]) == (7, 1, 2)
+    assert body["analytes"][0]["missing_percent"] >= body["analytes"][-1]["missing_percent"]
+    crp = client.get(f"{API}/labs", params={"analyte": "CRP", "view": "all"}).json()
+    assert crp["total"] == 4 and {r["form_id"] for r in crp["results"]} == {"D1_LB"}
+    assert client.get(f"{API}/labs", params={"site": "102", "view": "all"}).json()["total"] == 13
+
+
+@pytest.mark.parametrize(("role", "code"), [(Role.DATA_MANAGER, 200), (Role.CRA, 403), (Role.VIEWER, 403)])
+def test_missing_and_lab_excel(dm, role: Role, code: int) -> None:  # type: ignore[no-untyped-def]
+    client = dm(role)
+    res = client.get(f"{API}/missing/export.xlsx", params={"view": "pending"})
+    assert res.status_code == code
+    labs = client.get(f"{API}/labs/export.xlsx")
+    assert labs.status_code == code
+    if code != 200:
+        return
+    assert len(_sheet(res.content, "Missing data")) - 1 == 5
+    rows = _sheet(labs.content, "Lab results")
+    assert len(rows) - 1 == 11 and rows[0][-1] == "To check"
+    assert {r[0] for r in _sheet(labs.content, "About")} >= {"Labs", "Range", "Evaluation", "Filters"}
+
+
+def test_vital_signs_and_ecg_are_not_labs() -> None:
+    from app.data_management.export_reader import parse_time
+    from app.data_management.labs import read_lab_files
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr(
+            "S_20261111_000000_VS.csv",
+            "Subject Id,Systolic result,unit\nSubjectId,VSORRES$1,VSORRESU$1\n101-001,120,mmHg\n",
+        )
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as archive:
+        assert read_lab_files(archive, parse_time) == []

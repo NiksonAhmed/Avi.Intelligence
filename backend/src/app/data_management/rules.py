@@ -47,7 +47,10 @@ RULES = {
         "Unconfirmed missing data: fields left blank that the site has not yet confirmed as missing. "
         "Pending forms: forms expected at a visit but not completed."
     ),
-    "source": "Read-only copy of the Viedoc export; subject IDs only, no other patient details are stored.",
+    "source": (
+        "Read-only copy of the Viedoc export; subject IDs only, no other patient details are stored. "
+        "Lab results are kept as flags only (no values)."
+    ),
 }
 
 

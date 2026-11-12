@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { adminUser, mockApi, renderRoute, viewerUser } from '../../test/utils'
-import type { DmOverview, DmQueryDetail, DmQueryList, DmSdv, DmStatus } from './api'
+import type { DmLabs, DmMissing, DmOverview, DmQueryDetail, DmQueryList, DmSdv, DmStatus } from './api'
 
 const dmUser = { ...adminUser, permissions: [...adminUser.permissions, 'dm.view', 'dm.sync'] }
 
@@ -131,6 +131,76 @@ const sdv: DmSdv = {
   rules: { sdv: 'SDV is counted per field.', review: 'Review rule.' },
 }
 
+const missing: DmMissing = {
+  scope: 'sandbox',
+  multi: false,
+  environment: 'sandbox',
+  tiles: [
+    { key: 'fields', label: 'Missing fields', value: 1845, note: 'Unconfirmed by the site · 30 subjects', tone: 'warn' },
+    { key: 'overdue', label: 'Overdue', value: 1700, note: 'Over 5 working days (fields and forms)', tone: 'bad' },
+    { key: 'pending', label: 'Pending forms', value: 527, note: 'Oldest 140 days', tone: 'warn' },
+    { key: 'subjects', label: 'Subjects with gaps', value: 32, note: 'Missing fields or pending forms', tone: 'neutral' },
+    { key: 'upgrades', label: 'Forms awaiting upgrade', value: 49, note: 'Waiting for a new design version', tone: 'info' },
+  ],
+  sites: [
+    { connection: 'sandbox', study_code: 'DEMO_IS', site_code: 'U01', site_name: 'Demo Unit', fields: 1200, overdue: 1100, pending_forms: 300, upgrades: 20, oldest_days: 140 },
+  ],
+  visits: [{ id: 'E01_SCR', label: 'Screening', fields: 900, pending_forms: 120 }],
+  forms: [{ id: 'PE', label: 'Physical Examination', fields: 400, pending_forms: 10 }],
+  top_fields: [{ form_label: 'Physical Examination', item_label: 'Date of examination', subjects: 25 }],
+  subjects: [{ connection: 'sandbox', study_code: 'DEMO_IS', site_code: 'U01', subject_id: 'AUU01-002', fields: 120, pending_forms: 14, oldest_days: 140 }],
+  items: [
+    {
+      id: 'm1', kind: 'field', connection: 'sandbox', study_code: 'DEMO_IS', site_code: 'U01', site_name: 'Demo Unit',
+      subject_id: 'AUU01-002', event_id: 'E01_SCR', event_name: 'Screening', event_date: '2026-06-19T00:00:00Z',
+      form_id: 'PE', form_label: 'Physical Examination', item_label: 'Date of examination',
+      since: '2026-06-20T09:30:00Z', days: 145, working_days: 104, flag: 'red',
+    },
+  ],
+  total: 1845,
+  views: { fields: 1845, overdue: 1700, pending: 527, upgrade: 49 },
+  studies: [{ connection: 'sandbox', study_code: 'DEMO_IS' }],
+  site_options: [{ id: 'U01', label: 'U01 · Demo Unit' }],
+  form_options: [{ id: 'PE', label: 'PE · Physical Examination' }],
+  visit_options: [{ id: 'E01_SCR', label: 'Screening' }],
+  target_days: 5,
+  rules: { missing: 'Missing rule.', target: 'Target rule.' },
+}
+
+const labs: DmLabs = {
+  scope: 'sandbox',
+  multi: false,
+  environment: 'sandbox',
+  tiles: [
+    { key: 'reported', label: 'Results reported (%)', value: 92, note: '24 of 26 expected · 5 not done', tone: 'info' },
+    { key: 'missing', label: 'Results missing', value: 2, note: 'Expected but blank', tone: 'warn' },
+    { key: 'out_of_range', label: 'Out of range', value: 4, note: '3 high · 1 low', tone: 'warn' },
+    { key: 'clin_sig', label: 'Clinically significant', value: 2, note: '1 without AE/MH reference', tone: 'bad' },
+  ],
+  analytes: [
+    { form_label: 'Haematology', analyte: 'Platelets', expected: 7, reported: 6, missing: 1, not_done: 2, out_of_range: 0, clin_sig: 0, no_range: 1, no_unit: 0, missing_percent: 14.3 },
+    { form_label: 'Haematology', analyte: 'Haemoglobin', expected: 8, reported: 8, missing: 0, not_done: 1, out_of_range: 1, clin_sig: 1, no_range: 1, no_unit: 1, missing_percent: 0 },
+  ],
+  sites: [{ connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre', reported: 9, missing: 1, out_of_range: 1, clin_sig: 1, flagged: 5 }],
+  results: [
+    {
+      id: 'l1', connection: 'sandbox', study_code: 'DEMO_IS', site_code: '102', site_name: 'Demo Cancer Centre',
+      subject_id: '102-001', event_id: 'E01_SCR', event_name: 'Screening', event_date: '2026-09-13T00:00:00Z',
+      form_id: 'LBHM', form_label: 'Haematology', analyte: 'Haemoglobin', status: 'reported', out_of_range: 'low',
+      evaluation: 'abnormal_cs', evaluation_label: 'Abnormal, clinically significant',
+      issues: ['Out of range (low)', 'Clinically significant', 'No AE/MH reference'],
+    },
+  ],
+  total: 11,
+  views: { flagged: 11, out_of_range: 4, clin_sig: 2, missing: 2, no_evaluation: 1, no_unit: 1, no_range: 3, all: 31 },
+  studies: [{ connection: 'sandbox', study_code: 'DEMO_IS' }],
+  site_options: [{ id: '102', label: '102 · Demo Cancer Centre' }],
+  form_options: [{ id: 'LBHM', label: 'LBHM · Haematology' }],
+  visit_options: [{ id: 'E01_SCR', label: 'Screening' }],
+  analyte_options: [{ id: 'Haemoglobin', label: 'Haemoglobin' }, { id: 'Platelets', label: 'Platelets' }],
+  rules: { labs: 'Flags only: no values are stored.', range: 'Range rule.', evaluation: 'Evaluation rule.' },
+}
+
 const routes = {
   '/me': dmUser,
   '/data-management/status': status,
@@ -138,6 +208,8 @@ const routes = {
   '/data-management/queries': list,
   '/data-management/queries/q8': detail,
   '/data-management/sdv': sdv,
+  '/data-management/missing': missing,
+  '/data-management/labs': labs,
 }
 
 describe('Data Management', () => {
@@ -350,5 +422,49 @@ describe('Data Management', () => {
     expect(await screen.findByTestId('dm-query-count')).toBeInTheDocument()
     expect(screen.queryByTestId('dm-queries-excel')).not.toBeInTheDocument()
     expect(screen.queryByText('Download Excel')).not.toBeInTheDocument()
+  })
+
+  it('shows missing data: tiles, sites, worst subjects and an overdue list with Excel', async () => {
+    const fetchMock = mockApi({ ...routes })
+    const { router } = renderRoute('/data-management?tab=missing')
+    expect(await screen.findByTestId('dm-missing-tile-fields')).toHaveTextContent('1845')
+    expect(screen.getByTestId('dm-missing-tile-upgrades')).toHaveTextContent('49')
+    expect(screen.getByTestId('dm-missing-site-row')).toHaveTextContent('1100')
+    expect(screen.getByTestId('dm-missing-top-field')).toHaveTextContent('Date of examination · Physical Examination25 subjects')
+    const row = screen.getByTestId('dm-missing-row')
+    expect(row).toHaveTextContent('AUU01-002')
+    expect(row).toHaveTextContent('Date of examination')
+    expect(row).toHaveTextContent('Overdue')
+    expect(screen.getByTestId('dm-missing-excel')).toHaveAttribute('href', '/api/v1/data-management/missing/export.xlsx?scope=sandbox&view=fields')
+
+    await userEvent.click(screen.getByTestId('dm-missing-view-pending'))
+    expect(router.state.location.search).toBe('?tab=missing&mview=pending')
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/data-management/missing') && String(u).includes('view=pending'))).toBe(true)
+
+    await userEvent.click(within(screen.getByTestId('dm-missing-subject-row')).getByRole('button', { name: 'AUU01-002' }))
+    expect(router.state.location.search).toBe('?tab=missing&mview=pending&mq=AUU01-002')
+    expect(await screen.findByTestId('dm-missing-active-filters')).toHaveTextContent('Subject: “AUU01-002”')
+  })
+
+  it('shows lab flags (no values): views, analytes and the results to check', async () => {
+    mockApi({ ...routes })
+    const { router } = renderRoute('/data-management?tab=labs')
+    expect(await screen.findByTestId('dm-labs-tile-reported')).toHaveTextContent('92%')
+    expect(screen.getByTestId('dm-labs-tile-clin_sig')).toHaveTextContent('2')
+    expect(screen.getByTestId('dm-labs-view-flagged')).toHaveTextContent('To check11')
+    const row = screen.getByTestId('dm-labs-row')
+    expect(row).toHaveTextContent('102-001')
+    expect(row).toHaveTextContent('Low')
+    expect(row).toHaveTextContent('Abnormal, clinically significant')
+    expect(row).toHaveTextContent('No AE/MH reference')
+    expect(screen.getAllByTestId('dm-labs-analyte-row')[0]).toHaveTextContent('1 (14.3%)')
+    expect(screen.getByText(/Flags only: no values are stored/)).toBeInTheDocument()
+
+    await userEvent.click(within(screen.getAllByTestId('dm-labs-analyte-row')[0]!).getByRole('button', { name: 'Platelets' }))
+    expect(router.state.location.search).toBe('?tab=labs&lanalyte=Platelets&lview=all')
+    expect(await screen.findByTestId('dm-labs-excel')).toHaveAttribute(
+      'href',
+      '/api/v1/data-management/labs/export.xlsx?scope=sandbox&view=all&analyte=Platelets',
+    )
   })
 })

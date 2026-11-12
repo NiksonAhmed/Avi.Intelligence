@@ -1,7 +1,8 @@
 """Reads a Viedoc export (zip of CSV files) into Data Management records, keeping only what is needed.
 
 Only Queries.csv, Pending_forms.csv, SDV.csv and Review_status.csv are read, and only the columns listed
-below; the form files (demographics, clinical values) in the same export are ignored.
+below. Of the form files, only lab forms are read (see labs.py), and only as flags: no lab values are kept.
+All other form files (demographics, clinical values) in the same export are ignored.
 Viedoc's CSVs carry a second header row
 of column IDs (e.g. "QueryState"), which is skipped.
 
@@ -20,6 +21,8 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from .labs import LabResult, read_lab_files
+
 # Viedoc's wording -> who has the query now.
 STATE_MAP = {
     "query raised": "open_at_site",
@@ -36,6 +39,7 @@ QUERY_COLUMNS = {
     "subject_id": "Subject Id",
     "event_id": "Event Id",
     "event_name": "Event name",
+    "event_date": "Event date",
     "form_id": "Form Id",
     "form_name": "Form name",
     "item_id": "Item Id",
@@ -197,6 +201,12 @@ class MissingItem:
     form_id: str | None
     item_id: str | None
     query_type: str
+    site_name: str | None = None
+    event_name: str | None = None
+    event_date: datetime | None = None
+    form_name: str | None = None
+    item_label: str | None = None
+    saved_at: datetime | None = None
 
 
 @dataclass
@@ -218,6 +228,9 @@ class ExportData:
     missing: list[MissingItem]
     pending: list[PendingForm]
     forms: list[FormStatus] = field(default_factory=list)
+    labs: list[LabResult] = field(default_factory=list)
+    form_names: dict[str, str] = field(default_factory=dict)
+    """Form ID -> form name, from every file that names forms (lab files do not)."""
 
 
 class ExportFormatError(Exception):
@@ -274,6 +287,7 @@ def read_export(content: bytes) -> ExportData:
         _pending_file, pending_rows = _rows(archive, "_Pending_forms.csv")
         _sdv_file, sdv_rows = _rows(archive, "_SDV.csv")
         _review_file, review_rows = _rows(archive, "_Review_status.csv")
+        labs = read_lab_files(archive, parse_time)
     if query_file is None:
         raise ExportFormatError("The Viedoc export has no Queries file (was includeQueries set?).")
     match = re.match(r"(.+?)_\d{8}_\d{6}_", query_file.rsplit("/", 1)[-1])
@@ -293,6 +307,12 @@ def read_export(content: bytes) -> ExportData:
                     form_id=_clean(_get(row, c["form_id"]), 64),
                     item_id=_clean(_get(row, c["item_id"]), 100),
                     query_type=_clean(_get(row, c["query_type"]), 64) or "Unknown",
+                    site_name=_clean(_get(row, c["site_name"]), 300),
+                    event_name=_clean(_get(row, c["event_name"]), 200),
+                    event_date=parse_time(_get(row, c["event_date"])),
+                    form_name=_clean(_get(row, c["form_name"]), 200),
+                    item_label=_clean(_get(row, c["item_label"]), 300),
+                    saved_at=parse_time(_get(row, c["at"])),
                 )
             )
             continue
@@ -343,12 +363,24 @@ def read_export(content: bytes) -> ExportData:
         for row in pending_rows
         if _get(row, p["subject_id"])
     ]
+    forms = _form_statuses(sdv_rows, review_rows)
+    form_names: dict[str, str] = {}
+    for fid, fname in [
+        *((q.form_id, q.form_name) for q in grouped.values()),
+        *((m.form_id, m.form_name) for m in missing),
+        *((p.form_id, p.form_name) for p in pending),
+        *((f.form_id, f.form_name) for f in forms),
+    ]:
+        if fid and fname:
+            form_names.setdefault(fid, fname)
     return ExportData(
         study_code=study_code,
         queries=list(grouped.values()),
         missing=missing,
         pending=pending,
-        forms=_form_statuses(sdv_rows, review_rows),
+        forms=forms,
+        labs=labs,
+        form_names=form_names,
     )
 
 

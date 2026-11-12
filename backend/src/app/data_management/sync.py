@@ -24,7 +24,15 @@ from app.db.session import new_session
 
 from .demo import demo_export
 from .export_reader import ExportData, read_export
-from .models import DmFormStatus, DmMissingItem, DmPendingForm, DmQuery, DmQueryEvent, DmSyncRun
+from .models import (
+    DmFormStatus,
+    DmLabResult,
+    DmMissingItem,
+    DmPendingForm,
+    DmQuery,
+    DmQueryEvent,
+    DmSyncRun,
+)
 
 log = logging.getLogger("data_management.sync")
 
@@ -75,6 +83,7 @@ def _store(db: Session, tenant_id: str, name: str, environment: str, data: Expor
     db.execute(
         delete(DmFormStatus).where(DmFormStatus.tenant_id == tenant_id, DmFormStatus.connection == name)
     )
+    db.execute(delete(DmLabResult).where(DmLabResult.tenant_id == tenant_id, DmLabResult.connection == name))
     db.flush()
     for r in data.queries:
         db.add(
@@ -129,6 +138,36 @@ def _store(db: Session, tenant_id: str, name: str, environment: str, data: Expor
                 form_id=m.form_id,
                 item_id=m.item_id,
                 query_type=m.query_type,
+                site_name=m.site_name,
+                event_name=m.event_name,
+                event_date=m.event_date,
+                form_name=m.form_name,
+                item_label=m.item_label,
+                saved_at=m.saved_at,
+            )
+        )
+    for lab in data.labs:
+        db.add(
+            DmLabResult(
+                tenant_id=tenant_id,
+                connection=name,
+                environment=environment,
+                study_code=data.study_code,
+                site_code=lab.site_code,
+                site_name=lab.site_name,
+                subject_id=lab.subject_id,
+                event_id=lab.event_id,
+                event_name=lab.event_name,
+                event_date=lab.event_date,
+                form_id=lab.form_id,
+                form_name=data.form_names.get(lab.form_id),
+                analyte=lab.analyte,
+                status=lab.status,
+                out_of_range=lab.out_of_range,
+                unit_missing=lab.unit_missing,
+                range_missing=lab.range_missing,
+                evaluation=lab.evaluation,
+                cs_reference_missing=lab.cs_reference_missing,
             )
         )
     for f in data.forms:
@@ -215,6 +254,8 @@ async def sync_connection(
             "sdv_required": sum(f.sdv_required for f in data.forms),
             "sdv_done": sum(f.sdv_done for f in data.forms),
             "forms_with_status": len(data.forms),
+            "lab_results": len(data.labs),
+            "lab_out_of_range": sum(bool(r.out_of_range) for r in data.labs),
         }
     except Exception as exc:  # shown on screen; the previous copy is kept
         db.rollback()

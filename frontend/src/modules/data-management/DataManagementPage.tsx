@@ -8,6 +8,8 @@ import { formatDateTime } from '../../lib/format'
 import type { DmScope, DmStatus } from './api'
 import { useDmOverview, useDmStatus, useDmSync } from './api'
 import { OverviewTab } from './OverviewTab'
+import { LabsTab } from './LabsTab'
+import { MissingTab } from './MissingTab'
 import { QueriesTab } from './QueriesTab'
 import { SdvTab } from './SdvTab'
 
@@ -111,7 +113,7 @@ export function DataManagementPage() {
   const scope = s.scopes.find((c) => c.id === params.get('scope')) ?? s.scopes.find((c) => c.id === s.default_scope)
   if (!scope) return <Empty description="No Viedoc connection configured." />
   const raw = params.get('tab')
-  const tab = raw === 'queries' || raw === 'sdv' ? raw : 'overview'
+  const tab = raw === 'queries' || raw === 'sdv' || raw === 'missing' || raw === 'labs' ? raw : 'overview'
 
   return (
     <>
@@ -179,6 +181,20 @@ export function DataManagementPage() {
               label: 'SDV',
               children: (
                 <SdvTab scope={scope.id} canExport={s.can_export} params={params} onChange={(changes) => update(changes)} />
+              ),
+            },
+            {
+              key: 'missing',
+              label: 'Missing data',
+              children: (
+                <MissingTab scope={scope.id} canExport={s.can_export} params={params} onChange={(changes) => update(changes)} />
+              ),
+            },
+            {
+              key: 'labs',
+              label: 'Labs',
+              children: (
+                <LabsTab scope={scope.id} canExport={s.can_export} params={params} onChange={(changes) => update(changes)} />
               ),
             },
           ]}

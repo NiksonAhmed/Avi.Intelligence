@@ -1089,3 +1089,7 @@ async def export_sdv(
         request, db, user, report="SDV", sc=sc, filters=filters, sheets=[forms, sites, visits],
         about=about, rows=len(data.forms),
     )  # fmt: skip
+
+
+# Missing data and labs (Step 3) live in their own file; importing it registers their routes here.
+from . import checks_api  # noqa: E402, F401

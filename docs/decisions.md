@@ -144,6 +144,32 @@ Each step is shown before it is committed, and pushed only when agreed. Work hap
    filters, e.g. one site), plus an About sheet (study, filters, source and as-of time, targets, rules,
    "subject IDs only, roles not names"). Every download is audited (`dm.exported`).
 
+### Step 3: Missing data and Labs (built 12 Nov 2026, shown before committing)
+
+- **Missing data tab:** missing fields (Viedoc "unconfirmed missing data"), pending forms and forms
+  awaiting a design upgrade (49 in the sandbox, shown apart). Each missing field now keeps its visit,
+  visit date, form, field label and **when the form was saved blank**; the site's clock (5 working days)
+  runs from then, and from "pending since" for pending forms. Tiles, sites (most overdue first),
+  subjects with the most gaps, fields most often left blank, by visit; quick views Missing fields /
+  Overdue / Pending forms / Awaiting upgrade; filters and Excel as on the other tabs.
+- **Labs tab, flags only (user decision, 12 Nov 2026):** lab values are read in memory during the sync
+  and only the outcome is stored per expected result: reported / missing / not done, out of range (high
+  or low) against the normal range entered on the form, unit or normal range missing, the investigator's
+  evaluation (normal / abnormal NCS / abnormal CS) and whether a CS result has its AE/MH reference. No
+  result values and no normal-range numbers are stored; people open Viedoc to see a value.
+- Lab forms are recognised from their CDASH-style item IDs (`…ORRES`, `…ORRESU`, `…ORNR_Lower/Upper`,
+  `…RANGE`, `…TEST`, `…CLSIG`, `…CSREF`, `…ND`, `…PERF`/`…LBYN`), in both of Viedoc's layouts (repeating
+  rows with an analyte column, or one column set per analyte). Only result items with "LB" in their prefix
+  count: vital signs, ECG and the qualitative pregnancy test are left out. The Viedoc API has no lab
+  reference-range export, so ranges come from the form (filled for few results in the sandbox).
+- Views: To check, Out of range, Clinically significant, Missing results, Not evaluated, No unit, No
+  normal range, All; plus by analyte (most often missing first, which shows "missing across many
+  subjects") and by site. "Out of range but evaluated normal" is flagged for checking with the site.
+- First sandbox sync: 1,845 missing fields (23 subjects), 527 pending forms (oldest 149 days), 49 forms
+  awaiting upgrade; labs 472 results on 5 lab forms (72 of 431 expected reported, 41 not done), 3 out of
+  range, 7 clinically significant (none with an AE/MH reference), 19 not evaluated, 44 without a normal
+  range, 20 without a unit.
+
 ## 2026-11-11: Reports and Insights, Steps 3–5 (Work management, Quality (SOPs), eTMF)
 
 All three tabs follow Step 1's pattern: headline tiles, charts that state their rule, filters kept in the
