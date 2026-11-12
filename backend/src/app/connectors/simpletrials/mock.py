@@ -10,7 +10,14 @@ from datetime import date, timedelta
 
 from app.studies.clock import today as app_today
 
-from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyConnectorInfo, StudyRecord
+from .models import (
+    ActionItemRecord,
+    EtmfDocumentRecord,
+    MilestoneRecord,
+    SiteRecord,
+    StudyConnectorInfo,
+    StudyRecord,
+)
 
 
 def _d(today: date, days: int | None) -> date | None:
@@ -220,7 +227,7 @@ class MockStudyConnector:
         return StudyConnectorInfo(mode="mock", mock_reason=self._reason)
 
     async def fetch_studies(self) -> list[StudyRecord]:
-        return with_demo_documents(demo_studies())
+        return with_demo_action_items(with_demo_documents(demo_studies()))
 
 
 # Demo eTMF structure: (section, folder, document name, expires).
@@ -315,4 +322,46 @@ def with_demo_documents(studies: list[StudyRecord], today: date | None = None) -
                     )
                 )
         study.documents = docs
+    return studies
+
+
+# Demo action items per study: (site index, category, subcategory, priority, description, opened days ago,
+# due in days (negative = overdue), closed days ago or None).
+_ACTIONS: list[tuple[int, str, str, str, str, int, int, int | None]] = [
+    (0, "Site", "Site Visit", "High", "Demo: chase missing ISF delegation log signatures", 20, -6, None),
+    (0, "Site", "Site Visit", "Normal", "Demo: confirm temperature log for IP storage", 9, 5, None),
+    (1, "Site", "Site Visit", "Normal", "Demo: retrain staff on eCRF completion", 40, -20, 12),
+]
+
+
+def with_demo_action_items(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo SimpleTrials action items (read-only issues) to the first study."""
+    t = today or app_today()
+    if not studies:
+        return studies
+    first = studies[0]
+    items: list[ActionItemRecord] = []
+    for n, (site, category, sub, priority, text, opened, due, closed) in enumerate(_ACTIONS, start=1):
+        s = first.sites[site] if site < len(first.sites) else None
+        items.append(
+            ActionItemRecord(
+                external_id=f"{first.external_id}-A{n}",
+                number=str(n),
+                category=category,
+                subcategory=sub,
+                priority=priority,
+                status="Closed" if closed is not None else "New",
+                closed=closed is not None,
+                site_number=s.site_number if s else None,
+                site_name=s.name if s else None,
+                description=text,
+                assignee="Demo CRA",
+                opened_on=_d(t, -opened),
+                due_on=_d(t, due),
+                closed_on=_d(t, -closed) if closed is not None else None,
+            )
+        )
+    first.action_items = items
+    for other in studies[1:]:
+        other.action_items = []
     return studies

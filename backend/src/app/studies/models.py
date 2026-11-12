@@ -60,6 +60,9 @@ class Study(Base):
     etmf_documents: Mapped[list[EtmfDocument]] = relationship(
         back_populates="study", cascade="all, delete-orphan"
     )
+    action_items: Mapped[list[StudyActionItem]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudyActionItem.opened_on"
+    )
 
     __table_args__ = (Index("ux_studies_external", "tenant_id", "source", "external_id", unique=True),)
 
@@ -139,6 +142,34 @@ class EtmfDocument(Base):
     version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     study: Mapped[Study] = relationship(back_populates="etmf_documents")
+
+
+class StudyActionItem(Base):
+    """A read-only copy of one SimpleTrials action item, shown as an issue "From SimpleTrials"."""
+
+    __tablename__ = "study_action_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    subcategory: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    site_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignee: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opened_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="action_items")
 
 
 class ConnectorSync(Base):

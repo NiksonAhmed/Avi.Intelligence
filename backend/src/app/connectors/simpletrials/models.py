@@ -73,6 +73,29 @@ class EtmfDocumentRecord(BaseModel):
     version: str | None = None
 
 
+class ActionItemRecord(BaseModel):
+    """One SimpleTrials action item (e.g. a site visit follow-up), shown as a read-only issue.
+
+    Kept: number, category, priority, status, site, dates, description, response and the assignee's
+    display name. Not kept: user ids. Unblinded and inactive items are never read."""
+
+    external_id: str
+    number: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    priority: str | None = None
+    status: str | None = None
+    closed: bool = False
+    site_number: str | None = None
+    site_name: str | None = None
+    description: str | None = None
+    response: str | None = None
+    assignee: str | None = None
+    opened_on: date | None = None
+    due_on: date | None = None
+    closed_on: date | None = None
+
+
 class StudyRecord(BaseModel):
     external_id: str
     protocol_number: str
@@ -92,6 +115,8 @@ class StudyRecord(BaseModel):
     milestones: list[MilestoneRecord] = Field(default_factory=list)
     documents: list[EtmfDocumentRecord] | None = None
     """eTMF document metadata; None when it could not be read (the previous copy is kept)."""
+    action_items: list[ActionItemRecord] | None = None
+    """SimpleTrials action items; None when they could not be read (the previous copy is kept)."""
 
 
 class StudyConnectorInfo(BaseModel):

@@ -95,6 +95,7 @@ class TestSync:
             "updated": len(changed),
             "no_longer_in_source": 1,
             "etmf_documents": 0,
+            "action_items": 0,
             "completions_recorded": 0,  # already recorded by the first sync
             "snapshot_taken": False,  # one snapshot per day
         }
@@ -373,3 +374,24 @@ def test_people_directory(client: TestClient) -> None:
 
 def test_mock_connector_info() -> None:
     assert MockStudyConnector("x").info().mode == "mock"
+
+
+def test_simpletrials_action_items_show_as_read_only_issues(make_client) -> None:  # type: ignore[no-untyped-def]
+    viewer = make_client(Role.VIEWER)
+    viewer.get("/api/v1/studies")  # the first visit syncs the (demo) studies
+    body = viewer.get("/api/v1/risks").json()
+    issues = body["simpletrials_issues"]
+    assert len(issues) == 2  # the closed demo item is hidden by default
+    first = issues[0]
+    assert first["days_overdue"] == 6 and first["priority"] == "High" and first["site_number"] == "101"
+    assert first["study"]["protocol_number"] == "DEMO-ONC-301" and first["assignee"] == "Demo CRA"
+    assert issues[1]["days_overdue"] is None
+    closed = viewer.get("/api/v1/risks", params={"include_closed": "true"}).json()["simpletrials_issues"]
+    assert len(closed) == 3 and closed[-1]["closed"] is True
+    assert viewer.get("/api/v1/risks", params={"kind": "risk"}).json()["simpletrials_issues"] == []
+    assert len(viewer.get("/api/v1/risks", params={"kind": "issue"}).json()["simpletrials_issues"]) == 2
+    assert viewer.get("/api/v1/risks", params={"owner": "me"}).json()["simpletrials_issues"] == []
+    other = next(
+        s for s in viewer.get("/api/v1/studies").json()["studies"] if s["protocol_number"] != "DEMO-ONC-301"
+    )
+    assert viewer.get("/api/v1/risks", params={"study_id": other["id"]}).json()["simpletrials_issues"] == []

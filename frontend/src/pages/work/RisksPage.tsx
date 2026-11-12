@@ -8,6 +8,7 @@ import type { Risk, RiskKind } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { RiskFormModal } from '../../components/work/RiskFormModal'
 import { RiskTable } from '../../components/work/RiskTable'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 
 const SCORE_RULE =
   'Score: likelihood × impact as entered by the risk owner (1 = low, 3 = high). 6 or more is High, 3–4 Medium, 1–2 Low.'
@@ -88,6 +89,11 @@ export function RisksPage() {
           scoreRule={SCORE_RULE}
         />
       </Card>
+      {kind !== 'risk' && !mine && (
+        <Card style={{ marginTop: 16 }}>
+          <SimpleTrialsIssues issues={data?.simpletrials_issues ?? []} loading={isLoading} showStudy />
+        </Card>
+      )}
       <RiskFormModal open={modal.open} risk={modal.risk} onClose={() => setModal({ open: false })} />
     </>
   )

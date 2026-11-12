@@ -28,6 +28,7 @@ import { PlanTable } from '../../components/PlanTable'
 import { StudySourceBanner } from '../../components/StudySourceBanner'
 import { RiskFormModal } from '../../components/work/RiskFormModal'
 import { RiskTable } from '../../components/work/RiskTable'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 import { TaskFormModal } from '../../components/work/TaskFormModal'
 import { TaskTable } from '../../components/work/TaskTable'
 import { formatDateTime, formatDay } from '../../lib/format'
@@ -288,6 +289,9 @@ export function StudyCommandCentrePage() {
                     emptyText="No open risks or issues for this study."
                     scoreRule={rules.risk_score}
                   />
+                  <div style={{ marginTop: 20 }}>
+                    <SimpleTrialsIssues issues={risks.data?.simpletrials_issues ?? []} loading={risks.isLoading} />
+                  </div>
                 </>
               ),
             },

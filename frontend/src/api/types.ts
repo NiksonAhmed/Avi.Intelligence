@@ -511,10 +511,34 @@ export interface Risk {
   can_update_status: boolean
 }
 
+/** A SimpleTrials action item shown as a read-only issue (managed in SimpleTrials). */
+export interface SimpleTrialsIssue {
+  id: string
+  number: string | null
+  study: StudyRef
+  site_number: string | null
+  site_name: string | null
+  category: string | null
+  subcategory: string | null
+  priority: string | null
+  status: string | null
+  closed: boolean
+  description: string | null
+  response: string | null
+  assignee: string | null
+  opened_on: string | null
+  due_on: string | null
+  closed_on: string | null
+  /** Days past the due date for open items; null when not overdue. */
+  days_overdue: number | null
+}
+
 export interface RiskListResponse {
   risks: Risk[]
   can_manage: boolean
   statuses: RiskStatus[]
+  /** Read-only issues from SimpleTrials; empty when filtering by owner or by risks. */
+  simpletrials_issues?: SimpleTrialsIssue[]
 }
 
 export interface RiskFilters {

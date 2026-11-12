@@ -33,7 +33,15 @@ from app.connectors.sharepoint import get_sop_connector
 from app.connectors.sharepoint.models import DocumentKind, SopConnector, SopStatus
 from app.db.session import get_db
 from app.studies.clock import today
-from app.studies.models import Risk, Study, StudyMilestone, Task, TaskAssignee, TaskDocument
+from app.studies.models import (
+    Risk,
+    Study,
+    StudyActionItem,
+    StudyMilestone,
+    Task,
+    TaskAssignee,
+    TaskDocument,
+)
 from app.studies.rules import (
     TASK_CATEGORY_LABELS,
     TASK_CLOSED,
@@ -730,10 +738,35 @@ class RiskOut(BaseModel):
     can_update_status: bool
 
 
+class SimpleTrialsIssueOut(BaseModel):
+    """A SimpleTrials action item shown as a read-only issue (managed in SimpleTrials, not here)."""
+
+    id: str
+    number: str | None
+    study: StudyRef
+    site_number: str | None
+    site_name: str | None
+    category: str | None
+    subcategory: str | None
+    priority: str | None
+    status: str | None
+    closed: bool
+    description: str | None
+    response: str | None
+    assignee: str | None
+    opened_on: date | None
+    due_on: date | None
+    closed_on: date | None
+    days_overdue: int | None
+    """Calendar days past the due date, for open items (None when not overdue)."""
+
+
 class RiskListResponse(BaseModel):
     risks: list[RiskOut]
     can_manage: bool
     statuses: list[str]
+    simpletrials_issues: list[SimpleTrialsIssueOut] = []
+    """Read-only issues from SimpleTrials (action items); empty when filtering by owner or by risks."""
 
 
 class RiskCreate(BaseModel):
@@ -827,6 +860,54 @@ def list_risks(
         risks=[_risk_out(r, user) for r in risks],
         can_manage=user.can(Permission.WORK_MANAGE),
         statuses=[s.value for s in RiskStatus],
+        simpletrials_issues=(
+            []
+            if owner or kind == RiskKind.RISK
+            else _simpletrials_issues(db, user.tenant_id, study_id, include_closed)
+        ),
+    )
+
+
+def _simpletrials_issues(
+    db: Session, tenant_id: str, study_id: str | None, include_closed: bool
+) -> list[SimpleTrialsIssueOut]:
+    """SimpleTrials action items as read-only issues: overdue first, then by due date."""
+    query = (
+        select(StudyActionItem)
+        .join(Study)
+        .where(Study.tenant_id == tenant_id, Study.in_source.is_(True))
+        .options(joinedload(StudyActionItem.study))
+    )
+    if study_id:
+        query = query.where(StudyActionItem.study_id == study_id)
+    if not include_closed:
+        query = query.where(StudyActionItem.closed.is_(False))
+    now = today()
+    out = [
+        SimpleTrialsIssueOut(
+            id=a.id,
+            number=a.number,
+            study=StudyRef(id=a.study.id, protocol_number=a.study.protocol_number, title=a.study.title),
+            site_number=a.site_number,
+            site_name=a.site_name,
+            category=a.category,
+            subcategory=a.subcategory,
+            priority=a.priority,
+            status=a.status,
+            closed=a.closed,
+            description=a.description,
+            response=a.response,
+            assignee=a.assignee,
+            opened_on=a.opened_on,
+            due_on=a.due_on,
+            closed_on=a.closed_on,
+            days_overdue=(now - a.due_on).days if a.due_on and not a.closed and a.due_on < now else None,
+        )
+        for a in db.scalars(query)
+    ]
+    return sorted(
+        out,
+        key=lambda i: (i.closed, -(i.days_overdue or 0), i.due_on or date.max, i.study.protocol_number),
     )
 
 

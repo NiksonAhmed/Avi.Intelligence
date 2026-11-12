@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from .api_client import SimpleTrialsClient, SimpleTrialsError
-from .mapping import map_documents, map_study
+from .mapping import map_action_items, map_documents, map_study
 from .models import StudyConnectorInfo, StudyRecord
 
 log = logging.getLogger("simpletrials")
@@ -42,5 +42,11 @@ class ApiStudyConnector:
                 )
             except SimpleTrialsError as exc:
                 log.warning("simpletrials.documents_unavailable", extra={"status": exc.status})
+            try:  # read-only issues for Risks and Issues; must not stop the study sync either
+                record.action_items = map_action_items(
+                    await self._client.list_all("action_items", "action_items", params)
+                )
+            except SimpleTrialsError as exc:
+                log.warning("simpletrials.action_items_unavailable", extra={"status": exc.status})
             records.append(record)
         return records

@@ -255,3 +255,46 @@ describe('study helpers', () => {
     expect(taskBucket(null, false, today)).toBe('later')
   })
 })
+
+describe('Risks and Issues', () => {
+  const issue = {
+    id: 'a1',
+    number: '1',
+    study: { id: study.id, protocol_number: 'DEMO-ONC-301', title: 'Demo study' },
+    site_number: '101',
+    site_name: 'Demo Hospital North',
+    category: 'Site',
+    subcategory: 'Site Visit',
+    priority: 'High',
+    status: 'New',
+    closed: false,
+    description: 'Demo: chase missing ISF delegation log signatures',
+    response: null,
+    assignee: 'Demo CRA',
+    opened_on: '2026-10-23',
+    due_on: '2026-11-06',
+    closed_on: null,
+    days_overdue: 6,
+  }
+
+  it('shows SimpleTrials action items as read-only issues, with overdue days', async () => {
+    mockApi({ '/me': viewerUser, '/risks': { risks: [], can_manage: false, statuses: [], simpletrials_issues: [issue] } })
+    renderRoute('/risks')
+    const table = await screen.findByTestId('simpletrials-issues')
+    expect(table).toHaveTextContent('From SimpleTrials')
+    expect(table).toHaveTextContent('Read-only')
+    const row = await screen.findByTestId('simpletrials-issue-row')
+    expect(row).toHaveTextContent('DEMO-ONC-301')
+    expect(row).toHaveTextContent('101 · Demo Hospital North')
+    expect(row).toHaveTextContent('Demo: chase missing ISF delegation log signatures')
+    expect(row).toHaveTextContent('Demo CRA')
+    expect(screen.getByTestId('simpletrials-issue-overdue')).toHaveTextContent('6 days overdue')
+  })
+
+  it('hides SimpleTrials issues when showing risks only or my own', async () => {
+    mockApi({ '/me': viewerUser, '/risks': { risks: [], can_manage: false, statuses: [], simpletrials_issues: [] } })
+    renderRoute('/risks?kind=risk')
+    expect(await screen.findByText('No open risks or issues.')).toBeInTheDocument()
+    expect(screen.queryByTestId('simpletrials-issues')).not.toBeInTheDocument()
+  })
+})

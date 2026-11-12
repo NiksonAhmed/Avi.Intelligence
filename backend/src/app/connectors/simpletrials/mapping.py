@@ -15,6 +15,10 @@ Field choices (verified against the Sandbox study, Nov 2026):
     Superseded versions (another record's precursor_id) and attachments of other records
     (parent_type set, e.g. payments) are left out. File names, URLs, descriptions and user ids are
     not kept.
+  * Action items (/action_items): number, category_display / subcategory_display, priority_display,
+    status, site_number / site_display_name, opened_on / due_on / closed_on, description, response and
+    assigned_to_display_name. Closed when closed_on is set or the status says so. Unblinded and
+    inactive items are left out; user ids are not kept.
 Nothing is inferred beyond this; missing values stay empty.
 """
 
@@ -24,7 +28,7 @@ import re
 from datetime import date
 from typing import Any
 
-from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyRecord
+from .models import ActionItemRecord, EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyRecord
 
 
 def as_int(value: Any) -> int | None:
@@ -255,6 +259,43 @@ def map_documents(docs: list[dict[str, Any]]) -> list[EtmfDocumentRecord]:
                 expires_on=as_date(d.get("expires_on")),
                 expired=str(d.get("expiration_status") or "").lower() == "expired",
                 version=_text(d.get("doc_version"), 32),
+            )
+        )
+    return records
+
+
+CLOSED_STATUSES = {"closed", "complete", "completed", "resolved", "done", "cancelled", "canceled"}
+
+
+def _label(value: Any, limit: int = 64) -> str | None:
+    text = _text(value, limit)
+    return text.replace("_", " ").capitalize() if text and text.islower() else text
+
+
+def map_action_items(items: list[dict[str, Any]]) -> list[ActionItemRecord]:
+    records: list[ActionItemRecord] = []
+    for a in items:
+        if a.get("id") is None or a.get("active") is False or a.get("unblinded") is True:
+            continue  # unblinded items must never reach blinded staff
+        status = _text(a.get("status_display") or a.get("status"), 64)
+        closed_on = as_date(a.get("closed_on"))
+        records.append(
+            ActionItemRecord(
+                external_id=str(a["id"]),
+                number=_text(str(a["number"]) if a.get("number") is not None else None, 32),
+                category=_label(a.get("category_display") or a.get("category")),
+                subcategory=_label(a.get("subcategory_display") or a.get("subcategory")),
+                priority=_label(a.get("priority_display") or a.get("priority"), 32),
+                status=_label(status),
+                closed=closed_on is not None or (status or "").lower() in CLOSED_STATUSES,
+                site_number=_text(a.get("site_number"), 64),
+                site_name=_text(a.get("site_display_name"), 255),
+                description=_text(a.get("description"), 2000),
+                response=_text(a.get("response"), 2000),
+                assignee=_text(a.get("assigned_to_display_name"), 255),
+                opened_on=as_date(a.get("opened_on")) or as_date(a.get("created_at")),
+                due_on=as_date(a.get("due_on")),
+                closed_on=closed_on,
             )
         )
     return records

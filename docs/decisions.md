@@ -2,6 +2,28 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-12: SimpleTrials action items as read-only issues; protocol deviations (DM Step 4)
+
+**What the SimpleTrials API offers (probed read-only with the sandbox study key, field names only).**
+`protocol_deviations` exists but the sandbox study has none yet, so its fields are unknown. There is no
+risk or issue register endpoint (16 likely names return 404). `action_items` (site/visit follow-ups),
+`site_visits`, `events` and `visit_reports` exist.
+
+**Decisions (user, 12 Nov 2026).**
+- Risks and Issues pulls SimpleTrials **action items as read-only issues**, labelled "From SimpleTrials",
+  next to Avi.Intelligence's own risks register (which is unchanged). They are edited only in
+  SimpleTrials and refresh with the hourly SimpleTrials sync. Shown on the Risks and Issues page and on
+  each study's Risks and issues tab; hidden when filtering to risks only or "Owned by me" (assignees are
+  SimpleTrials users, not Avi.Intelligence people).
+- Kept per action item: number, category, sub-category, priority, status, site, opened / due / closed
+  dates, description, response and the assignee's display name. Not kept: user ids. **Unblinded and
+  inactive items are never read** (unblinded content must not reach blinded staff). Overdue = open and
+  past the due date (calendar days). If action items cannot be read, the study still syncs and the
+  previous copy is kept.
+- **Protocol deviations:** the user adds 2–3 test deviations in the SimpleTrials sandbox study; their
+  field names (no values) are then read and the Deviations view is built on the real shape.
+- First sandbox sync: 3 action items (all site 1001, Site Visit, status New), all overdue (212–287 days).
+
 ## 2026-11-11: Data Management (Viedoc) as a self-contained module (agreed before any code)
 
 - User decision: build Data Management **inside Avi.Intelligence**, not as separate software, but keep its

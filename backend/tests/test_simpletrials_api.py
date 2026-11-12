@@ -16,6 +16,7 @@ from app.connectors.simpletrials.api_client import SimpleTrialsClient, SimpleTri
 from app.connectors.simpletrials.live import ApiStudyConnector
 from app.connectors.simpletrials.mapping import (
     as_int,
+    map_action_items,
     map_documents,
     map_plan,
     map_site,
@@ -196,6 +197,25 @@ DOCUMENTS: list[dict[str, Any]] = [
     {"id": 5, "active": False, "placeholder": True, "document_path": "Sandbox Study/02. Other"},
     {"id": 6, "active": True, "placeholder": True, "document_path": "", "title": "Loose document"},
 ]
+
+
+ACTIONS = [
+    {
+        "id": 11, "number": 1, "active": True, "unblinded": False, "category": "site",
+        "category_display": "Site", "subcategory": "site_visit", "subcategory_display": "Site Visit",
+        "priority": "high", "priority_display": "High", "status": "new", "site_number": "1001",
+        "site_display_name": "Sandbox Clinic", "description": "Collect   the missing\nlog", "response": None,
+        "assigned_to_display_name": "Smith, Alex", "assigned_to_id": 991, "opened_by_id": 992,
+        "opened_on": "2026-10-01", "due_on": "2026-10-15", "closed_on": None,
+        "created_at": "2026-10-01T09:00:00.000+00:00",
+    },
+    {
+        "id": 12, "number": 2, "active": True, "unblinded": False, "category": "study", "status": "closed",
+        "priority": "normal", "closed_on": "2026-10-20", "opened_on": "2026-10-02", "description": "Done",
+    },
+    {"id": 13, "number": 3, "active": True, "unblinded": True, "status": "new", "description": "Unblinded"},
+    {"id": 14, "number": 4, "active": False, "status": "new", "description": "Deleted"},
+]  # fmt: skip
 
 
 class FakeApi:
@@ -387,17 +407,21 @@ class TestConnector:
             "sites",
             "tasks",
             "documents",
+            "action_items",
         ]
         assert connector.info().mode == "api" and connector.info().scope == "study"
-        # No eTMF access (404 here): the study still syncs and the previous eTMF copy is kept.
-        assert records[0].documents is None
+        # No eTMF or action item access (404 here): the study still syncs; previous copies are kept.
+        assert records[0].documents is None and records[0].action_items is None
 
     def test_reads_etmf_metadata_and_never_patient_data(self) -> None:
-        api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS, "documents": DOCUMENTS})
+        api = FakeApi(
+            {"study": STUDY, "sites": SITES, "tasks": TASKS, "documents": DOCUMENTS, "action_items": ACTIONS}
+        )
         records = asyncio.run(ApiStudyConnector(api.client()).fetch_studies())
         assert records[0].documents is not None and len(records[0].documents) == 3
+        assert records[0].action_items is not None and len(records[0].action_items) == 2
         paths = {r.url.path.rsplit("/", 1)[-1] for r in api.requests}
-        assert "subjects" not in paths and paths <= {"study", "sites", "tasks", "documents"}
+        assert "subjects" not in paths and paths <= {"study", "sites", "tasks", "documents", "action_items"}
 
     def test_workspace_scope_lists_studies(self) -> None:
         api = FakeApi(
@@ -487,3 +511,22 @@ def test_map_documents() -> None:
         and "smith" not in str(site.model_dump())
     )
     assert docs["6"].section == "Unfiled" and docs["6"].name == "Loose document"
+
+
+def test_map_action_items() -> None:
+    items = {a.external_id: a for a in map_action_items(ACTIONS)}
+    assert set(items) == {"11", "12"}  # unblinded and inactive items are never read
+    first = items["11"]
+    assert (first.number, first.category, first.subcategory, first.priority, first.status) == (
+        "1",
+        "Site",
+        "Site Visit",
+        "High",
+        "New",
+    )
+    assert (first.site_number, first.site_name, first.assignee) == ("1001", "Sandbox Clinic", "Smith, Alex")
+    assert first.description == "Collect the missing log" and first.closed is False
+    assert (first.opened_on, first.due_on) == (date(2026, 10, 1), date(2026, 10, 15))
+    assert "991" not in str(first.model_dump())  # user ids are not kept
+    done = items["12"]
+    assert done.closed is True and done.closed_on == date(2026, 10, 20) and done.category == "Study"
