@@ -18,7 +18,15 @@ from app.core.logging import redact
 from app.reports.history import record_completions, take_daily_snapshot
 
 from .clock import today
-from .models import ConnectorSync, EtmfDocument, Study, StudyActionItem, StudyMilestone, StudySite
+from .models import (
+    ConnectorSync,
+    EtmfDocument,
+    Study,
+    StudyActionItem,
+    StudyDeviation,
+    StudyMilestone,
+    StudySite,
+)
 
 log = logging.getLogger("studies.sync")
 
@@ -51,7 +59,7 @@ async def sync_studies(
         s.external_id: s
         for s in db.scalars(select(Study).where(Study.tenant_id == tenant_id, Study.source == source))
     }
-    created = updated = documents = action_items = 0
+    created = updated = documents = action_items = deviations = 0
     seen: set[str] = set()
     for rec in records:
         seen.add(rec.external_id)
@@ -85,6 +93,9 @@ async def sync_studies(
         if rec.action_items is not None:  # None: not readable this time, keep the previous copy
             study.action_items = [StudyActionItem(**a.model_dump()) for a in rec.action_items]
             action_items += len(rec.action_items)
+        if rec.deviations is not None:  # None: not readable this time, keep the previous copy
+            study.deviations = [StudyDeviation(**d.model_dump()) for d in rec.deviations]
+            deviations += len(rec.deviations)
 
     flagged = 0
     for ext_id, study in existing.items():
@@ -101,6 +112,7 @@ async def sync_studies(
         "no_longer_in_source": flagged,
         "etmf_documents": documents,
         "action_items": action_items,
+        "deviations": deviations,
     }
     db.commit()
     # Report history: completion dates and the daily snapshot (both read-only derivations).

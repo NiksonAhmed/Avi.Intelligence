@@ -762,6 +762,49 @@ export interface EtmfReport {
   source: ReportSource
 }
 
+export interface DeviationCount {
+  key: string
+  label: string
+  count: number
+  open: number
+}
+
+export interface DeviationRow {
+  id: string
+  number: string | null
+  protocol_number: string
+  where: string
+  category: string
+  severity: string
+  status: string
+  closed: boolean
+  description: string | null
+  subject_level: boolean
+  occurred_on: string | null
+  identified_on: string | null
+  reported_on: string | null
+  closed_on: string | null
+  reportable: boolean | null
+  days_open: number | null
+  days_to_identify: number | null
+}
+
+/** Protocol deviations report: SimpleTrials deviations (read-only copy; no subject IDs or people). */
+export interface DeviationsReport {
+  tiles: ReportTile[]
+  by_severity: DeviationCount[]
+  by_category: DeviationCount[]
+  by_site: { key: string; label: string; protocol_number: string; total: number; open: number; major: number; enrolled: number | null; per_10: number | null }[]
+  trend: { month: string; critical: number; major: number; minor: number; other: number }[]
+  ageing: DeviationCount[]
+  deviations: DeviationRow[]
+  has_deviations: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
+}
+
 export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'
 
 export interface QualityScheduleRow {

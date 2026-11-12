@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from './client'
 import type {
   ReportFilters,
+  DeviationsReport,
   EtmfReport,
   QualityReport,
   QualityReportFilters,
@@ -285,6 +286,15 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useDeviationsReport(filters: ReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'deviations', filters],
+    queryFn: () =>
+      apiRequest<DeviationsReport>('/reports/deviations', { params: { study_id: filters.study_id, site_id: filters.site_id } }),
     placeholderData: (previous) => previous,
   })
 }

@@ -96,6 +96,32 @@ class ActionItemRecord(BaseModel):
     closed_on: date | None = None
 
 
+class DeviationRecord(BaseModel):
+    """One SimpleTrials protocol deviation (read-only), for the Protocol deviations report.
+
+    No subject IDs or people are kept (no patient-level data from SimpleTrials): only whether the
+    deviation concerns a subject. Unblinded and inactive deviations are never read."""
+
+    external_id: str
+    number: str | None = None
+    site_external_id: str | None = None
+    site_number: str | None = None
+    site_name: str | None = None
+    category: str | None = None
+    severity: str | None = None
+    """Normalised: Critical, Major, Minor, or SimpleTrials' own wording; None when not classified."""
+    status: str | None = None
+    closed: bool = False
+    description: str | None = None
+    subject_level: bool = False
+    occurred_on: date | None = None
+    identified_on: date | None = None
+    reported_on: date | None = None
+    closed_on: date | None = None
+    reportable: bool | None = None
+    """Reportable to the ethics committee / IRB, when SimpleTrials records it."""
+
+
 class StudyRecord(BaseModel):
     external_id: str
     protocol_number: str
@@ -117,6 +143,8 @@ class StudyRecord(BaseModel):
     """eTMF document metadata; None when it could not be read (the previous copy is kept)."""
     action_items: list[ActionItemRecord] | None = None
     """SimpleTrials action items; None when they could not be read (the previous copy is kept)."""
+    deviations: list[DeviationRecord] | None = None
+    """SimpleTrials protocol deviations; None when they could not be read (the previous copy is kept)."""
 
 
 class StudyConnectorInfo(BaseModel):

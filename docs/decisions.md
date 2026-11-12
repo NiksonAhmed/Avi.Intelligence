@@ -20,8 +20,19 @@ risk or issue register endpoint (16 likely names return 404). `action_items` (si
   inactive items are never read** (unblinded content must not reach blinded staff). Overdue = open and
   past the due date (calendar days). If action items cannot be read, the study still syncs and the
   previous copy is kept.
-- **Protocol deviations:** the user adds 2–3 test deviations in the SimpleTrials sandbox study; their
-  field names (no values) are then read and the Deviations view is built on the real shape.
+- **Protocol deviations (user: "add protocol deviation pull as report dashboard"):** a **Protocol
+  deviations** tab in Reports and Insights, from SimpleTrials `protocol_deviations`, synced with the
+  studies (hourly; if they cannot be read the study still syncs and the previous copy is kept). Tiles
+  (total, open, major or critical, per 10 enrolled subjects, median days to identify), by severity, by
+  category, monthly trend by severity, ageing of open deviations, sites by rate, and the full list;
+  study/site filters, Excel and PDF like the other reports.
+- Kept per deviation: number, site, category, severity (normalised to Critical / Major / Minor, keeping
+  SimpleTrials' wording otherwise), status, description, dates (occurred, identified, reported, closed),
+  reportable to ethics, and only *whether* it concerns a subject. **No subject IDs and no people**
+  (no patient-level data from SimpleTrials). Unblinded and inactive records are never read.
+- **Field names are not yet verified**: the sandbox study has no deviations, so each field is read from
+  SimpleTrials' usual name variants (`map_deviations`). The user adds 2–3 test deviations in the sandbox;
+  then the real field names are checked (names only) and the mapping is tightened.
 - First sandbox sync: 3 action items (all site 1001, Site Visit, status New), all overdue (212–287 days).
 
 ## 2026-11-11: Data Management (Viedoc) as a self-contained module (agreed before any code)

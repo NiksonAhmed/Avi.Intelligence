@@ -12,6 +12,7 @@ from app.studies.clock import today as app_today
 
 from .models import (
     ActionItemRecord,
+    DeviationRecord,
     EtmfDocumentRecord,
     MilestoneRecord,
     SiteRecord,
@@ -227,7 +228,7 @@ class MockStudyConnector:
         return StudyConnectorInfo(mode="mock", mock_reason=self._reason)
 
     async def fetch_studies(self) -> list[StudyRecord]:
-        return with_demo_action_items(with_demo_documents(demo_studies()))
+        return with_demo_deviations(with_demo_action_items(with_demo_documents(demo_studies())))
 
 
 # Demo eTMF structure: (section, folder, document name, expires).
@@ -364,4 +365,52 @@ def with_demo_action_items(studies: list[StudyRecord], today: date | None = None
     first.action_items = items
     for other in studies[1:]:
         other.action_items = []
+    return studies
+
+
+# Demo protocol deviations: (study index, site index, category, severity, description, occurred days ago,
+# identified days after, closed days ago or None, subject level).
+_DEVIATIONS: list[tuple[int, int, str, str, str, int, int, int | None, bool]] = [
+    (0, 0, "Visit schedule", "Minor", "Demo: Day 7 visit outside the window", 150, 3, 120, True),
+    (0, 0, "Informed consent", "Major", "Demo: re-consent to amendment 1 not obtained", 95, 10, None, True),
+    (0, 0, "Procedures", "Minor", "Demo: ECG not done at screening", 60, 2, 40, True),
+    (0, 1, "Eligibility", "Major", "Demo: enrolled with an exclusion lab value", 45, 20, None, True),
+    (0, 1, "Visit schedule", "Minor", "Demo: Day 1 visit one day late", 30, 1, None, True),
+    (0, 1, "Investigational product", "Critical", "Demo: IP stored too warm", 12, 1, None, False),
+    (1, 0, "Procedures", "Minor", "Demo: vital signs taken after dosing", 70, 5, 50, True),
+    (1, 0, "Visit schedule", "Minor", "Demo: unscheduled visit not recorded", 20, 4, None, True),
+]  # fmt: skip
+
+
+def with_demo_deviations(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo protocol deviations to the first two studies."""
+    t = today or app_today()
+    for study in studies:
+        study.deviations = []
+    for n, (si, site_i, category, severity, text, ago, found, closed, subject) in enumerate(_DEVIATIONS, 1):
+        if si >= len(studies):
+            continue
+        study = studies[si]
+        site = study.sites[site_i] if site_i < len(study.sites) else None
+        assert study.deviations is not None
+        study.deviations.append(
+            DeviationRecord(
+                external_id=f"{study.external_id}-PD{n}",
+                number=f"PD-{n:03d}",
+                site_external_id=site.external_id if site else None,
+                site_number=site.site_number if site else None,
+                site_name=site.name if site else None,
+                category=category,
+                severity=severity,
+                status="Closed" if closed is not None else "Open",
+                closed=closed is not None,
+                description=text,
+                subject_level=subject,
+                occurred_on=_d(t, -ago),
+                identified_on=_d(t, -ago + found),
+                reported_on=_d(t, -ago + found + 2),
+                closed_on=_d(t, -closed) if closed is not None else None,
+                reportable=severity in ("Major", "Critical"),
+            )
+        )
     return studies

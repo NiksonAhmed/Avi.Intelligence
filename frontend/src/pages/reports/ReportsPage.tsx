@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router'
 import type { ReportFilters, TaskCategory } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { CHANGE_PERIODS } from '../../lib/reports'
+import { DeviationsTab } from './DeviationsTab'
 import { EtmfTab } from './EtmfTab'
 import { QualityTab } from './QualityTab'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
@@ -14,6 +15,7 @@ const TABS = [
   { key: 'work', label: 'Work management' },
   { key: 'quality', label: 'Quality (SOPs)' },
   { key: 'etmf', label: 'eTMF' },
+  { key: 'deviations', label: 'Protocol deviations' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -41,7 +43,7 @@ export function ReportsPage() {
     <>
       <PageHeader
         title="Reports and Insights"
-        subtitle="How studies, work, SOPs and the eTMF are tracking. Hover a chart for exact numbers."
+        subtitle="How studies, work, SOPs, the eTMF and protocol deviations are tracking. Hover a chart for exact numbers."
       />
       <Tabs
         className="no-print"
@@ -67,6 +69,8 @@ export function ReportsPage() {
           }}
           onFilters={(f) => update({ department: f.department, months: f.months ? String(f.months) : undefined })}
         />
+      ) : tab === 'deviations' ? (
+        <DeviationsTab filters={filters} onFilters={(f) => update({ study: f.study_id, site: f.site_id })} />
       ) : (
         <EtmfTab filters={filters} onFilters={(f) => update({ study: f.study_id, site: f.site_id })} />
       )}

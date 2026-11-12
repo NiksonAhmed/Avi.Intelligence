@@ -21,6 +21,7 @@ from app.connectors.sharepoint.models import SopConnector
 from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector
 from app.db.session import get_db
+from app.reports.deviations import Deviations, build_deviations
 from app.reports.etmf import Etmf, build_etmf
 from app.reports.excel import Sheet, build_workbook
 from app.reports.history import snapshot_days
@@ -665,6 +666,121 @@ async def etmf_export(
         request=request,
     )
     name = f"eTMF {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# --- Protocol deviations ---
+
+
+class DeviationsResponse(Deviations):
+    source: ReportSource
+
+
+async def _deviations(
+    db: Session, connector: StudyConnector, user: CurrentUser, study_id: str | None, site_id: str | None
+) -> DeviationsResponse:
+    await ensure_synced(db, connector, user.tenant_id)
+    source = current_source_label(connector)
+    studies = list(
+        db.scalars(
+            select(Study)
+            .where(Study.tenant_id == user.tenant_id, Study.source == source, Study.in_source.is_(True))
+            .options(selectinload(Study.sites), selectinload(Study.deviations))
+            .order_by(Study.protocol_number)
+        )
+    )
+    report = build_deviations(studies, today(), study_id=study_id, site_id=site_id)
+    info = study_source(db, connector, user.tenant_id)
+    return DeviationsResponse(
+        **report.model_dump(),
+        source=ReportSource(
+            mode=info.connector.mode,
+            as_of=info.last_successful_sync_at,
+            sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+            snapshot_days=0,
+        ),
+    )
+
+
+@router.get("/deviations", response_model=DeviationsResponse)
+async def deviations(
+    db: Db, connector: Connector, user: Reader, study_id: IdParam = None, site_id: IdParam = None
+) -> DeviationsResponse:
+    return await _deviations(db, connector, user, study_id, site_id)
+
+
+@router.get("/deviations/export.xlsx")
+async def deviations_export(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    site_id: IdParam = None,
+) -> Response:
+    r = await _deviations(db, connector, user, study_id, site_id)
+
+    def yes_no(v: bool | None) -> str:
+        return "" if v is None else ("Yes" if v else "No")
+
+    sheets = [
+        Sheet(
+            "Deviations",
+            ["No.", "Study", "Site", "Category", "Severity", "Status", "Description", "Subject level",
+             "Occurred", "Identified", "Reported", "Closed", "Days open", "Days to identify", "Reportable"],
+            [[d.number, d.protocol_number, d.where, d.category, d.severity, d.status, d.description,
+              "Yes" if d.subject_level else "No", d.occurred_on, d.identified_on, d.reported_on, d.closed_on,
+              d.days_open, d.days_to_identify, yes_no(d.reportable)] for d in r.deviations],
+        ),
+        Sheet(
+            "By site",
+            ["Study", "Site", "Deviations", "Open", "Major or critical", "Enrolled", "Per 10 enrolled"],
+            [[x.protocol_number, x.label, x.total, x.open, x.major, x.enrolled, x.per_10] for x in r.by_site],
+        ),
+        Sheet(
+            "By category and severity",
+            ["Measure", "Group", "Deviations", "Open"],
+            [["Severity", c.label, c.count, c.open] for c in r.by_severity]
+            + [["Category", c.label, c.count, c.open] for c in r.by_category],
+        ),
+        Sheet(
+            "Monthly trend",
+            ["Month", "Critical", "Major", "Minor", "Other"],
+            [[m.month, m.critical, m.major, m.minor, m.other] for m in r.trend],
+        ),
+    ]  # fmt: skip
+    scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
+    if site_id:
+        scope += f" · site {next((o.label for o in r.site_options if o.id == site_id), '')}"
+    about = [
+        ("Report", "Protocol deviations"),
+        ("Scope", scope),
+        ("Data as of", r.source.as_of.strftime("%d %b %Y %H:%M UTC") if r.source.as_of else "Not yet synced"),
+        (
+            "Source",
+            "SimpleTrials protocol deviations (read-only copy; no subject IDs or people)"
+            if r.source.mode == "api"
+            else "Demo data (SimpleTrials not connected)",
+        ),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="deviations",
+        summary=f"Exported Protocol deviations report to Excel ({scope})",
+        details={"format": "xlsx", "study_id": study_id, "site_id": site_id},
+        request=request,
+    )
+    name = f"Protocol deviations {datetime.now().strftime('%Y-%m-%d')}.xlsx"
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

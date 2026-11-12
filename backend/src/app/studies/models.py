@@ -63,6 +63,9 @@ class Study(Base):
     action_items: Mapped[list[StudyActionItem]] = relationship(
         back_populates="study", cascade="all, delete-orphan", order_by="StudyActionItem.opened_on"
     )
+    deviations: Mapped[list[StudyDeviation]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudyDeviation.occurred_on"
+    )
 
     __table_args__ = (Index("ux_studies_external", "tenant_id", "source", "external_id", unique=True),)
 
@@ -170,6 +173,35 @@ class StudyActionItem(Base):
     closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     study: Mapped[Study] = relationship(back_populates="action_items")
+
+
+class StudyDeviation(Base):
+    """A read-only copy of one SimpleTrials protocol deviation (no subject IDs, no people)."""
+
+    __tablename__ = "study_deviations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    site_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    site_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    severity: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subject_level: Mapped[bool] = mapped_column(Boolean, default=False)
+    occurred_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    identified_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reported_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reportable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="deviations")
 
 
 class ConnectorSync(Base):
