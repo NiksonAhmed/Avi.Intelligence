@@ -335,47 +335,24 @@ class TestTaskPermissions:
         assert study["open_tasks"] == 1
 
 
-class TestRiskPermissions:
-    def _create(self, admin: TestClient, owner: str = "demo-pm-1") -> dict:  # type: ignore[type-arg]
+class TestRisksComeFromSimpleTrialsOnly:
+    """Risks and issues are never raised or edited in Avi.Intelligence (user decision 2026-11-13)."""
+
+    def test_no_one_can_raise_edit_or_change_status(self, admin: TestClient) -> None:
         study = _first_study(admin)
-        res = admin.post(
-            "/api/v1/risks",
-            json={
-                "study_id": study["id"],
-                "kind": "risk",
-                "title": "Slow enrolment at site 102",
-                "likelihood": 3,
-                "impact": 2,
-                "owner_id": owner,
-                "mitigation": "Add a referral site",
-            },
+        body = {"study_id": study["id"], "title": "Slow enrolment", "likelihood": 3, "impact": 2}
+        assert admin.post("/api/v1/risks", json={**body, "owner_id": "demo-pm-1"}).status_code == 405
+        some_id = "00000000-0000-0000-0000-000000000000"
+        assert admin.patch(f"/api/v1/risks/{some_id}", json={"impact": 1}).status_code in (404, 405)
+        assert admin.post(f"/api/v1/risks/{some_id}/status", json={"status": "Closed"}).status_code in (
+            404,
+            405,
         )
-        assert res.status_code == 201, res.text
-        return res.json()  # type: ignore[no-any-return]
 
-    def test_score_and_rating(self, admin: TestClient) -> None:
-        risk = self._create(admin)
-        assert risk["reference"] == "RSK-0001"
-        assert (risk["score"], risk["rating"]) == (6, "High")
-
-    def test_owner_only_status_and_admin_only_edit(self, admin: TestClient, make_client) -> None:  # type: ignore[no-untyped-def]
-        risk = self._create(admin, owner="demo-pm-1")
-        url = f"/api/v1/risks/{risk['id']}/status"
-        assert (
-            make_client(Role.CRA, user_id="demo-cra-1").post(url, json={"status": "Closed"}).status_code
-            == 403
-        )
-        owner = make_client(Role.PROJECT_MANAGER, user_id="demo-pm-1")
-        assert owner.patch(f"/api/v1/risks/{risk['id']}", json={"impact": 1}).status_code == 403
-        res = owner.post(url, json={"status": "Mitigating"})
-        assert res.status_code == 200 and res.json()["status"] == "Mitigating"
-
-    def test_issue_reference_and_invalid_scores(self, admin: TestClient) -> None:
-        study = _first_study(admin)
-        base = {"study_id": study["id"], "title": "Protocol deviation trend", "owner_id": "demo-pm-1"}
-        res = admin.post("/api/v1/risks", json={**base, "kind": "issue", "likelihood": 1, "impact": 1})
-        assert res.json()["reference"] == "ISS-0001"
-        assert admin.post("/api/v1/risks", json={**base, "likelihood": 4, "impact": 1}).status_code == 422
+    def test_open_risk_counts_are_open_simpletrials_issues(self, admin: TestClient) -> None:
+        studies = {s["protocol_number"]: s for s in admin.get("/api/v1/studies").json()["studies"]}
+        assert studies["DEMO-ONC-301"]["open_risks"] == 2  # two open demo action items; one is closed
+        assert all(s["open_risks"] == 0 for p, s in studies.items() if p != "DEMO-ONC-301")
 
 
 def test_people_directory(client: TestClient) -> None:
@@ -399,9 +376,7 @@ def test_simpletrials_action_items_show_as_read_only_issues(make_client) -> None
     assert issues[1]["days_overdue"] is None
     closed = viewer.get("/api/v1/risks", params={"include_closed": "true"}).json()["simpletrials_issues"]
     assert len(closed) == 3 and closed[-1]["closed"] is True
-    assert viewer.get("/api/v1/risks", params={"kind": "risk"}).json()["simpletrials_issues"] == []
-    assert len(viewer.get("/api/v1/risks", params={"kind": "issue"}).json()["simpletrials_issues"]) == 2
-    assert viewer.get("/api/v1/risks", params={"owner": "me"}).json()["simpletrials_issues"] == []
+    assert set(body) == {"simpletrials_issues"}  # no Avi.Intelligence register any more
     other = next(
         s for s in viewer.get("/api/v1/studies").json()["studies"] if s["protocol_number"] != "DEMO-ONC-301"
     )

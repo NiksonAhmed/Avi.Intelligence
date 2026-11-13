@@ -39,11 +39,16 @@ describe('Study Portfolio', () => {
     expect(screen.getByText('Overdue milestones')).toBeInTheDocument()
   })
 
-  it('shows Sync now only to users who manage connectors', async () => {
+  it('shows Sync now to every role with study.sync, and hides it without', async () => {
     mockApi({ '/me': viewerUser, '/studies': makeStudyList([study]) })
-    renderRoute('/portfolio')
+    const { unmount } = renderRoute('/portfolio')
     await screen.findByRole('link', { name: 'DEMO-ONC-301' })
     expect(screen.queryByRole('button', { name: /Sync now/ })).not.toBeInTheDocument()
+    unmount()
+    const viewer = { ...viewerUser, permissions: [...viewerUser.permissions, 'study.sync'] }
+    mockApi({ '/me': viewer, '/studies': makeStudyList([study]) })
+    renderRoute('/portfolio')
+    expect(await screen.findByRole('button', { name: /Sync now/ })).toBeInTheDocument()
   })
 })
 
@@ -58,7 +63,7 @@ describe('Study Command Centre', () => {
       can_create: me === adminUser ? ['study', 'sop', 'vendor', 'system', 'general'] : [],
       statuses: [],
     },
-    '/risks': { risks: [], can_manage: me === adminUser, statuses: [] },
+    '/risks': { simpletrials_issues: [] },
     '/people': [],
   })
 
@@ -204,7 +209,7 @@ describe('Study Command Centre', () => {
   })
 
   it('shows not found for an unknown study', async () => {
-    mockApi({ '/me': adminUser, '/tasks': { tasks: [] }, '/risks': { risks: [] } })
+    mockApi({ '/me': adminUser, '/tasks': { tasks: [] }, '/risks': { simpletrials_issues: [] } })
     renderRoute('/command-centre/00000000-0000-0000-0000-000000000000')
     expect(await screen.findByText('Study not found')).toBeInTheDocument()
   })
@@ -278,7 +283,7 @@ describe('Risks and Issues', () => {
   }
 
   it('shows SimpleTrials action items as read-only issues, with overdue days', async () => {
-    mockApi({ '/me': viewerUser, '/risks': { risks: [], can_manage: false, statuses: [], simpletrials_issues: [issue] } })
+    mockApi({ '/me': viewerUser, '/risks': { simpletrials_issues: [issue] } })
     renderRoute('/risks')
     const table = await screen.findByTestId('simpletrials-issues')
     expect(table).toHaveTextContent('From SimpleTrials')
@@ -291,10 +296,14 @@ describe('Risks and Issues', () => {
     expect(screen.getByTestId('simpletrials-issue-overdue')).toHaveTextContent('6 days overdue')
   })
 
-  it('hides SimpleTrials issues when showing risks only or my own', async () => {
-    mockApi({ '/me': viewerUser, '/risks': { risks: [], can_manage: false, statuses: [], simpletrials_issues: [] } })
-    renderRoute('/risks?kind=risk')
-    expect(await screen.findByText('No open risks or issues.')).toBeInTheDocument()
-    expect(screen.queryByTestId('simpletrials-issues')).not.toBeInTheDocument()
+  it('is read-only: no raising, everyone can sync, and links to the dashboard', async () => {
+    const admin = { ...adminUser, permissions: [...adminUser.permissions, 'study.sync'] }
+    mockApi({ '/me': admin, '/risks': { simpletrials_issues: [] }, '/studies': { studies: [] } })
+    renderRoute('/risks')
+    expect(await screen.findByText('Risks and issues are managed in SimpleTrials')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Sync now/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Raise risk or issue/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Dashboard/ })).toHaveAttribute('href', '/reports?tab=risks')
+    expect(await screen.findByText('No open SimpleTrials action items.')).toBeInTheDocument()
   })
 })

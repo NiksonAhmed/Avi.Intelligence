@@ -2,26 +2,8 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import type { RiskHeatCell, WorkManagementReport } from '../../api/types'
+import type { WorkManagementReport } from '../../api/types'
 import { adminUser, mockApi, renderRoute, viewerUser } from '../../test/utils'
-
-function heatMap(): RiskHeatCell[] {
-  const cells: RiskHeatCell[] = []
-  for (const likelihood of [3, 2, 1]) {
-    for (const impact of [1, 2, 3]) {
-      const score = likelihood * impact
-      cells.push({
-        likelihood,
-        impact,
-        score,
-        rating: score >= 6 ? 'High' : score >= 3 ? 'Medium' : 'Low',
-        risks: likelihood === 3 && impact === 3 ? 2 : 0,
-        issues: likelihood === 3 && impact === 2 ? 1 : 0,
-      })
-    }
-  }
-  return cells
-}
 
 function report(overrides: Partial<WorkManagementReport> = {}): WorkManagementReport {
   return {
@@ -30,7 +12,6 @@ function report(overrides: Partial<WorkManagementReport> = {}): WorkManagementRe
       { key: 'overdue', label: 'Overdue tasks', value: '2', note: 'Past the due date', tone: 'bad' },
       { key: 'due_soon', label: 'Due in the next 14 days', value: '1', note: 'Still open', tone: 'warn' },
       { key: 'completed', label: 'Completed in the last 30 days', value: '1', note: '1 of 1 on time', tone: 'info' },
-      { key: 'high_risks', label: 'Open high risks and issues', value: '3', note: '3 open in all', tone: 'bad' },
     ],
     by_category: [
       { key: 'study', label: 'Study', not_started: 2, in_progress: 1, blocked: 0, overdue: 1, total: 3 },
@@ -55,22 +36,6 @@ function report(overrides: Partial<WorkManagementReport> = {}): WorkManagementRe
         waiting_on: ['Demo CRA Two'],
       },
     ],
-    heat_map: heatMap(),
-    top_risks: [
-      {
-        risk_id: 'r1',
-        reference: 'RSK-0001',
-        kind: 'risk',
-        title: 'Slow recruitment at site 101',
-        protocol_number: 'DEMO-ONC-301',
-        likelihood: 3,
-        impact: 3,
-        score: 9,
-        rating: 'High',
-        owner_name: 'Demo PM One',
-        status: 'Open',
-      },
-    ],
     completed: { total: 1, with_due_date: 1, on_time: 1 },
     study_options: [{ id: '11111111-1111-1111-1111-111111111111', label: 'DEMO-ONC-301 · Oncology study' }],
     category_options: [
@@ -86,8 +51,6 @@ function report(overrides: Partial<WorkManagementReport> = {}): WorkManagementRe
       due_soon: 'Due soon: within 14 days.',
       completed: 'Completed in the last 30 days: the day the last person finished.',
       by_person: "Each person's open parts.",
-      heat_map: 'Score: likelihood × impact.',
-      filters: 'The category filter applies to tasks only.',
     },
     source: { mode: 'mock', as_of: '2026-11-09T00:00:00Z', sandbox_only: false, snapshot_days: 0 },
     ...overrides,
@@ -95,12 +58,13 @@ function report(overrides: Partial<WorkManagementReport> = {}): WorkManagementRe
 }
 
 describe('Work management report', () => {
-  it('shows tiles, tasks by category, study and person, overdue tasks and the heat map', async () => {
+  it('shows tiles, tasks by category, study and person, and overdue tasks', async () => {
     mockApi({ '/me': adminUser, '/reports/work-management': report() })
     renderRoute('/reports?tab=work')
 
     expect(await screen.findByTestId('tile-overdue')).toHaveTextContent('2')
-    expect(screen.getByTestId('tile-high_risks')).toHaveTextContent('3')
+    expect(screen.queryByTestId('tile-high_risks')).not.toBeInTheDocument()
+    expect(screen.queryByText('Risk heat map')).not.toBeInTheDocument()
 
     const cats = screen.getAllByTestId('category-row')
     expect(cats).toHaveLength(2)
@@ -120,12 +84,6 @@ describe('Work management report', () => {
     expect(overdue).toHaveTextContent('TSK-0001 · Chase ethics approval')
     expect(overdue).toHaveTextContent('Waiting on Demo CRA Two')
     expect(within(overdue).getByText('5 days late')).toBeInTheDocument()
-
-    expect(screen.getByTestId('heat-3-3')).toHaveTextContent('2')
-    expect(screen.getByTestId('heat-3-3')).toHaveTextContent('2 risks')
-    expect(screen.getByTestId('heat-3-2')).toHaveTextContent('1 issue')
-    expect(screen.getByTestId('heat-1-1')).toHaveTextContent('Low · 1')
-    expect(screen.getByText('High · 9')).toBeInTheDocument()
   })
 
   it('filters by category, hides the study chart for other categories and updates the Excel link', async () => {
@@ -150,12 +108,11 @@ describe('Work management report', () => {
   it('says so when nothing is overdue or open', async () => {
     mockApi({
       '/me': adminUser,
-      '/reports/work-management': report({ overdue: [], by_person: [], top_risks: [] }),
+      '/reports/work-management': report({ overdue: [], by_person: [] }),
     })
     renderRoute('/reports?tab=work')
     expect(await screen.findByText('No overdue tasks in this selection.')).toBeInTheDocument()
     expect(screen.getByText('Nobody has open tasks in this selection.')).toBeInTheDocument()
-    expect(screen.getByText('No open risks or issues.')).toBeInTheDocument()
   })
 
   it('refreshes the live figures with Sync now', async () => {

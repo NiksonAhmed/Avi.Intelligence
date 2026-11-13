@@ -21,18 +21,15 @@ test('Study delivery report: figures, filter by study and Excel export', async (
   expect(download.suggestedFilename()).toMatch(/^Study delivery \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
 
-test('Work management report: overdue task, person and risk heat map', async ({ page }, testInfo) => {
+test('Work management report: overdue task and person', async ({ page }, testInfo) => {
   const title = `E2E return temperature loggers (${testInfo.project.name})`
-  const studies = (await (await page.request.get('/api/v1/studies')).json()) as { studies: { id: string }[] }
   const due = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const task = await page.request.post('/api/v1/tasks', {
     data: { category: 'vendor', subject_name: 'E2E Courier Ltd', title, assignee_ids: ['demo-dm-1'], due_date: due },
   })
   expect(task.status()).toBe(201)
-  const risk = await page.request.post('/api/v1/risks', {
-    data: { study_id: studies.studies[0]!.id, kind: 'risk', title: 'E2E courier delays', likelihood: 3, impact: 3, owner_id: 'demo-pm-1' },
-  })
-  expect(risk.status()).toBe(201)
+  // Risks and issues come from SimpleTrials only: they can no longer be raised here.
+  expect((await page.request.post('/api/v1/risks', { data: {} })).status()).toBe(405)
 
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'Work management' }).click()
@@ -41,7 +38,7 @@ test('Work management report: overdue task, person and risk heat map', async ({ 
   await expect(overdue).toContainText('Waiting on Demo Data Manager')
   await expect(overdue).toContainText(/[67] days late/)
   await expect(page.getByTestId('person-row').filter({ hasText: 'Demo Data Manager' })).toBeVisible()
-  await expect(page.getByTestId('heat-3-3')).not.toContainText(/^0/)
+  await expect(page.getByText('Risk heat map')).toHaveCount(0)
 
   // Filter to Vendor tasks: the study chart goes away.
   await page.getByRole('combobox', { name: 'Filter by task category' }).click()
@@ -54,6 +51,16 @@ test('Work management report: overdue task, person and risk heat map', async ({ 
   await page.getByRole('link', { name: /Excel/ }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/^Work management \d{4}-\d{2}-\d{2}\.xlsx$/)
+})
+
+test('Risks and issues report: SimpleTrials issues, overdue first, with Excel export', async ({ page }) => {
+  await page.goto('/reports?tab=risks')
+  await expect(page.getByRole('tab', { name: 'Risks and issues', selected: true })).toBeVisible()
+  await expect(page.getByTestId('issue-row').first()).toContainText('days overdue')
+  await expect(page.getByRole('button', { name: /Sync now/ })).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: /Excel/ }).click()
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^Risks and issues \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
 
 test('Quality (SOPs) report: review schedule, department filter and Excel export', async ({ page }) => {

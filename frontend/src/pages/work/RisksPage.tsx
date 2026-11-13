@@ -1,30 +1,19 @@
-import { PlusOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Checkbox, Flex, Segmented, Typography } from 'antd'
-import { useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { BarChartOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Checkbox, Flex, Select, Typography } from 'antd'
+import { Link, useSearchParams } from 'react-router'
 
-import { useRisks } from '../../api/hooks'
-import type { Risk, RiskKind } from '../../api/types'
+import { useRisks, useStudies } from '../../api/hooks'
 import { PageHeader } from '../../components/PageHeader'
-import { RiskFormModal } from '../../components/work/RiskFormModal'
-import { RiskTable } from '../../components/work/RiskTable'
+import { SyncNowButton } from '../../components/SyncNowButton'
 import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 
-const SCORE_RULE =
-  'Score: likelihood × impact as entered by the risk owner (1 = low, 3 = high). 6 or more is High, 3–4 Medium, 1–2 Low.'
-
+/** Risks and issues all come from SimpleTrials (the CTMS); nothing is raised or edited here. */
 export function RisksPage() {
   const [params, setParams] = useSearchParams()
-  const kindParam = params.get('kind')
-  const kind: RiskKind | undefined = kindParam === 'risk' || kindParam === 'issue' ? kindParam : undefined
-  const mine = params.get('owner') === 'me'
+  const studyId = params.get('study') ?? undefined
   const includeClosed = params.get('closed') === '1'
-  const { data, isLoading, isError, error, refetch } = useRisks({
-    kind,
-    owner: mine ? 'me' : undefined,
-    include_closed: includeClosed,
-  })
-  const [modal, setModal] = useState<{ open: boolean; risk?: Risk | null }>({ open: false })
+  const { data, isLoading, isError, error, refetch } = useRisks({ study_id: studyId, include_closed: includeClosed })
+  const studies = useStudies()
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params)
@@ -32,20 +21,27 @@ export function RisksPage() {
     else next.delete(key)
     setParams(next, { replace: true })
   }
-  const canManage = Boolean(data?.can_manage)
 
   return (
     <>
       <PageHeader
         title="Risks and Issues"
-        subtitle="Risk and issue register across all studies, highest score first."
+        subtitle="From SimpleTrials, the CTMS, across all studies. Overdue first."
         extra={
-          canManage && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal({ open: true })}>
-              Raise risk or issue
-            </Button>
-          )
+          <Flex gap={8} wrap>
+            <SyncNowButton kind="simpletrials" />
+            <Link to="/reports?tab=risks">
+              <Button icon={<BarChartOutlined />}>Dashboard</Button>
+            </Link>
+          </Flex>
         }
+      />
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        title="Risks and issues are managed in SimpleTrials"
+        description="Raise and update them in SimpleTrials; changes appear here after the next sync. SimpleTrials' API has no risk register, so its action items are shown as issues."
       />
       {isError && (
         <Alert
@@ -59,42 +55,25 @@ export function RisksPage() {
       )}
       <Card>
         <Flex gap={16} wrap align="center" style={{ marginBottom: 16 }}>
-          <Segmented
-            aria-label="Type"
-            value={kind ?? 'all'}
-            onChange={(v) => setParam('kind', v === 'all' ? null : String(v))}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'risk', label: 'Risks' },
-              { value: 'issue', label: 'Issues' },
-            ]}
+          <Select
+            aria-label="Filter by study"
+            allowClear
+            placeholder="All studies"
+            value={studyId}
+            onChange={(v?: string) => setParam('study', v ?? null)}
+            options={(studies.data?.studies ?? []).map((s) => ({ value: s.id, label: `${s.protocol_number} · ${s.title}` }))}
+            style={{ width: 300, maxWidth: '100%' }}
+            popupMatchSelectWidth={false}
           />
-          <Checkbox checked={mine} onChange={(e) => setParam('owner', e.target.checked ? 'me' : null)}>
-            Owned by me
-          </Checkbox>
           <Checkbox checked={includeClosed} onChange={(e) => setParam('closed', e.target.checked ? '1' : null)}>
             Show closed
           </Checkbox>
+          <Typography.Text type="secondary" style={{ marginLeft: 'auto' }}>
+            {data ? `${data.simpletrials_issues.length} shown` : ''}
+          </Typography.Text>
         </Flex>
-        <Typography.Paragraph type="secondary">
-          {SCORE_RULE} Only the owner can update a status; only an administrator can raise or edit.
-        </Typography.Paragraph>
-        <RiskTable
-          risks={data?.risks ?? []}
-          loading={isLoading}
-          canManage={canManage}
-          showStudy
-          onEdit={(risk) => setModal({ open: true, risk })}
-          emptyText="No open risks or issues."
-          scoreRule={SCORE_RULE}
-        />
+        <SimpleTrialsIssues issues={data?.simpletrials_issues ?? []} loading={isLoading} showStudy />
       </Card>
-      {kind !== 'risk' && !mine && (
-        <Card style={{ marginTop: 16 }}>
-          <SimpleTrialsIssues issues={data?.simpletrials_issues ?? []} loading={isLoading} showStudy />
-        </Card>
-      )}
-      <RiskFormModal open={modal.open} risk={modal.risk} onClose={() => setModal({ open: false })} />
     </>
   )
 }

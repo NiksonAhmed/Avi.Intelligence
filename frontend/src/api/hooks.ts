@@ -16,11 +16,9 @@ import type {
   ReindexResponse,
   Me,
   Person,
-  Risk,
   RiskFilters,
-  RiskInput,
   RiskListResponse,
-  RiskStatus,
+  RisksIssuesReport,
   SharePointStatus,
   SopDetailResponse,
   SopFilters,
@@ -180,6 +178,7 @@ export function useStudiesSync() {
     mutationFn: () => apiRequest<StudySource>('/studies/sync', { method: 'POST' }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['reports'] })
+      await queryClient.invalidateQueries({ queryKey: ['risks'] })
       await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
       await queryClient.invalidateQueries({ queryKey: ['studies'] })
       await queryClient.invalidateQueries({ queryKey: ['study'] })
@@ -257,38 +256,10 @@ export function useRisks(filters: RiskFilters) {
       apiRequest<RiskListResponse>('/risks', {
         params: {
           study_id: filters.study_id,
-          kind: filters.kind,
-          owner: filters.owner,
           include_closed: filters.include_closed ? 'true' : undefined,
         },
       }),
     placeholderData: (previous) => previous,
-  })
-}
-
-export function useCreateRisk() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: RiskInput) => apiRequest<Risk>('/risks', jsonInit('POST', input)),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
-  })
-}
-
-export function useUpdateRisk() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<RiskInput> & { status?: RiskStatus } }) =>
-      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}`, jsonInit('PATCH', input)),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
-  })
-}
-
-export function useRiskStatus() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: RiskStatus }) =>
-      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}/status`, jsonInit('POST', { status })),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
   })
 }
 
@@ -300,6 +271,15 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useRisksIssuesReport(filters: ReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'risks-issues', filters],
+    queryFn: () =>
+      apiRequest<RisksIssuesReport>('/reports/risks-issues', { params: { study_id: filters.study_id, site_id: filters.site_id } }),
     placeholderData: (previous) => previous,
   })
 }

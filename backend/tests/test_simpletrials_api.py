@@ -544,6 +544,56 @@ def test_severity_wording() -> None:
     assert severity_label("Other") == "Other" and severity_label(None) is None and severity_label("") is None
 
 
+def test_map_deviations_reads_the_real_simpletrials_fields() -> None:
+    """Field names as returned by the SimpleTrials sandbox (2026-11-13); values made up."""
+    items = [
+        {
+            "id": 11, "active": True, "category": None, "severity": "minor", "severity_display": "Minor",
+            "site_id": 501, "site_number": "1001", "site_name": "Sandbox Clinic", "description": "Late visit",
+            "subject_id": 9001, "subject_number": "002-003", "scope_display": "Subject #: 002-003",
+            "all_subjects": False, "date_deviated": "2026-11-01", "date_discovered": None,
+            "date_entered": "2026-11-03", "date_actioned": "2026-11-10", "action_taken": "Retrained",
+            "irbec_submission_status": None, "irbec_submission_date": None,
+        },
+        {
+            "id": 12, "active": True, "severity": "major", "site_id": 501, "description": "Wrong kit",
+            "subject_id": None, "all_subjects": True, "date_deviated": "2026-11-05",
+            "date_discovered": "2026-11-06",
+            "date_entered": "2026-11-07", "date_actioned": None, "irbec_submission_status": "submitted",
+            "irbec_submission_date": "2026-11-08",
+        },
+    ]  # fmt: skip
+    rows = {d.external_id: d for d in map_deviations(items)}
+    first, second = rows["11"], rows["12"]
+    assert (first.severity, first.status, first.closed, first.closed_on) == (
+        "Minor",
+        "Actioned",
+        True,
+        date(2026, 11, 10),
+    )
+    assert (first.occurred_on, first.identified_on, first.reportable) == (
+        date(2026, 11, 1),
+        date(2026, 11, 3),
+        None,
+    )
+    assert (
+        first.subject_level is True
+        and "002-003" not in str(first.model_dump())
+        and "9001" not in str(first.model_dump())
+    )
+    assert (second.severity, second.status, second.closed, second.subject_level) == (
+        "Major",
+        "Open",
+        False,
+        False,
+    )
+    assert (second.identified_on, second.reported_on, second.reportable) == (
+        date(2026, 11, 6),
+        date(2026, 11, 8),
+        True,
+    )
+
+
 def test_map_deviations_reads_name_variants_and_never_subjects() -> None:
     items = [
         {

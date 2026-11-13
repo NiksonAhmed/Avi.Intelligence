@@ -485,32 +485,6 @@ export interface TaskInput {
   due_date?: string | null
 }
 
-export const RISK_STATUSES = ['Open', 'Mitigating', 'Closed'] as const
-export type RiskStatus = (typeof RISK_STATUSES)[number]
-export type RiskKind = 'risk' | 'issue'
-
-export interface Risk {
-  id: string
-  reference: string
-  kind: RiskKind
-  study: StudyRef
-  title: string
-  description: string | null
-  likelihood: number
-  impact: number
-  score: number
-  rating: 'Low' | 'Medium' | 'High'
-  mitigation: string | null
-  owner_id: string
-  owner_name: string
-  status: RiskStatus
-  created_by_name: string
-  created_at: string
-  updated_at: string
-  closed_at: string | null
-  can_update_status: boolean
-}
-
 /** A SimpleTrials action item shown as a read-only issue (managed in SimpleTrials). */
 export interface SimpleTrialsIssue {
   id: string
@@ -533,31 +507,16 @@ export interface SimpleTrialsIssue {
   days_overdue: number | null
 }
 
+/** Risks and issues come from SimpleTrials (the CTMS) only; nothing is raised in Avi.Intelligence. */
 export interface RiskListResponse {
-  risks: Risk[]
-  can_manage: boolean
-  statuses: RiskStatus[]
-  /** Read-only issues from SimpleTrials; empty when filtering by owner or by risks. */
-  simpletrials_issues?: SimpleTrialsIssue[]
+  simpletrials_issues: SimpleTrialsIssue[]
 }
 
 export interface RiskFilters {
   study_id?: string
-  kind?: RiskKind
-  owner?: string
   include_closed?: boolean
 }
 
-export interface RiskInput {
-  study_id: string
-  kind: RiskKind
-  title: string
-  description?: string | null
-  likelihood: number
-  impact: number
-  mitigation?: string | null
-  owner_id: string
-}
 
 // ---- Reports and Insights ----
 
@@ -676,37 +635,12 @@ export interface WorkOverdueTask {
   waiting_on: string[]
 }
 
-export interface RiskHeatCell {
-  likelihood: number
-  impact: number
-  score: number
-  rating: 'Low' | 'Medium' | 'High'
-  risks: number
-  issues: number
-}
-
-export interface WorkOpenRisk {
-  risk_id: string
-  reference: string
-  kind: 'risk' | 'issue'
-  title: string
-  protocol_number: string
-  likelihood: number
-  impact: number
-  score: number
-  rating: 'Low' | 'Medium' | 'High'
-  owner_name: string
-  status: string
-}
-
 export interface WorkManagementReport {
   tiles: ReportTile[]
   by_category: WorkStatusCounts[]
   by_study: WorkStatusCounts[]
   by_person: WorkPersonLoad[]
   overdue: WorkOverdueTask[]
-  heat_map: RiskHeatCell[]
-  top_risks: WorkOpenRisk[]
   completed: { total: number; with_due_date: number; on_time: number }
   study_options: ReportOption[]
   category_options: ReportOption[]
@@ -799,6 +733,42 @@ export interface DeviationsReport {
   ageing: DeviationCount[]
   deviations: DeviationRow[]
   has_deviations: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
+}
+
+export interface IssueRow {
+  id: string
+  number: string | null
+  protocol_number: string
+  where: string
+  category: string
+  subcategory: string | null
+  priority: string
+  status: string
+  closed: boolean
+  description: string | null
+  response: string | null
+  assignee: string | null
+  opened_on: string | null
+  due_on: string | null
+  closed_on: string | null
+  days_open: number | null
+  days_overdue: number | null
+}
+
+/** Risks and issues report: SimpleTrials action items (read-only copy; nothing raised in Avi.Intelligence). */
+export interface RisksIssuesReport {
+  tiles: ReportTile[]
+  by_priority: (DeviationCount & { overdue: number })[]
+  by_category: DeviationCount[]
+  by_site: { key: string; label: string; protocol_number: string; open: number; overdue: number; total: number }[]
+  ageing: DeviationCount[]
+  trend: { month: string; opened: number; closed: number }[]
+  issues: IssueRow[]
+  has_issues: boolean
   study_options: ReportOption[]
   site_options: ReportOption[]
   rules: Record<string, string>

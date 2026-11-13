@@ -6,6 +6,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { CHANGE_PERIODS } from '../../lib/reports'
 import { DeviationsTab } from './DeviationsTab'
 import { EtmfTab } from './EtmfTab'
+import { RisksIssuesTab } from './RisksIssuesTab'
 import { QualityTab } from './QualityTab'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
 import { WorkManagementTab } from './WorkManagementTab'
@@ -16,6 +17,7 @@ const TABS = [
   { key: 'quality', label: 'Quality (SOPs)' },
   { key: 'etmf', label: 'eTMF' },
   { key: 'deviations', label: 'Protocol deviations' },
+  { key: 'risks', label: 'Risks and issues' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -43,7 +45,7 @@ export function ReportsPage() {
     <>
       <PageHeader
         title="Reports and Insights"
-        subtitle="How studies, work, SOPs, the eTMF and protocol deviations are tracking. Hover a chart for exact numbers."
+        subtitle="How studies, work, SOPs, the eTMF, protocol deviations and risks and issues are tracking. Hover a chart for exact numbers."
       />
       <Tabs
         className="no-print"
@@ -69,6 +71,8 @@ export function ReportsPage() {
           }}
           onFilters={(f) => update({ department: f.department, months: f.months ? String(f.months) : undefined })}
         />
+      ) : tab === 'risks' ? (
+        <RisksIssuesTab filters={filters} onFilters={(f) => update({ study: f.study_id, site: f.site_id })} />
       ) : tab === 'deviations' ? (
         <DeviationsTab filters={filters} onFilters={(f) => update({ study: f.study_id, site: f.site_id })} />
       ) : (

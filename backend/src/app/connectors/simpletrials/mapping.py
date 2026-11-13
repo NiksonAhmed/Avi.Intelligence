@@ -345,13 +345,25 @@ def _flag(value: Any) -> bool | None:
     return None
 
 
+def _irbec_reportable(d: dict[str, Any]) -> bool | None:
+    """IRB/EC submission status: "not required" means not reportable; any other value means it is."""
+    status = _first(d, "irbec_submission_status_display", "irbec_submission_status")
+    if status is None:
+        return True if d.get("irbec_submission_date") else None
+    text = str(status).lower().replace("_", " ")
+    return not ("not" in text or text in ("no", "none", "n/a", "na"))
+
+
 def map_deviations(items: list[dict[str, Any]]) -> list[DeviationRecord]:
     records: list[DeviationRecord] = []
     for d in items:
         if d.get("id") is None or d.get("active") is False or d.get("unblinded") is True:
             continue
-        status = _label(_first(d, "status_display", "status"))
-        closed_on = as_date(_first(d, "closed_on", "resolved_on", "closed_at", "resolved_at", "date_closed"))
+        # SimpleTrials has no deviation status: one with a Date Actioned counts as closed ("Actioned").
+        closed_on = as_date(
+            _first(d, "date_actioned", "closed_on", "resolved_on", "closed_at", "resolved_at", "date_closed")
+        )
+        status = _label(_first(d, "status_display", "status")) or ("Actioned" if closed_on else "Open")
         site = _first(d, "site_id", "study_site_id")
         number = _first(d, "number", "deviation_number", "pd_number")
         records.append(
@@ -391,6 +403,7 @@ def map_deviations(items: list[dict[str, Any]]) -> list[DeviationRecord]:
                 occurred_on=as_date(
                     _first(
                         d,
+                        "date_deviated",
                         "deviation_date",
                         "occurred_on",
                         "occurrence_date",
@@ -402,17 +415,30 @@ def map_deviations(items: list[dict[str, Any]]) -> list[DeviationRecord]:
                 identified_on=as_date(
                     _first(
                         d,
+                        "date_discovered",
                         "identified_on",
                         "discovered_on",
                         "identified_date",
                         "awareness_date",
                         "opened_on",
+                        "date_entered",
                         "created_at",
                     ),
                 ),  # fmt: skip
-                reported_on=as_date(_first(d, "reported_on", "date_reported", "reported_at", "submitted_on")),
+                reported_on=as_date(
+                    _first(
+                        d,
+                        "irbec_submission_date",
+                        "reported_on",
+                        "date_reported",
+                        "reported_at",
+                        "submitted_on",
+                    )
+                ),
                 closed_on=closed_on,
-                reportable=_flag(_first(d, "irb_reportable", "reportable", "report_to_irb", "ec_reportable")),
+                reportable=_flag(_first(d, "irb_reportable", "reportable", "report_to_irb", "ec_reportable"))
+                if _first(d, "irb_reportable", "reportable", "report_to_irb", "ec_reportable") is not None
+                else _irbec_reportable(d),
             )
         )
     return records

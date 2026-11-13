@@ -34,7 +34,7 @@ describe('SOP list page', () => {
     mockApi({ '/me': adminUser, '/sops': makeSopList(docs, 'live') })
     renderRoute('/documents/sops')
     expect(await screen.findByText(/Source record · SharePoint/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Refresh from SharePoint/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sync now/ })).toBeInTheDocument()
     expect(screen.queryByText(/Demo data/)).not.toBeInTheDocument()
   })
 

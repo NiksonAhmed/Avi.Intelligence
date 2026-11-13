@@ -2,6 +2,39 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-13: Risks and issues come only from SimpleTrials; Risks and issues dashboard; Sync now everywhere
+
+**Decision (user, 13 Nov 2026): "we don't want to allow to create new Risk and issue, it should all be
+coming from CTMS".**
+- Nothing is raised, edited or status-changed in Avi.Intelligence any more: `POST /risks`, `PATCH
+  /risks/{id}` and `POST /risks/{id}/status` are removed (405/404), and the "Raise risk or issue"
+  buttons, the risk form and the likelihood × impact register are gone from the Risks and Issues page
+  and each study's Risks and issues tab. No risks had been raised in the live database, so nothing was
+  lost; the `risks` table is kept, unused, so no migration was needed.
+- SimpleTrials' API has no risk register (see 12 Nov), so **its action items are the issues**. The Risks
+  and Issues page lists them read-only (study filter, show closed), with Sync now and a link to the
+  dashboard. "Open risks" counts on the portfolio and study pages now count open SimpleTrials action
+  items.
+- **Risks and issues dashboard** (Reports and Insights → Risks and issues), from the same action items:
+  tiles (open, overdue, open high priority, due in 14 days, closed in 30 days with median days to
+  close), by priority, by category, opened vs closed per month (12 months), ageing of open issues, sites
+  (most overdue first) and the full list; study/site filters, Excel and PDF, Sync now.
+- The risk heat map and "highest open risks" are removed from Work management (they read the retired
+  Avi.Intelligence register); that report is now tasks only.
+- **Sync now on every page fed by an API**, for every role: report tabs, Risks and Issues, Study
+  Portfolio and Study Command Centre (SimpleTrials, `study.sync`), the SOP library (SharePoint; button
+  renamed from "Refresh from SharePoint") and Data Management (Viedoc, already). Admin-only sync stays on
+  Administration → Connectors.
+
+**Protocol deviation field names confirmed (13 Nov, two test deviations in the sandbox).** SimpleTrials
+returns `severity`/`severity_display`, `category` (empty in the sandbox), `date_deviated` (occurred),
+`date_discovered` (identified; falls back to `date_entered`), `date_actioned` + `action_taken`,
+`irbec_submission_status` / `irbec_submission_date`, `subject_id` / `subject_number` / `scope_display`,
+`all_subjects`, `site_id` / `site_number` / `site_name`, `active`; there is **no status and no
+deviation number**. So: a deviation with a Date Actioned counts as closed ("Actioned"), otherwise
+"Open"; reportable comes from the IRB/EC submission status ("not required" = no). Subject numbers are
+never stored, only whether a deviation is subject-level.
+
 ## 2026-11-12: SimpleTrials action items as read-only issues; protocol deviations (DM Step 4)
 
 **What the SimpleTrials API offers (probed read-only with the sandbox study key, field names only).**

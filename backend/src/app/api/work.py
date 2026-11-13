@@ -1,18 +1,20 @@
-"""Tasks, risks and issues (managed in Avi.Intelligence).
+"""Tasks (managed in Avi.Intelligence) and risks and issues (read-only from SimpleTrials).
 
 Access rules (agreed with Avion):
-  * Everyone with study access can view all tasks and risks (read-only).
+  * Everyone with study access can view all tasks, risks and issues (read-only).
+  * Risks and issues are never raised or edited here: they all come from SimpleTrials, the CTMS
+    (user decision 2026-11-13). SimpleTrials' API has no risk register, so its action items are shown.
   * Tasks are assigned by category (`task.assign.<category>`): Admin all; Project Managers Study and
     General; QA Procedures and SOPs, Vendor, Computer system and General. Whoever may assign a
     category may also edit and cancel its tasks.
   * Everyone else (except viewers) may create tasks for themselves only, for their own tracking, in
     any category but Procedures and SOPs (`task.create_own`). They can edit and cancel those tasks.
   * A task can have several people; each updates their own status, and the task is Completed when
-    everyone is done. The owner of a risk may update its status; risks are managed by administrators.
+    everyone is done.
 
 Task categories: Study (a study, optionally one plan entry), Procedures and SOPs (one or more SOPs or
 forms from the live approved list), Vendor and Computer system (a name as typed), General.
-Nothing is deleted: a task is cancelled and a risk is closed instead, and every change is audited.
+Nothing is deleted: a task is cancelled instead, and every change is audited.
 """
 
 from __future__ import annotations
@@ -34,7 +36,6 @@ from app.connectors.sharepoint.models import DocumentKind, SopConnector, SopStat
 from app.db.session import get_db
 from app.studies.clock import today
 from app.studies.models import (
-    Risk,
     Study,
     StudyActionItem,
     StudyMilestone,
@@ -45,13 +46,9 @@ from app.studies.models import (
 from app.studies.rules import (
     TASK_CATEGORY_LABELS,
     TASK_CLOSED,
-    RiskKind,
-    RiskStatus,
     TaskCategory,
     TaskStatus,
     overall_task_status,
-    risk_rating,
-    risk_score,
     task_overdue,
 )
 
@@ -94,7 +91,7 @@ def _study_or_422(db: Session, tenant_id: str, study_id: str) -> Study:
     return study
 
 
-def _next_reference(db: Session, model: type[Task] | type[Risk], tenant_id: str, prefix: str) -> str:
+def _next_reference(db: Session, model: type[Task], tenant_id: str, prefix: str) -> str:
     count = db.scalar(select(func.count()).select_from(model).where(model.tenant_id == tenant_id)) or 0
     return f"{prefix}-{count + 1:04d}"
 
@@ -716,28 +713,6 @@ def change_task_status(
 # --- Risks and issues -------------------------------------------------------------------------
 
 
-class RiskOut(BaseModel):
-    id: str
-    reference: str
-    kind: RiskKind
-    study: StudyRef
-    title: str
-    description: str | None
-    likelihood: int
-    impact: int
-    score: int
-    rating: str
-    mitigation: str | None
-    owner_id: str
-    owner_name: str
-    status: RiskStatus
-    created_by_name: str
-    created_at: datetime
-    updated_at: datetime
-    closed_at: datetime | None
-    can_update_status: bool
-
-
 class SimpleTrialsIssueOut(BaseModel):
     """A SimpleTrials action item shown as a read-only issue (managed in SimpleTrials, not here)."""
 
@@ -762,76 +737,10 @@ class SimpleTrialsIssueOut(BaseModel):
 
 
 class RiskListResponse(BaseModel):
-    risks: list[RiskOut]
-    can_manage: bool
-    statuses: list[str]
-    simpletrials_issues: list[SimpleTrialsIssueOut] = []
-    """Read-only issues from SimpleTrials (action items); empty when filtering by owner or by risks."""
+    """Risks and issues come from SimpleTrials (the CTMS) only; nothing is raised in Avi.Intelligence."""
 
-
-class RiskCreate(BaseModel):
-    study_id: str
-    kind: RiskKind = RiskKind.RISK
-    title: str = Field(min_length=3, max_length=300)
-    description: str | None = Field(default=None, max_length=5000)
-    likelihood: int = Field(ge=1, le=3)
-    impact: int = Field(ge=1, le=3)
-    mitigation: str | None = Field(default=None, max_length=5000)
-    owner_id: str
-
-    _strip = field_validator("title", "description", "mitigation", mode="before")(_clean)
-
-
-class RiskUpdate(BaseModel):
-    kind: RiskKind | None = None
-    title: str | None = Field(default=None, min_length=3, max_length=300)
-    description: str | None = Field(default=None, max_length=5000)
-    likelihood: int | None = Field(default=None, ge=1, le=3)
-    impact: int | None = Field(default=None, ge=1, le=3)
-    mitigation: str | None = Field(default=None, max_length=5000)
-    owner_id: str | None = None
-    status: RiskStatus | None = None
-
-    _strip = field_validator("title", "description", "mitigation", mode="before")(_clean)
-
-
-def _risk_out(risk: Risk, user: CurrentUser) -> RiskOut:
-    score = risk_score(risk.likelihood, risk.impact)
-    return RiskOut(
-        id=risk.id,
-        reference=risk.reference,
-        kind=RiskKind(risk.kind),
-        study=StudyRef(id=risk.study.id, protocol_number=risk.study.protocol_number, title=risk.study.title),
-        title=risk.title,
-        description=risk.description,
-        likelihood=risk.likelihood,
-        impact=risk.impact,
-        score=score,
-        rating=risk_rating(score),
-        mitigation=risk.mitigation,
-        owner_id=risk.owner_id,
-        owner_name=risk.owner_name,
-        status=RiskStatus(risk.status),
-        created_by_name=risk.created_by_name,
-        created_at=risk.created_at,
-        updated_at=risk.updated_at,
-        closed_at=risk.closed_at,
-        can_update_status=user.can(Permission.WORK_MANAGE) or risk.owner_id == user.id,
-    )
-
-
-def _get_risk(db: Session, tenant_id: str, risk_id: str) -> Risk:
-    risk = db.scalars(
-        select(Risk).where(Risk.tenant_id == tenant_id, Risk.id == risk_id).options(joinedload(Risk.study))
-    ).first()
-    if risk is None:
-        raise HTTPException(404, "Risk or issue not found.")
-    return risk
-
-
-def _apply_risk_status(risk: Risk, status: RiskStatus) -> None:
-    risk.status = status.value
-    risk.closed_at = datetime.now(UTC) if status == RiskStatus.CLOSED else None
+    simpletrials_issues: list[SimpleTrialsIssueOut]
+    """SimpleTrials action items, read-only: overdue first, then by due date."""
 
 
 @router.get("/risks", response_model=RiskListResponse)
@@ -839,32 +748,10 @@ def list_risks(
     db: Db,
     user: Reader,
     study_id: Annotated[str | None, Query(max_length=36)] = None,
-    kind: RiskKind | None = None,
-    owner: Annotated[str | None, Query(max_length=255, description='"me" or a person id')] = None,
     include_closed: bool = False,
 ) -> RiskListResponse:
-    query = select(Risk).where(Risk.tenant_id == user.tenant_id).options(joinedload(Risk.study))
-    if study_id:
-        query = query.where(Risk.study_id == study_id)
-    if kind:
-        query = query.where(Risk.kind == kind.value)
-    if owner:
-        query = query.where(Risk.owner_id == (user.id if owner == "me" else owner))
-    if not include_closed:
-        query = query.where(Risk.status != RiskStatus.CLOSED.value)
-    risks = sorted(
-        db.scalars(query).all(),
-        key=lambda r: (-risk_score(r.likelihood, r.impact), r.created_at),
-    )
     return RiskListResponse(
-        risks=[_risk_out(r, user) for r in risks],
-        can_manage=user.can(Permission.WORK_MANAGE),
-        statuses=[s.value for s in RiskStatus],
-        simpletrials_issues=(
-            []
-            if owner or kind == RiskKind.RISK
-            else _simpletrials_issues(db, user.tenant_id, study_id, include_closed)
-        ),
+        simpletrials_issues=_simpletrials_issues(db, user.tenant_id, study_id, include_closed)
     )
 
 
@@ -909,126 +796,3 @@ def _simpletrials_issues(
         out,
         key=lambda i: (i.closed, -(i.days_overdue or 0), i.due_on or date.max, i.study.protocol_number),
     )
-
-
-@router.post("/risks", response_model=RiskOut, status_code=201)
-def create_risk(body: RiskCreate, request: Request, db: Db, user: Manager) -> RiskOut:
-    study = _study_or_422(db, user.tenant_id, body.study_id)
-    owner = _person_or_422(body.owner_id)
-    risk = Risk(
-        tenant_id=user.tenant_id,
-        reference=_next_reference(db, Risk, user.tenant_id, "RSK" if body.kind == RiskKind.RISK else "ISS"),
-        study_id=study.id,
-        kind=body.kind.value,
-        title=body.title,
-        description=body.description,
-        likelihood=body.likelihood,
-        impact=body.impact,
-        mitigation=body.mitigation,
-        owner_id=owner.id,
-        owner_name=owner.name,
-        status=RiskStatus.OPEN.value,
-        created_by_id=user.id,
-        created_by_name=user.name,
-    )
-    db.add(risk)
-    db.commit()
-    record_event(
-        db,
-        user,
-        action="risk.created",
-        entity_type="risk",
-        entity_id=risk.id,
-        summary=f'Raised {risk.reference} "{risk.title}" owned by {owner.name} ({study.protocol_number})',
-        details={
-            "kind": body.kind.value,
-            "study": study.protocol_number,
-            "likelihood": body.likelihood,
-            "impact": body.impact,
-            "owner": owner.name,
-        },
-        request=request,
-    )
-    return _risk_out(_get_risk(db, user.tenant_id, risk.id), user)
-
-
-def _risk_snapshot(risk: Risk) -> dict[str, Any]:
-    return {
-        "kind": risk.kind,
-        "title": risk.title,
-        "description": risk.description,
-        "likelihood": risk.likelihood,
-        "impact": risk.impact,
-        "mitigation": risk.mitigation,
-        "owner": risk.owner_name,
-        "status": risk.status,
-    }
-
-
-@router.patch("/risks/{risk_id}", response_model=RiskOut)
-def update_risk(risk_id: ItemId, body: RiskUpdate, request: Request, db: Db, user: Manager) -> RiskOut:
-    risk = _get_risk(db, user.tenant_id, risk_id)
-    before = _risk_snapshot(risk)
-    fields = body.model_fields_set
-    if "kind" in fields and body.kind:
-        risk.kind = body.kind.value
-    if "title" in fields and body.title:
-        risk.title = body.title
-    for name in ("description", "mitigation"):
-        if name in fields:
-            setattr(risk, name, getattr(body, name))
-    if "likelihood" in fields and body.likelihood:
-        risk.likelihood = body.likelihood
-    if "impact" in fields and body.impact:
-        risk.impact = body.impact
-    if "owner_id" in fields and body.owner_id:
-        person = _person_or_422(body.owner_id)
-        risk.owner_id, risk.owner_name = person.id, person.name
-    if "status" in fields and body.status:
-        _apply_risk_status(risk, body.status)
-    changes = _changes(before, _risk_snapshot(risk))
-    if changes:
-        risk.updated_at = datetime.now(UTC)
-        db.commit()
-        record_event(
-            db,
-            user,
-            action="risk.updated",
-            entity_type="risk",
-            entity_id=risk.id,
-            summary=f"Updated {risk.reference}: {', '.join(changes)}",
-            details={"changes": changes},
-            request=request,
-        )
-    return _risk_out(risk, user)
-
-
-@router.post("/risks/{risk_id}/status", response_model=RiskOut)
-def change_risk_status(
-    risk_id: ItemId, body: StatusChange, request: Request, db: Db, user: Reader
-) -> RiskOut:
-    risk = _get_risk(db, user.tenant_id, risk_id)
-    if not (user.can(Permission.WORK_MANAGE) or risk.owner_id == user.id):
-        raise HTTPException(403, "Only the owner of this risk or issue can update its status.")
-    try:
-        status = RiskStatus(body.status)
-    except ValueError:
-        raise HTTPException(
-            422, f"Status must be one of: {', '.join(s.value for s in RiskStatus)}."
-        ) from None
-    previous = risk.status
-    if previous != status.value:
-        _apply_risk_status(risk, status)
-        risk.updated_at = datetime.now(UTC)
-        db.commit()
-        record_event(
-            db,
-            user,
-            action="risk.status_changed",
-            entity_type="risk",
-            entity_id=risk.id,
-            summary=f"{risk.reference} status changed from {previous} to {status.value}",
-            details={"from": previous, "to": status.value},
-            request=request,
-        )
-    return _risk_out(risk, user)

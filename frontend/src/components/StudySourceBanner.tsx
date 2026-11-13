@@ -1,36 +1,17 @@
-import { CloudSyncOutlined, SyncOutlined } from '@ant-design/icons'
-import { Alert, App, Button, Flex, Typography } from 'antd'
+import { CloudSyncOutlined } from '@ant-design/icons'
+import { Alert, Flex, Typography } from 'antd'
 
-import { useHasPermission, useSyncSimpleTrials } from '../api/hooks'
 import type { StudySource } from '../api/types'
 import { formatDateTime } from '../lib/format'
 import { ProvenanceTag } from './ProvenanceTag'
+import { SyncNowButton } from './SyncNowButton'
 
 /** States where study data came from and when it was last synced; flags demo data. */
 export function StudySourceBanner({ source }: { source: StudySource }) {
-  const canSync = useHasPermission('connector.manage')
-  const sync = useSyncSimpleTrials()
-  const { message } = App.useApp()
   const synced = source.last_successful_sync_at
   const failed = source.last_sync && !source.last_sync.ok
 
-  const syncButton = canSync && (
-    <Button
-      icon={<SyncOutlined />}
-      loading={sync.isPending}
-      onClick={() =>
-        sync.mutate(undefined, {
-          onSuccess: (s) =>
-            s.last_sync?.ok
-              ? void message.success('Studies synced from SimpleTrials')
-              : void message.error(s.last_sync?.error ?? 'Sync failed'),
-          onError: (e) => void message.error(e.message),
-        })
-      }
-    >
-      Sync now
-    </Button>
-  )
+  const syncButton = <SyncNowButton kind="simpletrials" />
 
   return (
     <>
@@ -46,7 +27,7 @@ export function StudySourceBanner({ source }: { source: StudySource }) {
               {source.connector.mock_reason}
             </>
           }
-          action={syncButton || undefined}
+          action={syncButton}
         />
       ) : (
         <Flex align="center" justify="space-between" wrap gap={8} style={{ marginBottom: 16 }} role="status">

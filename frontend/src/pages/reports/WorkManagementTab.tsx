@@ -3,7 +3,6 @@ import { Alert, Button, Empty, Flex, Skeleton, Typography } from 'antd'
 import { reportExportUrl } from '../../api/client'
 import { useWorkManagement } from '../../api/hooks'
 import type {
-  RiskHeatCell,
   TaskCategory,
   WorkManagementReport,
   WorkPersonLoad,
@@ -13,7 +12,6 @@ import type {
 import { ToneTag } from '../../components/ToneTag'
 import { formatDay } from '../../lib/format'
 import { INK, todayIso, toneStyle } from '../../lib/reports'
-import { TONES } from '../../lib/studies'
 import { ChartCard, Legend, ReportTiles, ReportToolbar, StackedBar } from './ReportParts'
 
 interface Props {
@@ -27,8 +25,6 @@ const STATUS_KEY = [
   { label: 'In progress', color: INK.info },
   { label: 'Blocked', color: INK.warn },
 ]
-const LEVEL = ['', 'Low', 'Medium', 'High']
-const RATING_TONE = { High: 'bad', Medium: 'warn', Low: 'good' } as const
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
@@ -136,92 +132,6 @@ function OverdueList({ report }: { report: WorkManagementReport }) {
   )
 }
 
-function cellText(c: RiskHeatCell): string {
-  const parts = []
-  if (c.risks) parts.push(plural(c.risks, 'risk'))
-  if (c.issues) parts.push(plural(c.issues, 'issue'))
-  return parts.join(', ')
-}
-
-/** 3 × 3 grid: likelihood (rows, high at the top) by impact (columns, high at the right). */
-export function RiskHeatMap({ cells }: { cells: RiskHeatCell[] }) {
-  const at = (l: number, i: number) => cells.find((c) => c.likelihood === l && c.impact === i)
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'separate', borderSpacing: 4, width: '100%', minWidth: 320 }}>
-        <caption className="sr-only">Open risks and issues by likelihood and impact</caption>
-        <thead>
-          <tr>
-            <th />
-            {[1, 2, 3].map((i) => (
-              <th key={i} scope="col" style={{ fontSize: 12, color: '#5B6B82', fontWeight: 600 }}>
-                Impact {LEVEL[i]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[3, 2, 1].map((l) => (
-            <tr key={l}>
-              <th scope="row" style={{ fontSize: 12, color: '#5B6B82', fontWeight: 600, textAlign: 'right', paddingRight: 6 }}>
-                Likelihood {LEVEL[l]}
-              </th>
-              {[1, 2, 3].map((i) => {
-                const c = at(l, i)
-                if (!c) return <td key={i} />
-                const tone = TONES[RATING_TONE[c.rating]]
-                const n = c.risks + c.issues
-                return (
-                  <td
-                    key={i}
-                    data-testid={`heat-${l}-${i}`}
-                    title={`Likelihood ${LEVEL[l]}, impact ${LEVEL[i]}: score ${c.score} (${c.rating}). ${cellText(c) || 'None open'}`}
-                    style={{
-                      background: tone.background,
-                      border: `1px solid ${tone.border}`,
-                      color: tone.color,
-                      borderRadius: 6,
-                      height: 64,
-                      textAlign: 'center',
-                      verticalAlign: 'middle',
-                      opacity: n ? 1 : 0.55,
-                    }}
-                  >
-                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{n}</div>
-                    <div style={{ fontSize: 11 }}>{cellText(c) || `${c.rating} · ${c.score}`}</div>
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function TopRisks({ report }: { report: WorkManagementReport }) {
-  const top = report.top_risks.slice(0, 5)
-  if (top.length === 0) return <Typography.Text type="secondary">No open risks or issues.</Typography.Text>
-  return (
-    <Flex vertical>
-      {top.map((r) => (
-        <Flex key={r.risk_id} justify="space-between" align="center" gap={8} style={{ padding: '8px 0', borderTop: '1px solid #EEF1F5' }}>
-          <Flex vertical style={{ minWidth: 0 }}>
-            <span style={{ fontWeight: 600 }}>
-              {r.reference} · {r.title}
-            </span>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {r.kind === 'issue' ? 'Issue' : 'Risk'} · {r.protocol_number} · {r.owner_name} · {r.status}
-            </Typography.Text>
-          </Flex>
-          <ToneTag tone={toneStyle(RATING_TONE[r.rating], `${r.rating} · ${r.score}`)} />
-        </Flex>
-      ))}
-    </Flex>
-  )
-}
-
 export function WorkManagementTab({ filters, onFilters }: Props) {
   const { data, isLoading, isError, error, refetch } = useWorkManagement(filters)
 
@@ -270,7 +180,7 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
             width: 220,
           },
         ]}
-        sourceText="Live figures · Source: Avi.Intelligence tasks, risks and issues"
+        sourceText="Live figures · Source: Avi.Intelligence tasks"
         sync="live"
         excelUrl={reportExportUrl('work-management', { study_id: filters.study_id, category: filters.category })}
       />
@@ -320,15 +230,6 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
         </ChartCard>
         <ChartCard title="Overdue tasks" rule={data.rules.due_soon} flex="1 1 480px">
           <OverdueList report={data} />
-        </ChartCard>
-      </Flex>
-
-      <Flex gap={18} wrap>
-        <ChartCard title="Risk heat map" rule={data.rules.heat_map} flex="1 1 480px">
-          <RiskHeatMap cells={data.heat_map} />
-        </ChartCard>
-        <ChartCard title="Highest open risks and issues" rule={data.rules.filters} flex="1 1 480px">
-          <TopRisks report={data} />
         </ChartCard>
       </Flex>
 

@@ -18,13 +18,13 @@ const OTHER_COLOUR = '#8A97A8'
 const SEVERITY_TAG: Record<string, string> = { Critical: 'red', Major: 'orange', Minor: 'blue' }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function monthLabel(ym: string): string {
+export function monthLabel(ym: string): string {
   const [y, m] = ym.split('-')
   return `${MONTHS[Number(m) - 1] ?? m} ${y?.slice(2)}`
 }
 
 /** Horizontal bars: total, with the open share darker. */
-function Counts({ rows, colourFor, testId, empty }: { rows: DeviationCount[]; colourFor: (label: string) => string; testId: string; empty: string }) {
+export function Counts({ rows, colourFor, testId, empty }: { rows: DeviationCount[]; colourFor: (label: string) => string; testId: string; empty: string }) {
   if (rows.length === 0) return <Typography.Text type="secondary">{empty}</Typography.Text>
   const max = Math.max(1, ...rows.map((r) => r.count))
   return (

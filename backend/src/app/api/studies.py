@@ -16,12 +16,11 @@ from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector, StudyConnectorInfo
 from app.db.session import get_db
 from app.studies.clock import today
-from app.studies.models import ConnectorSync, Risk, Study, Task
+from app.studies.models import ConnectorSync, Study, StudyActionItem, Task
 from app.studies.rules import (
     RULES,
     TASK_CLOSED,
     MilestoneState,
-    RiskStatus,
     ScheduleState,
     enrolment_percent,
     milestone_state,
@@ -118,6 +117,7 @@ class StudySummary(BaseModel):
     next_milestone: MilestoneOut | None
     open_tasks: int
     open_risks: int
+    """Open SimpleTrials action items (shown as issues)."""
 
 
 class StudyListResponse(BaseModel):
@@ -205,11 +205,13 @@ def _open_counts(db: Session, tenant_id: str) -> tuple[dict[str, int], dict[str,
         ).all()
         if study_id
     }
+    # Risks and issues come from SimpleTrials only: open action items per study.
     risks = dict(
         db.execute(
-            select(Risk.study_id, func.count())
-            .where(Risk.tenant_id == tenant_id, Risk.status != RiskStatus.CLOSED.value)
-            .group_by(Risk.study_id)
+            select(StudyActionItem.study_id, func.count())
+            .join(Study)
+            .where(Study.tenant_id == tenant_id, StudyActionItem.closed.is_(False))
+            .group_by(StudyActionItem.study_id)
         ).all()
     )
     return tasks, risks

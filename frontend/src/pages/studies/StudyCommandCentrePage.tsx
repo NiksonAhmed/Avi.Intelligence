@@ -21,13 +21,11 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { useRisks, useStudies, useStudy, useTasks } from '../../api/hooks'
-import type { PlanItemRef, Risk, StudySite, Task } from '../../api/types'
+import type { PlanItemRef, StudySite, Task } from '../../api/types'
 import { ApiError } from '../../api/client'
 import { PageHeader } from '../../components/PageHeader'
 import { PlanTable } from '../../components/PlanTable'
 import { StudySourceBanner } from '../../components/StudySourceBanner'
-import { RiskFormModal } from '../../components/work/RiskFormModal'
-import { RiskTable } from '../../components/work/RiskTable'
 import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 import { TaskFormModal } from '../../components/work/TaskFormModal'
 import { TaskTable } from '../../components/work/TaskTable'
@@ -85,7 +83,6 @@ export function StudyCommandCentrePage() {
   const [taskModal, setTaskModal] = useState<{ open: boolean; task?: Task | null; planItem?: PlanItemRef }>({
     open: false,
   })
-  const [riskModal, setRiskModal] = useState<{ open: boolean; risk?: Risk | null }>({ open: false })
 
   if (study.isError) {
     const notFound = study.error instanceof ApiError && study.error.status === 404
@@ -273,25 +270,7 @@ export function StudyCommandCentrePage() {
               label: `Risks and issues (${s.open_risks})`,
               children: (
                 <>
-                  <Flex justify="space-between" align="center" wrap gap={8} style={{ marginBottom: 12 }}>
-                    <Typography.Text type="secondary">{rules.risk_score}</Typography.Text>
-                    {canManage && (
-                      <Button type="primary" icon={<PlusOutlined />} onClick={() => setRiskModal({ open: true })}>
-                        Raise risk or issue
-                      </Button>
-                    )}
-                  </Flex>
-                  <RiskTable
-                    risks={risks.data?.risks ?? []}
-                    loading={risks.isLoading}
-                    canManage={canManage}
-                    onEdit={(risk) => setRiskModal({ open: true, risk })}
-                    emptyText="No open risks or issues for this study."
-                    scoreRule={rules.risk_score}
-                  />
-                  <div style={{ marginTop: 20 }}>
-                    <SimpleTrialsIssues issues={risks.data?.simpletrials_issues ?? []} loading={risks.isLoading} />
-                  </div>
+                  <SimpleTrialsIssues issues={risks.data?.simpletrials_issues ?? []} loading={risks.isLoading} />
                 </>
               ),
             },
@@ -305,12 +284,6 @@ export function StudyCommandCentrePage() {
         planItem={taskModal.planItem}
         defaultStudyId={s.id}
         onClose={() => setTaskModal({ open: false })}
-      />
-      <RiskFormModal
-        open={riskModal.open}
-        risk={riskModal.risk}
-        defaultStudyId={s.id}
-        onClose={() => setRiskModal({ open: false })}
       />
     </>
   )
