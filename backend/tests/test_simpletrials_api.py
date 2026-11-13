@@ -21,6 +21,7 @@ from app.connectors.simpletrials.mapping import (
     map_documents,
     map_plan,
     map_site,
+    map_site_visits,
     map_study,
     normalise_name,
     parse_key_names,
@@ -411,11 +412,12 @@ class TestConnector:
             "documents",
             "action_items",
             "protocol_deviations",
+            "site_visits",
         ]
         assert connector.info().mode == "api" and connector.info().scope == "study"
         # No eTMF or action item access (404 here): the study still syncs; previous copies are kept.
         assert records[0].documents is None and records[0].action_items is None
-        assert records[0].deviations is None
+        assert records[0].deviations is None and records[0].site_visits is None
 
     def test_reads_etmf_metadata_and_never_patient_data(self) -> None:
         api = FakeApi(
@@ -425,7 +427,15 @@ class TestConnector:
         assert records[0].documents is not None and len(records[0].documents) == 3
         assert records[0].action_items is not None and len(records[0].action_items) == 2
         paths = {r.url.path.rsplit("/", 1)[-1] for r in api.requests}
-        allowed = {"study", "sites", "tasks", "documents", "action_items", "protocol_deviations"}
+        allowed = {
+            "study",
+            "sites",
+            "tasks",
+            "documents",
+            "action_items",
+            "protocol_deviations",
+            "site_visits",
+        }
         assert "subjects" not in paths and paths <= allowed
 
     def test_workspace_scope_lists_studies(self) -> None:
@@ -635,3 +645,31 @@ def test_map_deviations_reads_name_variants_and_never_subjects() -> None:
         date(2026, 8, 20),
     )
     assert second.subject_level is False and second.occurred_on == date(2026, 8, 1)
+
+
+def test_map_site_visits_keeps_site_visits_only_and_no_people() -> None:
+    items = [
+        {
+            "id": 1, "active": True, "category": "site", "site_id": 501,
+            "subcategory_display": "Routine Monitoring Visit",
+            "status_display": "Confirmed", "start_datetime": "2026-11-17T09:00:00+00:00",
+            "end_datetime": "2026-11-17T17:00:00+00:00", "contact_full_name": "Jane Monitor",
+            "notes": "Bring the delegation log", "location": "Room 4", "title": "IMV 3",
+        },
+        {"id": 2, "active": True, "category": "site", "site_id": 501, "subject_id": 9001,
+         "start_datetime": "2026-11-18T09:00:00"},
+        {"id": 3, "active": True, "category": "site", "site_id": 501, "canceled_at": "2026-11-01T00:00:00"},
+        {"id": 4, "active": False, "category": "site", "site_id": 501},
+        {"id": 5, "active": True, "category": "subject", "site_id": 501},
+    ]  # fmt: skip
+    rows = map_site_visits(items)
+    assert [r.external_id for r in rows] == ["1"]  # subject, cancelled, inactive and non-site visits left out
+    visit = rows[0]
+    assert (visit.site_external_id, visit.kind, visit.status) == (
+        "501",
+        "Routine Monitoring Visit",
+        "Confirmed",
+    )
+    assert visit.starts_on == date(2026, 11, 17) and visit.ends_on == date(2026, 11, 17)
+    kept = str(visit.model_dump())
+    assert "Jane" not in kept and "delegation" not in kept and "Room" not in kept and "IMV" not in kept

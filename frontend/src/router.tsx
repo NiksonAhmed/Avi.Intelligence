@@ -1,12 +1,12 @@
 import { Navigate, createBrowserRouter } from 'react-router'
 import type { RouteObject } from 'react-router'
 
-import { ComingSoon } from './components/ComingSoon'
 import { AppLayout } from './layout/AppLayout'
 import { NotFound } from './pages/NotFound'
 import { ConnectorsPage } from './pages/admin/ConnectorsPage'
 import { DataManagementPage } from './modules/data-management/DataManagementPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
+import { OverviewPage } from './pages/overview/OverviewPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
 import { SopListPage } from './pages/documents/SopListPage'
@@ -22,12 +22,7 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: (
-          <ComingSoon
-            title="Overview"
-            description="Your personalised portfolio dashboard arrives once study data is connected."
-          />
-        ),
+        element: <OverviewPage />,
       },
       { path: 'portfolio', element: <StudyPortfolioPage /> },
       { path: 'command-centre', element: <CommandCentreIndexPage /> },

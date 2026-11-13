@@ -1093,3 +1093,6 @@ async def export_sdv(
 
 # Missing data and labs (Step 3) live in their own file; importing it registers their routes here.
 from . import checks_api  # noqa: E402, F401
+
+# The module's sections on the role-based Overview register themselves with the Overview here.
+from . import overview_section  # noqa: E402, F401  # isort: skip

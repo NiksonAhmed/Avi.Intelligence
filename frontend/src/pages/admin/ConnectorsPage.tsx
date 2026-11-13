@@ -25,6 +25,7 @@ import { formatDateTime } from '../../lib/format'
 import { Forbidden } from '../../components/Forbidden'
 import { PageHeader } from '../../components/PageHeader'
 import { AssistantAdminCard } from './AssistantAdminCard'
+import { SiteAssignmentsCard } from './SiteAssignmentsCard'
 
 const FIELD_LABELS: Record<string, string> = {
   sop_number: 'SOP number',
@@ -111,6 +112,7 @@ function SimpleTrialsCard({ enabled }: { enabled: boolean }) {
 export function ConnectorsPage() {
   const me = useMe()
   const allowed = useHasPermission('connector.manage')
+  const canAssignSites = useHasPermission('work.manage')
   const { data, isLoading, isFetching, isError, error, refetch } = useSharePointStatus(allowed)
 
   if (me.isSuccess && !allowed) return <Forbidden what="connector settings" />
@@ -247,6 +249,12 @@ export function ConnectorsPage() {
       <SimpleTrialsCard enabled={allowed} />
 
       <AssistantAdminCard />
+
+      {canAssignSites && (
+        <div style={{ marginTop: 16 }}>
+          <SiteAssignmentsCard />
+        </div>
+      )}
 
       <Card title="Planned connectors" style={{ marginTop: 16 }}>
         <Flex gap={8} wrap>

@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, assistant, reports, sops, studies, work
+from app.api import admin, assistant, overview, reports, sops, studies, work
 from app.connectors.sharepoint.graph_client import GraphError
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -113,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(studies.router, prefix="/api/v1")
     app.include_router(work.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
+    app.include_router(overview.router, prefix="/api/v1")
     # Data Management: answers 404 unless DATA_MANAGEMENT_ENABLED=true.
     app.include_router(data_management_api.router, prefix="/api/v1")
     return app

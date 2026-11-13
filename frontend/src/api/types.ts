@@ -775,6 +775,55 @@ export interface RisksIssuesReport {
   source: ReportSource
 }
 
+export type OverviewTone = 'good' | 'info' | 'warn' | 'bad' | 'neutral'
+
+export interface OverviewKpi {
+  label: string
+  value: string
+  note: string | null
+  tone: OverviewTone
+  /** Opens the page with the detail. */
+  link: string | null
+}
+
+export interface OverviewRow {
+  label: string
+  detail: string | null
+  chip: string | null
+  tone: OverviewTone
+  link: string | null
+}
+
+export interface OverviewSection {
+  key: string
+  title: string
+  source: string
+  link: string | null
+  link_label: string | null
+  kpis: OverviewKpi[]
+  rows: OverviewRow[]
+  notice: string | null
+  empty: string | null
+}
+
+/** The role-based Overview: each role sees its own page; administrators may preview any role. */
+export interface OverviewData {
+  view: string
+  view_label: string
+  views: { id: string; label: string }[]
+  purpose: string
+  sources: { name: string; as_of: string | null; ok: boolean }[]
+  attention: { counts: OverviewKpi[]; items: OverviewRow[] }
+  sections: OverviewSection[]
+}
+
+/** Which sites each person (CRA) covers; set by administrators (SimpleTrials does not record it). */
+export interface SiteAssignments {
+  people: { id: string; name: string; job_title: string }[]
+  sites: { key: string; label: string }[]
+  assignments: Record<string, string[]>
+}
+
 export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'
 
 export interface QualityScheduleRow {

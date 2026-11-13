@@ -15,7 +15,18 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -65,6 +76,9 @@ class Study(Base):
     )
     deviations: Mapped[list[StudyDeviation]] = relationship(
         back_populates="study", cascade="all, delete-orphan", order_by="StudyDeviation.occurred_on"
+    )
+    site_visits: Mapped[list[StudySiteVisit]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudySiteVisit.starts_on"
     )
 
     __table_args__ = (Index("ux_studies_external", "tenant_id", "source", "external_id", unique=True),)
@@ -202,6 +216,46 @@ class StudyDeviation(Base):
     reportable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     study: Mapped[Study] = relationship(back_populates="deviations")
+
+
+class StudySiteVisit(Base):
+    """A read-only copy of one SimpleTrials site visit (site visits only; no people or notes)."""
+
+    __tablename__ = "study_site_visits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    site_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ends_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="site_visits")
+
+
+class SiteAssignment(Base):
+    """Which sites a person (a CRA) covers, set by an administrator in Avi.Intelligence.
+
+    SimpleTrials' API does not say which CRA covers which site (its site contacts are site staff), so
+    administrators assign them here. Keyed on the study and SimpleTrials' own site id, because site rows
+    are rebuilt on every sync."""
+
+    __tablename__ = "site_assignments"
+    __table_args__ = (UniqueConstraint("tenant_id", "person_id", "study_id", "site_external_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(64), index=True)
+    person_id: Mapped[str] = mapped_column(String(255), index=True)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    site_external_id: Mapped[str] = mapped_column(String(255))
+    assigned_by_name: Mapped[str] = mapped_column(String(255))
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class ConnectorSync(Base):

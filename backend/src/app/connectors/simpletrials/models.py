@@ -96,6 +96,22 @@ class ActionItemRecord(BaseModel):
     closed_on: date | None = None
 
 
+class SiteVisitRecord(BaseModel):
+    """One SimpleTrials site visit (pre-study, initiation, monitoring, close-out), read-only.
+
+    Site visits only: subject visits are never read (no patient-level data). No people, titles, notes,
+    locations or contact details are kept: only the site, the kind of visit, its status and dates."""
+
+    external_id: str
+    site_external_id: str | None = None
+    kind: str | None = None
+    """e.g. "Routine Monitoring Visit", "Initiation", "Prestudy"."""
+    status: str | None = None
+    """e.g. "Scheduled", "Confirmed", "Completed"."""
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+
 class DeviationRecord(BaseModel):
     """One SimpleTrials protocol deviation (read-only), for the Protocol deviations report.
 
@@ -145,6 +161,8 @@ class StudyRecord(BaseModel):
     """SimpleTrials action items; None when they could not be read (the previous copy is kept)."""
     deviations: list[DeviationRecord] | None = None
     """SimpleTrials protocol deviations; None when they could not be read (the previous copy is kept)."""
+    site_visits: list[SiteVisitRecord] | None = None
+    """SimpleTrials site visits (monitoring etc.); None when they could not be read (previous copy kept)."""
 
 
 class StudyConnectorInfo(BaseModel):

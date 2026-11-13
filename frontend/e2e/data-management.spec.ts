@@ -2,8 +2,9 @@ import { expect, test } from '@playwright/test'
 
 // Runs against the demo Viedoc study (VIEDOC_MODE=mock): never a real Viedoc study.
 test('Data Management: overview, site drill-down and a query timeline', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/audit')
   // The menu entry exists (on tablet the menu is folded away, so open the page by its address).
+  // (Not from the Overview, whose Data Management figures link here too.)
   await expect(page.locator('a[href="/data-management"]')).toHaveCount(1)
   await page.goto('/data-management')
   await expect(page.getByText('Demo data: no Viedoc study is connected')).toBeVisible()

@@ -97,6 +97,7 @@ class TestSync:
             "etmf_documents": 0,
             "action_items": 0,
             "deviations": 0,
+            "site_visits": 0,
             "completions_recorded": 0,  # already recorded by the first sync
             "snapshot_taken": False,  # one snapshot per day
         }

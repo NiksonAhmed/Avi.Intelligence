@@ -2,6 +2,44 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-13: Role-based Overview; CRA site assignments; SimpleTrials site visits
+
+**Decision (user, 13 Nov 2026): "This dashboard will be different depending on your role."** The
+Overview (home page) is built per role; mock-up approved:
+https://claude.ai/artifact/FuFzDhN7VZmfAp9rNQZPz9.
+- **Everyone** gets "Needs your attention" first (their own overdue tasks, tasks due in 7 days and one
+  role-specific figure, then their next tasks), when each source was last synced, and **Sync all**
+  (SimpleTrials, the SharePoint SOP library and, when Data Management is on and they may sync it, each
+  Viedoc study; one failure does not stop the others).
+- **Sections per role** (`LAYOUT` in `app/api/overview.py`): Administrator: connectors, studies, risks and
+  issues, deviations, eTMF, data management, SOPs, team tasks. Project Manager: studies, risks and issues,
+  deviations, eTMF, data management, team tasks, SOPs. CRA: their sites, site visits, data management,
+  risks and issues. CTA: eTMF, studies, SOPs. Data Manager: queries, missing data, labs, SDV,
+  deviations. Pharmacovigilance: a "safety database not connected yet" notice (until the Avie Safety DB
+  connector), lab flags, deviations, SOPs. QA: SOPs, deviations, team tasks, risks and issues. Viewer:
+  studies only.
+- **Every figure is taken from the existing report or module** (same rules, same numbers) and links to
+  the page with the detail; nothing is estimated and no AI is used. A section that cannot load says so
+  and the rest of the page still shows.
+- **People with two roles:** open on their main role's page with a switch (user decision). Users have
+  one role today, so the switch appears only for administrators, who may preview every role's page.
+- Data Management adds its sections through a provider it registers itself
+  (`app/overview/providers.py`), so the Overview never imports the module (one-way dependencies).
+
+**CRA sites (user decision: from SimpleTrials if possible, otherwise assigned by an Admin).**
+SimpleTrials' API does not say which CRA covers which site: `site_contacts` lists site staff only
+(Principal Investigator, Study Coordinator), and there is no user or assignment endpoint. So
+administrators assign sites to each person in **Administration → CRA site assignments**
+(`site_assignments` table, keyed on the study and SimpleTrials' own site id because site rows are rebuilt
+on every sync; changes audited as `site_assignment.updated`). Until a CRA has sites, their Overview shows
+all sites with a notice saying so.
+
+**SimpleTrials site visits (user decision: show upcoming monitoring visits).** `site_visits` is read with
+the study sync into `study_site_visits`: site visits only (subject visits, which carry patient-level
+data, are never read), active and not cancelled; kept: site, kind (Pre-study, Initiation, Routine
+Monitoring Visit...), status and dates. Not kept: people, contacts, titles, notes, locations. If they
+cannot be read, the study still syncs and the previous copy is kept.
+
 ## 2026-11-13: Risks and issues come only from SimpleTrials; Risks and issues dashboard; Sync now everywhere
 
 **Decision (user, 13 Nov 2026): "we don't want to allow to create new Risk and issue, it should all be

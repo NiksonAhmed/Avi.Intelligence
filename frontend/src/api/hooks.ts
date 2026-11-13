@@ -17,8 +17,10 @@ import type {
   Me,
   Person,
   RiskFilters,
+  OverviewData,
   RiskListResponse,
   RisksIssuesReport,
+  SiteAssignments,
   SharePointStatus,
   SopDetailResponse,
   SopFilters,
@@ -182,6 +184,62 @@ export function useStudiesSync() {
       await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
       await queryClient.invalidateQueries({ queryKey: ['studies'] })
       await queryClient.invalidateQueries({ queryKey: ['study'] })
+    },
+  })
+}
+
+export function useOverview(view?: string) {
+  return useQuery({
+    queryKey: ['overview', view ?? 'mine'],
+    queryFn: () => apiRequest<OverviewData>('/overview', { params: { view } }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+/**
+ * Sync all (everyone): SimpleTrials, the SharePoint SOP library and, when Data Management is on and the
+ * person may sync it, each Viedoc study. Read-only towards every source; one failure does not stop the rest.
+ */
+export function useSyncAll() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ studies, viedoc }: { studies: boolean; viedoc: boolean }) => {
+      const jobs: Promise<unknown>[] = [apiRequest<void>('/sops/refresh', { method: 'POST' })]
+      if (studies) jobs.push(apiRequest<StudySource>('/studies/sync', { method: 'POST' }))
+      if (viedoc) {
+        jobs.push(
+          (async () => {
+            const status = await apiRequest<{ connections: { name: string }[]; can_sync: boolean }>('/data-management/status')
+            if (!status.can_sync) return
+            for (const c of status.connections) {
+              await apiRequest('/data-management/sync', jsonInit('POST', { connection: c.name }))
+            }
+          })(),
+        )
+      }
+      const results = await Promise.allSettled(jobs)
+      return results.filter((r) => r.status === 'rejected').length
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  })
+}
+
+export function useSiteAssignments(enabled: boolean) {
+  return useQuery({
+    queryKey: ['site-assignments'],
+    queryFn: () => apiRequest<SiteAssignments>('/site-assignments'),
+    enabled,
+  })
+}
+
+export function useUpdateSiteAssignments() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ personId, sites }: { personId: string; sites: string[] }) =>
+      apiRequest<SiteAssignments>(`/site-assignments/${encodeURIComponent(personId)}`, jsonInit('PUT', { sites })),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['site-assignments'], data)
+      await queryClient.invalidateQueries({ queryKey: ['overview'] })
     },
   })
 }

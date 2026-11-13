@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from .api_client import SimpleTrialsClient, SimpleTrialsError
-from .mapping import map_action_items, map_deviations, map_documents, map_study
+from .mapping import map_action_items, map_deviations, map_documents, map_site_visits, map_study
 from .models import StudyConnectorInfo, StudyRecord
 
 log = logging.getLogger("simpletrials")
@@ -54,5 +54,11 @@ class ApiStudyConnector:
                 )
             except SimpleTrialsError as exc:
                 log.warning("simpletrials.deviations_unavailable", extra={"status": exc.status})
+            try:  # site visits for the CRA Overview; must not stop the study sync either
+                record.site_visits = map_site_visits(
+                    await self._client.list_all("site_visits", "site_visits", params)
+                )
+            except SimpleTrialsError as exc:
+                log.warning("simpletrials.site_visits_unavailable", extra={"status": exc.status})
             records.append(record)
         return records

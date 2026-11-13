@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('find an SOP, open it, download it and see the download in the audit trail', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Needs your attention' })).toBeVisible()
 
   // Navigate via global search (works on desktop and tablet layouts).
   await page.getByRole('searchbox', { name: 'Global search' }).fill('site activation')

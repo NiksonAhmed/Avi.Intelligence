@@ -26,6 +26,7 @@ from .models import (
     StudyDeviation,
     StudyMilestone,
     StudySite,
+    StudySiteVisit,
 )
 
 log = logging.getLogger("studies.sync")
@@ -59,7 +60,7 @@ async def sync_studies(
         s.external_id: s
         for s in db.scalars(select(Study).where(Study.tenant_id == tenant_id, Study.source == source))
     }
-    created = updated = documents = action_items = deviations = 0
+    created = updated = documents = action_items = deviations = site_visits = 0
     seen: set[str] = set()
     for rec in records:
         seen.add(rec.external_id)
@@ -96,6 +97,9 @@ async def sync_studies(
         if rec.deviations is not None:  # None: not readable this time, keep the previous copy
             study.deviations = [StudyDeviation(**d.model_dump()) for d in rec.deviations]
             deviations += len(rec.deviations)
+        if rec.site_visits is not None:  # None: not readable this time, keep the previous copy
+            study.site_visits = [StudySiteVisit(**v.model_dump()) for v in rec.site_visits]
+            site_visits += len(rec.site_visits)
 
     flagged = 0
     for ext_id, study in existing.items():
@@ -113,6 +117,7 @@ async def sync_studies(
         "etmf_documents": documents,
         "action_items": action_items,
         "deviations": deviations,
+        "site_visits": site_visits,
     }
     db.commit()
     # Report history: completion dates and the daily snapshot (both read-only derivations).

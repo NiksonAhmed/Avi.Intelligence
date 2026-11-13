@@ -16,6 +16,7 @@ from .models import (
     EtmfDocumentRecord,
     MilestoneRecord,
     SiteRecord,
+    SiteVisitRecord,
     StudyConnectorInfo,
     StudyRecord,
 )
@@ -228,7 +229,9 @@ class MockStudyConnector:
         return StudyConnectorInfo(mode="mock", mock_reason=self._reason)
 
     async def fetch_studies(self) -> list[StudyRecord]:
-        return with_demo_deviations(with_demo_action_items(with_demo_documents(demo_studies())))
+        return with_demo_site_visits(
+            with_demo_deviations(with_demo_action_items(with_demo_documents(demo_studies())))
+        )
 
 
 # Demo eTMF structure: (section, folder, document name, expires).
@@ -413,4 +416,39 @@ def with_demo_deviations(studies: list[StudyRecord], today: date | None = None) 
                 reportable=severity in ("Major", "Critical"),
             )
         )
+    return studies
+
+
+# Demo site visits: (site index, kind, status, starts in days (negative = past)).
+_VISITS: list[tuple[int, str, str, int]] = [
+    (0, "Routine Monitoring Visit", "Confirmed", 4),
+    (1, "Routine Monitoring Visit", "Scheduled", 12),
+    (0, "Routine Monitoring Visit", "Completed", -30),
+    (2, "Initiation", "Scheduled", 45),
+]
+
+
+def with_demo_site_visits(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo site visits (site visits only, no people) to the first study."""
+    t = today or app_today()
+    for study in studies:
+        study.site_visits = []
+    if not studies:
+        return studies
+    first = studies[0]
+    visits: list[SiteVisitRecord] = []
+    for n, (site_i, kind, status, starts) in enumerate(_VISITS, start=1):
+        if site_i >= len(first.sites):
+            continue
+        visits.append(
+            SiteVisitRecord(
+                external_id=f"{first.external_id}-V{n}",
+                site_external_id=first.sites[site_i].external_id,
+                kind=kind,
+                status=status,
+                starts_on=_d(t, starts),
+                ends_on=_d(t, starts),
+            )
+        )
+    first.site_visits = visits
     return studies

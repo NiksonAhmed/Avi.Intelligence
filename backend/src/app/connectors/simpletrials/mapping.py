@@ -37,6 +37,7 @@ from .models import (
     EtmfDocumentRecord,
     MilestoneRecord,
     SiteRecord,
+    SiteVisitRecord,
     StudyRecord,
 )
 
@@ -352,6 +353,33 @@ def _irbec_reportable(d: dict[str, Any]) -> bool | None:
         return True if d.get("irbec_submission_date") else None
     text = str(status).lower().replace("_", " ")
     return not ("not" in text or text in ("no", "none", "n/a", "na"))
+
+
+def map_site_visits(items: list[dict[str, Any]]) -> list[SiteVisitRecord]:
+    """Site visits only (never subject visits); no people, titles, notes or locations are kept.
+
+    Inactive and cancelled visits are left out."""
+    records: list[SiteVisitRecord] = []
+    for v in items:
+        if v.get("id") is None or v.get("active") is False or v.get("canceled_at"):
+            continue
+        if v.get("subject_id") is not None or v.get("subject_visit_def_id") is not None:
+            continue  # a subject (patient) visit: patient-level data is never read
+        category = str(v.get("category") or "site").lower()
+        if category != "site":
+            continue
+        site = v.get("site_id")
+        records.append(
+            SiteVisitRecord(
+                external_id=str(v["id"]),
+                site_external_id=str(site) if site is not None else None,
+                kind=_label(_first(v, "subcategory_display", "subcategory"), 100),
+                status=_label(_first(v, "status_display", "status")),
+                starts_on=as_date(v.get("start_datetime")),
+                ends_on=as_date(v.get("end_datetime")),
+            )
+        )
+    return records
 
 
 def map_deviations(items: list[dict[str, Any]]) -> list[DeviationRecord]:
