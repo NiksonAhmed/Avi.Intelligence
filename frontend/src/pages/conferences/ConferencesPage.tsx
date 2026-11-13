@@ -44,20 +44,6 @@ function dates(c: Conference): string {
   return c.ends_on !== c.starts_on ? `${formatDay(c.starts_on)} – ${formatDay(c.ends_on)}` : formatDay(c.starts_on)
 }
 
-/** Curved arcs between consecutive conferences, bowed upwards like flight paths. */
-function arcs(points: [number, number][]): string {
-  return points
-    .slice(1)
-    .map((b, i) => {
-      const a = points[i]!
-      const dist = Math.hypot(b[0] - a[0], b[1] - a[1])
-      const cx = (a[0] + b[0]) / 2
-      const cy = Math.max(4, (a[1] + b[1]) / 2 - dist * 0.28)
-      return `M${a[0].toFixed(1)},${a[1].toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${b[0].toFixed(1)},${b[1].toFixed(1)}`
-    })
-    .join(' ')
-}
-
 function Chip({ on, label, dot, onClick }: { on: boolean; label: string; dot?: string; onClick: () => void }) {
   return (
     <button
@@ -94,7 +80,6 @@ function WorldMap({
   onSelect: (id: string) => void
 }) {
   const placed = report.conferences.filter((c) => c.lat !== null && c.lon !== null)
-  const path = arcs(placed.map((c) => [fx(c.lon!) * 1000, fy(c.lat!) * 391.7]))
   return (
     <div
       role="img"
@@ -136,12 +121,6 @@ function WorldMap({
           {o.label}
         </span>
       ))}
-      {path && (
-        <svg aria-hidden="true" viewBox="0 0 1000 391.7" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-          <path d={path} fill="none" stroke="#FFFFFF" strokeOpacity={0.18} strokeWidth={5} vectorEffect="non-scaling-stroke" />
-          <path className="conf-route" d={path} fill="none" stroke="#FFFFFF" strokeOpacity={0.8} strokeWidth={1.3} strokeDasharray="5 7" vectorEffect="non-scaling-stroke" />
-        </svg>
-      )}
       {placed.map((c) => {
         const colour = colourOf(c)
         const on = selected?.id === c.id
@@ -349,10 +328,6 @@ export function ConferencesPage() {
               {label}
             </span>
           ))}
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 20, borderTop: '2px dashed #FFFFFF', opacity: 0.8 }} />
-            The year&apos;s route, in date order
-          </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #FFFFFF', boxSizing: 'border-box' }} />
             Next conference (pulses)

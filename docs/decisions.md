@@ -44,7 +44,7 @@ list**: the Microsoft admin is on leave and Microsoft has an outage, so the list
 - **Pins are placed by city** from a built-in table of conference cities (`geo.py`); no online geocoding, so
   nothing about Avion's plans leaves the system. An unknown city is counted as "not on the map".
 - Page: figures (conferences this year, countries, next conference, exhibiting or speaking, registration due
-  within 30 days), year and role filters, the map (curved route in date order, pulsing next conference),
+  within 30 days), year and role filters, the map (pulsing next conference; the date-order route was removed at the user's request),
   details with "Open in SharePoint", the list, Sync now, Excel (audited; cost column only for those
   allowed) and PDF. A "Next conferences" card is added to every role's Overview.
 - Map outlines: Natural Earth 110m land (public domain), drawn as `frontend/src/assets/world-map.svg`.
