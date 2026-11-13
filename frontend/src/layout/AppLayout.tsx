@@ -15,7 +15,7 @@ import {
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
-import { useMe } from '../api/hooks'
+import { useConferences, useMe } from '../api/hooks'
 import { BrandMark } from '../components/BrandMark'
 import { initials } from '../lib/format'
 import { brand } from '../theme'
@@ -91,10 +91,12 @@ export function AppLayout() {
   const { data: me } = useMe()
   const canSeeDm = Boolean(me?.permissions.includes('dm.view'))
   const dmStatus = useDmStatus(canSeeDm)
+  const conferences = useConferences({}, Boolean(me?.permissions.includes('conference.view')))
   const navItems = NAV_ITEMS.filter(
     (item) =>
       (!item.permission || Boolean(me?.permissions.includes(item.permission))) &&
-      (item.module !== 'data-management' || Boolean(dmStatus.data)),
+      (item.module !== 'data-management' || Boolean(dmStatus.data)) &&
+      (item.module !== 'conferences' || Boolean(conferences.data)),
   )
 
   return (

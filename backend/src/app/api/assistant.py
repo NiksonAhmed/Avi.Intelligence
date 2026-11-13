@@ -12,14 +12,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.studies import current_source_label, study_source
+from app.assistant import topics
 from app.assistant.service import (
     AskResponse,
     AssistantUnavailable,
     answer_question,
     answer_study_question,
     build_client,
+    record_lookup_answer,
 )
-from app.assistant.study_questions import STUDY_QUESTIONS, understand
+from app.assistant.study_questions import STUDY_QUESTIONS, about_procedures, understand
 from app.assistant.study_tools import load_study_data
 from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
@@ -123,8 +125,18 @@ def status(
         failed=stats.failed,
         last_indexed_at=stats.last_indexed_at,
         suggested_questions=_suggestions(db, user.tenant_id),
-        study_questions=STUDY_QUESTIONS if user.can(Permission.STUDY_READ) else [],
+        study_questions=_work_questions(user, settings),
     )
+
+
+def _work_questions(user: CurrentUser, settings: Settings) -> list[str]:
+    """Example questions about the person's work, for the areas they can see."""
+    out = list(STUDY_QUESTIONS) if user.can(Permission.STUDY_READ) else []
+    if settings.conferences_enabled and user.can(Permission.CONFERENCE_VIEW):
+        out.append("When is the next conference?")
+    if settings.data_management_enabled and user.can(Permission.DM_VIEW):
+        out += ["How many queries are open?", "What is our SDV progress?"]
+    return out
 
 
 async def _study_answer(
@@ -136,7 +148,7 @@ async def _study_answer(
     await ensure_synced(db, studies, user.tenant_id)
     info = study_source(db, studies, user.tenant_id)
     data = load_study_data(
-        db, user.tenant_id, current_source_label(studies), today(), info.last_successful_sync_at
+        db, user.tenant_id, current_source_label(studies), today(), info.last_successful_sync_at, user.id
     )
     parsed = understand(question, data)
     if parsed is None:
@@ -144,6 +156,17 @@ async def _study_answer(
     return answer_study_question(
         db=db, user=user, question=question, parsed=parsed, data=data, demo=studies.info().mode == "mock"
     )
+
+
+async def _topic_answer(db: Session, user: CurrentUser, question: str, demo: bool) -> AskResponse | None:
+    """A module's answer (Conferences, Data Management...) when the question is about its area."""
+    if about_procedures(question):
+        return None
+    for topic in topics.matching(question):
+        result = await topic.answer(db, user, question)
+        if result is not None:
+            return record_lookup_answer(db=db, user=user, question=question, result=result, demo=demo)
+    return None
 
 
 @router.post("/ask", response_model=AskResponse)
@@ -157,7 +180,9 @@ async def ask(
     user: Annotated[CurrentUser, Depends(require(Permission.ASSISTANT_USE))],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AskResponse:
-    result = await _study_answer(db, studies, user, body.question)
+    result = await _topic_answer(db, user, body.question, demo=studies.info().mode == "mock")
+    if result is None:
+        result = await _study_answer(db, studies, user, body.question)
     if result is None:
         try:
             result = await answer_question(

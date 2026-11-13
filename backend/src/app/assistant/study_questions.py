@@ -15,7 +15,19 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.studies.rules import MAJOR_SLIP_DAYS, MilestoneState, ScheduleState
+from app.reports.deviations import build_deviations
+from app.reports.etmf import build_etmf
+from app.reports.risks_issues import build_risks_issues
+from app.reports.work_management import task_about
+from app.studies.rules import (
+    MAJOR_SLIP_DAYS,
+    TASK_CATEGORY_LABELS,
+    TASK_CLOSED,
+    MilestoneState,
+    ScheduleState,
+    TaskCategory,
+    task_overdue,
+)
 
 from .study_tools import (
     PRIVACY_NOTE,
@@ -26,14 +38,16 @@ from .study_tools import (
     StudyData,
     StudyStatus,
     WorkInput,
-    open_risks,
     open_tasks,
     plan_items,
     sites,
     studies_overview,
 )
 
-Intent = Literal["status", "due", "behind", "milestone", "enrolment", "activation", "tasks", "risks"]
+Intent = Literal[
+    "status", "due", "behind", "milestone", "enrolment", "activation", "tasks", "risks", "deviations", "etmf",
+    "visits",
+]  # fmt: skip
 
 DEFAULT_WINDOW_DAYS = 90
 MAX_ROWS = 25
@@ -75,11 +89,30 @@ _WEAK_SOP = {
     "checklists",
 }
 _WEAK_SOP_PHRASES = ("how do", "how to", "how should", "what should", "risk-based", "risk based")
+_VISIT_CONTEXT = {
+    "upcoming", "next", "planned", "scheduled", "monitoring", "imv", "imvs", "cov", "covs", "coming", "due",
+    "when",
+}  # fmt: skip
+_ETMF_CONTEXT = {"etmf", "tmf", "filing", "filed", "expiring", "expiry", "expired", "essential", "missing"}
 _STUDY_CONTEXT = {"study", "studies", "trial", "trials", "portfolio", "project", "projects", "protocol"}
 
 _INTENT_WORDS: dict[Intent, tuple[str, ...]] = {
-    "tasks": ("task", "tasks", "action", "actions", "to-do", "todo"),
-    "risks": ("risk", "risks", "issue", "issues"),
+    "deviations": ("deviation", "deviations", "pd", "pds", "non-compliance", "noncompliance"),
+    "etmf": (
+        "etmf",
+        "tmf",
+        "filing",
+        "filed",
+        "expiring",
+        "expiry",
+        "expired",
+        "essential",
+        "document",
+        "documents",
+    ),
+    "visits": ("visit", "visits", "monitoring", "imv", "imvs", "cov", "covs"),
+    "tasks": ("task", "tasks", "to-do", "todo"),
+    "risks": ("risk", "risks", "issue", "issues", "action", "actions"),
     "enrolment": (
         "enrol",
         "enroll",
@@ -202,6 +235,8 @@ class StudyQuestion:
     overdue_only: bool = False
     asked_name: str | None = None
     """For "when is ..." questions: what was asked about, when no plan entry matched."""
+    mine: bool = False
+    """'My tasks': only the asker's own tasks (any category)."""
 
 
 # ---- understanding -------------------------------------------------------------------------------
@@ -314,6 +349,11 @@ def _phase(words: set[str], q: str) -> str | None:
     return None
 
 
+def about_procedures(question: str) -> bool:
+    """Clearly about SOPs, forms or templates: SOP search answers, whatever else the question mentions."""
+    return bool(set(_tokens(question)) & _STRONG_SOP)
+
+
 def understand(question: str, data: StudyData) -> StudyQuestion | None:
     """The study question being asked, or None when it is about procedures (SOP search)."""
     q = " ".join(question.lower().split())
@@ -339,11 +379,20 @@ def understand(question: str, data: StudyData) -> StudyQuestion | None:
         return None
 
     keyword_intent: Intent | None = None
-    order: tuple[Intent, ...] = ("tasks", "risks", "enrolment", "activation", "behind", "due")
+    order: tuple[Intent, ...] = (
+        "deviations", "etmf", "visits", "tasks", "risks", "enrolment", "activation", "behind", "due",
+    )  # fmt: skip
     for candidate in order:
-        if words & set(_INTENT_WORDS[candidate]):
-            keyword_intent = candidate
-            break
+        if not words & set(_INTENT_WORDS[candidate]):
+            continue
+        # "Visit" and "document" alone are SOP topics ("site initiation visit"); they are study questions
+        # only with study context ("upcoming monitoring visits", "expiring eTMF documents", a study or site).
+        if candidate == "visits" and not (entity or words & _VISIT_CONTEXT):
+            continue
+        if candidate == "etmf" and not (entity or words & _ETMF_CONTEXT):
+            continue
+        keyword_intent = candidate
+        break
     # A plan entry's name wins for "when is ..." questions, or when nothing else is asked
     # ("Which sites aren't activated?" is about sites, not the "All Sites Activated" milestone).
     intent: Intent | None = "milestone" if milestones and (asked or keyword_intent is None) else None
@@ -368,6 +417,7 @@ def understand(question: str, data: StudyData) -> StudyQuestion | None:
         window_days=_window(q),
         milestones=milestones,
         overdue_only=bool(words & {"overdue", "late", "behind"}),
+        mine=bool(words & {"my", "me", "mine", "i"}),
         asked_name=re.sub(r"\s+(?:for|on|at)\s+.*$", "", asked.group(1))
         if asked and not milestones
         else None,
@@ -393,7 +443,8 @@ class SourceLink(BaseModel):
 
 
 class StudyAnswer(BaseModel):
-    intent: Intent
+    intent: str
+    """A study intent, or a module's topic (e.g. "conferences", "dm_queries")."""
     understood: str
     """How the question was read, e.g. "Close-out items due in the next 90 days · all studies"."""
     headline: str
@@ -865,51 +916,182 @@ def _answer_activation(data: StudyData, q: StudyQuestion) -> tuple[str, list[str
 
 
 def _answer_tasks(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], list[AnswerTable]]:
-    rows = open_tasks(data, WorkInput(study_ids=q.study_ids or None, overdue_only=q.overdue_only))
-    overdue = [t for t in rows if t.overdue]
+    """Open tasks: the asker's own ("my tasks", any category), a study's, or everyone's (any category)."""
+    ids = {s.id for s in data.pick(q.study_ids)} if q.study_ids else None
+    rows = []
+    for t in data.tasks:
+        if t.status in TASK_CLOSED:
+            continue
+        if q.mine and not any(a.person_id == data.user_id and a.status != "Completed" for a in t.assignees):
+            continue
+        if ids is not None and t.study_id not in ids:
+            continue
+        overdue = task_overdue(t.due_date, t.status, data.today)
+        if q.overdue_only and not overdue:
+            continue
+        rows.append((t, overdue))
+    rows.sort(key=lambda r: (not r[1], r[0].due_date or date.max, r[0].reference))
+    overdue_n = sum(1 for _t, o in rows if o)
     table = AnswerTable(
-        title="Open study tasks (overdue first)",
-        columns=["Task", "Study", "Status", "Due", "Waiting on"],
+        title=("Your open tasks" if q.mine else "Open tasks") + " (overdue first)",
+        columns=["Task", "Category", "About", "Status", "Due", "Waiting on"],
         rows=[
             [
                 f"{t.reference} · {t.title}",
-                t.protocol_number,
+                TASK_CATEGORY_LABELS[TaskCategory(t.category)],
+                task_about(t) or "—",
                 t.status,
-                day(t.due_date) + (" (overdue)" if t.overdue else ""),
-                ", ".join(t.people) or "—",
+                day(t.due_date) + (" (overdue)" if o else ""),
+                ", ".join(a.person_name for a in t.assignees if a.status != "Completed") or "—",
             ]
-            for t in rows[:MAX_ROWS]
+            for t, o in rows[:MAX_ROWS]
         ],
-        links=["/tasks?scope=all"] * min(len(rows), MAX_ROWS),
+        links=["/tasks" if q.mine else "/tasks?scope=all"] * min(len(rows), MAX_ROWS),
         more=max(0, len(rows) - MAX_ROWS),
     )
-    head = f"{len(rows)} open study task{'s' if len(rows) != 1 else ''}, {len(overdue)} overdue."
+    who = "You have" if q.mine else "There are"
+    head = f"{who} {len(rows)} open task{'s' if len(rows) != 1 else ''}, {overdue_n} overdue."
     return head, [], [table] if rows else []
 
 
 def _answer_risks(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], list[AnswerTable]]:
-    rows = open_risks(data, WorkInput(study_ids=q.study_ids or None))
-    high = [r for r in rows if r.rating == "High"]
+    """Risks and issues: SimpleTrials action items (the CTMS is the only source)."""
+    r = build_risks_issues(data.pick(q.study_ids), data.today)
+    open_rows = [i for i in r.issues if not i.closed]
+    if q.site_numbers:
+        open_rows = [i for i in open_rows if any(i.where.startswith(f"{n} ") for n in q.site_numbers)]
+    overdue = [i for i in open_rows if i.days_overdue is not None]
+    if q.overdue_only:
+        open_rows = overdue
     table = AnswerTable(
-        title="Open risks and issues (highest score first)",
-        columns=["Reference", "Study", "Type", "Title", "Rating", "Owner", "Status"],
+        title="Open risks and issues from SimpleTrials (most overdue first)",
+        columns=["No.", "Study", "Site", "Issue", "Priority", "Due", "Status"],
         rows=[
             [
-                r.reference,
-                r.protocol_number,
-                "Issue" if r.kind == "issue" else "Risk",
-                r.title,
-                f"{r.rating} · {r.score}",
-                r.owner,
-                r.status,
+                i.number or "—",
+                i.protocol_number,
+                i.where,
+                i.description or "—",
+                i.priority,
+                day(i.due_on) + (f" ({i.days_overdue} days overdue)" if i.days_overdue is not None else ""),
+                i.status,
             ]
-            for r in rows[:MAX_ROWS]
+            for i in open_rows[:MAX_ROWS]
         ],
-        links=["/risks"] * min(len(rows), MAX_ROWS),
+        links=["/risks"] * min(len(open_rows), MAX_ROWS),
+        more=max(0, len(open_rows) - MAX_ROWS),
+    )
+    noun = "risk" if len(open_rows) == 1 else "risks"
+    head = (
+        f"{len(overdue)} overdue risks and issues."
+        if q.overdue_only
+        else f"{len(open_rows)} open {noun} and issues, {len(overdue)} overdue."
+    )
+    lines = ["SimpleTrials' API has no risk register, so its action items are the issues."]
+    return head, lines, [table] if open_rows else []
+
+
+def _answer_deviations(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], list[AnswerTable]]:
+    r = build_deviations(data.pick(q.study_ids), data.today)
+    tiles = {t.key: t for t in r.tiles}
+    rows = list(r.deviations)
+    if q.site_numbers:
+        rows = [d for d in rows if any(d.where.startswith(f"{n} ") for n in q.site_numbers)]
+    table = AnswerTable(
+        title="Protocol deviations (open first, most severe first)",
+        columns=["Study", "Site", "Severity", "Category", "Occurred", "Status"],
+        rows=[
+            [
+                d.protocol_number,
+                d.where,
+                d.severity,
+                d.category,
+                day(d.occurred_on),
+                d.status + (f" · {d.days_open} days open" if d.days_open is not None else ""),
+            ]
+            for d in rows[:MAX_ROWS]
+        ],
+        links=["/reports?tab=deviations"] * min(len(rows), MAX_ROWS),
         more=max(0, len(rows) - MAX_ROWS),
     )
-    head = f"{len(rows)} open risk{'s' if len(rows) != 1 else ''} and issues, {len(high)} rated High."
-    return head, [], [table] if rows else []
+    head = (
+        f"{tiles['total'].value} protocol deviations, {tiles['open'].value} open, "
+        f"{tiles['major'].value} major or critical."
+        if r.has_deviations
+        else "No protocol deviations are recorded in SimpleTrials."
+    )
+    lines = [f"Per 10 enrolled subjects: {tiles['rate'].value}."] if tiles["rate"].value != "—" else []
+    return head, lines, [table] if rows else []
+
+
+def _answer_etmf(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], list[AnswerTable]]:
+    r = build_etmf(data.pick(q.study_ids), data.today)
+    tiles = {t.key: t for t in r.tiles}
+    tables = []
+    if r.expiring:
+        tables.append(
+            AnswerTable(
+                title="Expired or expiring documents",
+                columns=["Document", "Study", "Where", "Expires"],
+                rows=[[e.name, e.protocol_number, e.where, day(e.expires_on)] for e in r.expiring[:MAX_ROWS]],
+                links=["/reports?tab=etmf"] * min(len(r.expiring), MAX_ROWS),
+                more=max(0, len(r.expiring) - MAX_ROWS),
+            )
+        )
+    if r.sites_missing:
+        tables.append(
+            AnswerTable(
+                title="Documents still expected, by site",
+                columns=["Site", "Expected", "Filed", "Still expected"],
+                rows=[
+                    [c.label, str(c.expected), str(c.filed), str(c.missing)]
+                    for c in r.sites_missing[:MAX_ROWS]
+                ],
+                links=["/reports?tab=etmf"] * min(len(r.sites_missing), MAX_ROWS),
+                more=max(0, len(r.sites_missing) - MAX_ROWS),
+            )
+        )
+    head = (
+        f"eTMF completeness {tiles['completeness'].value}: {tiles['missing'].value} documents expected, "
+        f"{tiles['expiring'].value} expired or expiring in 60 days."
+    )
+    return head, [f"{tiles['on_time'].label}: {tiles['on_time'].value}."], tables
+
+
+def _answer_visits(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], list[AnswerTable]]:
+    rows = []
+    for s in data.pick(q.study_ids):
+        sites_by_ext = {site.external_id: site for site in s.sites}
+        for v in s.site_visits:
+            site = sites_by_ext.get(v.site_external_id or "")
+            if q.site_numbers and (site is None or site.site_number not in q.site_numbers):
+                continue
+            if v.starts_on is None or v.starts_on < data.today or (v.status or "").lower() == "completed":
+                continue
+            rows.append((s, site, v))
+    rows.sort(key=lambda r: r[2].starts_on or date.max)
+    table = AnswerTable(
+        title="Upcoming site visits",
+        columns=["Date", "Visit", "Study", "Site", "Status"],
+        rows=[
+            [
+                day(v.starts_on),
+                v.kind or "Site visit",
+                s.protocol_number,
+                f"{site.site_number} · {site.name}" if site else "—",
+                v.status or "—",
+            ]
+            for s, site, v in rows[:MAX_ROWS]
+        ],
+        links=[_study_url(s.id, "sites") for s, _site, _v in rows[:MAX_ROWS]],
+        more=max(0, len(rows) - MAX_ROWS),
+    )
+    count = f"{len(rows)} upcoming site visit{'s' if len(rows) != 1 else ''}"
+    head = count + (
+        f", the next on {day(rows[0][2].starts_on)} ({rows[0][2].kind or 'site visit'})." if rows else "."
+    )
+    lines = ["Site visits from SimpleTrials (site visits only; no subject visits or people)."]
+    return head, lines, [table] if rows else []
 
 
 _ANSWERERS = {
@@ -921,6 +1103,9 @@ _ANSWERERS = {
     "activation": (_answer_activation, "sites"),
     "tasks": (_answer_tasks, "tasks"),
     "risks": (_answer_risks, "risks"),
+    "deviations": (_answer_deviations, None),
+    "etmf": (_answer_etmf, None),
+    "visits": (_answer_visits, "sites"),
 }
 
 _UNDERSTOOD = {
@@ -930,8 +1115,11 @@ _UNDERSTOOD = {
     "milestone": "Milestone dates",
     "enrolment": "Enrolment against target",
     "activation": "Site activation",
-    "tasks": "Open study tasks",
-    "risks": "Open risks and issues",
+    "tasks": "Open tasks",
+    "risks": "Open risks and issues (SimpleTrials)",
+    "deviations": "Protocol deviations",
+    "etmf": "eTMF completeness and expiring documents",
+    "visits": "Upcoming site visits",
 }
 
 FOLLOW_UPS = {
@@ -946,7 +1134,10 @@ FOLLOW_UPS = {
     "enrolment": ["Which sites are not activated?", "How are my studies going?"],
     "activation": ["Which sites are behind on enrolment?", "Are we falling behind?"],
     "tasks": ["Open risks?", "Are we falling behind?"],
-    "risks": ["Overdue tasks?", "How are my studies going?"],
+    "risks": ["Overdue tasks?", "Any open protocol deviations?"],
+    "deviations": ["Open risks?", "Which documents are expiring?"],
+    "etmf": ["Any open protocol deviations?", "Upcoming monitoring visits?"],
+    "visits": ["Open risks?", "Which documents are expiring?"],
 }
 
 
@@ -954,13 +1145,16 @@ def answer(data: StudyData, q: StudyQuestion) -> StudyAnswer:
     build, tab = _ANSWERERS[q.intent]
     headline, lines, tables = build(data, q)
     understood = _UNDERSTOOD[q.intent]
+    if q.intent == "tasks" and q.mine:
+        understood = "Your open tasks"
     if q.phase:
         understood += f" · {q.phase}"
     if q.intent == "due":
         understood += f" · next {q.window_days or DEFAULT_WINDOW_DAYS} days"
     if q.site_numbers:
         understood += " · site " + ", ".join(q.site_numbers)
-    understood += f" · {_scope(data, q)}"
+    if not (q.intent == "tasks" and q.mine and not q.study_ids):  # "my tasks" covers every category
+        understood += f" · {_scope(data, q)}"
     return StudyAnswer(
         intent=q.intent,
         understood=understood,
@@ -972,8 +1166,7 @@ def answer(data: StudyData, q: StudyQuestion) -> StudyAnswer:
         sandbox_only=data.sandbox_only,
         follow_ups=FOLLOW_UPS[q.intent],
         note=(
-            "Worked out by Avi.Intelligence from its read-only copy of SimpleTrials and its own tasks and "
-            "risks, "
+            "Worked out by Avi.Intelligence from its read-only copy of SimpleTrials and its own tasks, "
             "using the same rules as the Study Command Centre and Reports. " + PRIVACY_NOTE
         ),
     )
@@ -981,7 +1174,11 @@ def answer(data: StudyData, q: StudyQuestion) -> StudyAnswer:
 
 STUDY_QUESTIONS = [
     "How are my studies going?",
-    "Is anything due for study close-out?",
     "Are we falling behind?",
     "Which sites are behind on enrolment?",
+    "What are my overdue tasks?",
+    "Any open risks or issues?",
+    "Any open protocol deviations?",
+    "Which eTMF documents are expiring?",
+    "Upcoming monitoring visits?",
 ]

@@ -64,15 +64,35 @@ PURPOSE: dict[Role, str] = {
 }
 
 # Which sections each role sees, in order. Unknown keys (e.g. a module that is switched off) are skipped.
+# "conferences" (Next conferences) comes from the Conferences module when it is on.
 LAYOUT: dict[Role, list[str]] = {
-    Role.ADMIN: ["connectors", "studies", "risks", "deviations", "etmf", "dm", "sops", "team_tasks"],
-    Role.PROJECT_MANAGER: ["studies", "risks", "deviations", "etmf", "dm", "team_tasks", "sops"],
-    Role.CRA: ["my_sites", "visits", "dm", "risks"],
-    Role.CTA: ["etmf", "studies", "sops"],
-    Role.DATA_MANAGER: ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations"],
-    Role.SAFETY: ["safety_db", "dm_labs", "deviations", "sops"],
-    Role.QA: ["sops", "deviations", "team_tasks", "risks"],
-    Role.VIEWER: ["studies"],
+    Role.ADMIN: [
+        "connectors",
+        "studies",
+        "risks",
+        "deviations",
+        "etmf",
+        "dm",
+        "sops",
+        "team_tasks",
+        "conferences",
+    ],
+    Role.PROJECT_MANAGER: [
+        "studies",
+        "risks",
+        "deviations",
+        "etmf",
+        "dm",
+        "team_tasks",
+        "sops",
+        "conferences",
+    ],
+    Role.CRA: ["my_sites", "visits", "dm", "risks", "conferences"],
+    Role.CTA: ["etmf", "studies", "sops", "conferences"],
+    Role.DATA_MANAGER: ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations", "conferences"],
+    Role.SAFETY: ["safety_db", "dm_labs", "deviations", "sops", "conferences"],
+    Role.QA: ["sops", "deviations", "team_tasks", "risks", "conferences"],
+    Role.VIEWER: ["studies", "conferences"],
 }
 
 # The third "Needs your attention" figure for each role (the first two are the person's own tasks).

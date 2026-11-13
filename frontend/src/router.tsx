@@ -6,6 +6,7 @@ import { NotFound } from './pages/NotFound'
 import { ConnectorsPage } from './pages/admin/ConnectorsPage'
 import { DataManagementPage } from './modules/data-management/DataManagementPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
+import { ConferencesPage } from './pages/conferences/ConferencesPage'
 import { OverviewPage } from './pages/overview/OverviewPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
         index: true,
         element: <OverviewPage />,
       },
+      { path: 'conferences', element: <ConferencesPage /> },
       { path: 'portfolio', element: <StudyPortfolioPage /> },
       { path: 'command-centre', element: <CommandCentreIndexPage /> },
       { path: 'command-centre/:studyId', element: <StudyCommandCentrePage /> },

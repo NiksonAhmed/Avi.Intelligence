@@ -7,6 +7,7 @@ import {
   DatabaseOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
+  GlobalOutlined,
   ProjectOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
@@ -20,12 +21,20 @@ export interface NavItem {
   /** Shown only to users with this permission. */
   permission?: string
   /** Shown only while this optional module is switched on. */
-  module?: 'data-management'
+  module?: 'data-management' | 'conferences'
 }
 
 /** Main navigation, in the order defined by the product brief. */
 export const NAV_ITEMS: NavItem[] = [
   { key: 'overview', path: '/', label: 'Overview', icon: <DashboardOutlined /> },
+  {
+    key: 'conferences',
+    path: '/conferences',
+    label: 'Conferences',
+    icon: <GlobalOutlined />,
+    permission: 'conference.view',
+    module: 'conferences',
+  },
   { key: 'portfolio', path: '/portfolio', label: 'Study Portfolio', icon: <AppstoreOutlined /> },
   { key: 'command-centre', path: '/command-centre', label: 'Study Command Centre', icon: <ProjectOutlined /> },
   { key: 'tasks', path: '/tasks', label: 'My Tasks', icon: <CheckSquareOutlined /> },

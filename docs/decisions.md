@@ -2,6 +2,55 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-13: Ask Avi.Intelligence answers across the whole app
+
+**Decision (user, 13 Nov 2026): "if I ask anything regarding conference or study or task or risk or SOP or
+data management it should be able to answer".** Still no AI for anything but SOP answers (no key yet):
+every other answer is worked out by fixed rules from Avi.Intelligence's own data, with links to the
+records, using the same rules as the reports.
+- **Order:** a question clearly about SOPs, forms or templates goes to SOP search; otherwise a module's
+  topic (Conferences, Data Management) when its words match; otherwise the study questions; otherwise SOP
+  search.
+- **Studies (SimpleTrials):** status, what is due or behind, milestones, enrolment, activation, plus new:
+  **risks and issues** (now the SimpleTrials action items; the old register was retired), **protocol
+  deviations**, **eTMF** completeness and expiring documents, **upcoming site visits**. "Visit" or
+  "document" alone stays an SOP question ("site initiation visit"); it is a study question only with study
+  context (upcoming, monitoring, eTMF, expiring, a study or site...).
+- **Tasks:** every category, not only study tasks; "my tasks" means the asker's own open tasks.
+- **Conferences** (module topic): next conference, the year's list, by city or country, by Avion's role,
+  registration deadlines; costs only for `conference.cost`. Demo data is said to be demo.
+- **Data Management** (module topic, only while the module is on and for `dm.view`): queries, missing
+  data, SDV and lab flags for the default study scope, with per-site tables. **Counts and sites only: no
+  subject IDs in answers** (open Data Management for subject-level detail), and no EDC data is sent to AI.
+- Modules register their topics themselves (`app/assistant/topics.py`), so the assistant never imports
+  them (one-way dependencies).
+
+## 2026-11-13: Conferences (BD) page, demo data first
+
+**Decision (user, 13 Nov 2026).** The BD team's conferences (kept in a SharePoint list) get their own
+**Conferences** page, right after Overview, with a world map of where Avion is going; mock-up approved:
+https://claude.ai/artifact/ErJQZ2vrCrcQJ6u34AkbJc. **Start with demo data and leave room for the real
+list**: the Microsoft admin is on leave and Microsoft has an outage, so the list cannot be connected yet.
+- Optional module `app/conferences/` (`CONFERENCES_ENABLED`, on by default; answers 404 when off, menu entry
+  hidden). Everyone may view (`conference.view`); **costs only for `conference.cost`** (administrators, until
+  a BD role exists). Read-only; nothing is written to SharePoint.
+- **Demo until connected:** demo conferences (fictional names, dates relative to today) with a clear
+  "Demo conferences: the BD team's SharePoint list is not connected yet" notice, on the page and on the
+  Overview card.
+- **Ready for the real list:** set `CONFERENCES_SHAREPOINT_LIST` (and `CONFERENCES_SHAREPOINT_SITE_URL` if it
+  is not on the SOP site); the Entra app needs read access to that site. Column names are unknown, so each
+  field accepts several likely names and `CONFERENCES_FIELD_MAP` names the real ones once BD confirms them.
+  Not yet tried against the real list.
+- **Pins are placed by city** from a built-in table of conference cities (`geo.py`); no online geocoding, so
+  nothing about Avion's plans leaves the system. An unknown city is counted as "not on the map".
+- Page: figures (conferences this year, countries, next conference, exhibiting or speaking, registration due
+  within 30 days), year and role filters, the map (curved route in date order, pulsing next conference),
+  details with "Open in SharePoint", the list, Sync now, Excel (audited; cost column only for those
+  allowed) and PDF. A "Next conferences" card is added to every role's Overview.
+- Map outlines: Natural Earth 110m land (public domain), drawn as `frontend/src/assets/world-map.svg`.
+- To decide with BD: the list's real name and columns; whether anyone besides administrators sees costs;
+  reminders before registration deadlines (suggested: a task to the BD lead two weeks before).
+
 ## 2026-11-13: Role-based Overview; CRA site assignments; SimpleTrials site visits
 
 **Decision (user, 13 Nov 2026): "This dashboard will be different depending on your role."** The

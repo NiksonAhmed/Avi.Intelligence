@@ -36,6 +36,7 @@ export default defineConfig({
         SHAREPOINT_MODE: 'mock',
         SIMPLETRIALS_MODE: 'mock', // never call the real SimpleTrials API from tests
         VIEDOC_MODE: 'mock', // ... nor a real Viedoc study: the demo study is used
+        CONFERENCES_MODE: 'mock', // ... nor the BD SharePoint list: demo conferences
         DATA_MANAGEMENT_ENABLED: 'true',
         DATABASE_URL: 'sqlite:///./e2e.db',
         DEV_USER_ROLE: 'admin',

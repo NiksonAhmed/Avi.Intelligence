@@ -17,6 +17,7 @@ import type {
   Me,
   Person,
   RiskFilters,
+  ConferencesReport,
   OverviewData,
   RiskListResponse,
   RisksIssuesReport,
@@ -184,6 +185,30 @@ export function useStudiesSync() {
       await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
       await queryClient.invalidateQueries({ queryKey: ['studies'] })
       await queryClient.invalidateQueries({ queryKey: ['study'] })
+    },
+  })
+}
+
+export function useConferences(filters: { year?: number; role?: string }, enabled = true) {
+  return useQuery({
+    queryKey: ['conferences', filters],
+    queryFn: () =>
+      apiRequest<ConferencesReport>('/conferences', {
+        params: { year: filters.year ? String(filters.year) : undefined, role: filters.role },
+      }),
+    placeholderData: (previous) => previous,
+    enabled,
+    retry: false,
+  })
+}
+
+export function useRefreshConferences() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/conferences/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['conferences'] })
+      await queryClient.invalidateQueries({ queryKey: ['overview'] })
     },
   })
 }

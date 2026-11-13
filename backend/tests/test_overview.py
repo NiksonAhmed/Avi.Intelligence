@@ -28,14 +28,23 @@ def _keys(body: dict[str, Any]) -> list[str]:
 @pytest.mark.parametrize(
     ("role", "expected"),
     [
-        (Role.ADMIN, ["connectors", "studies", "risks", "deviations", "etmf", "sops", "team_tasks"]),
-        (Role.PROJECT_MANAGER, ["studies", "risks", "deviations", "etmf", "team_tasks", "sops"]),
-        (Role.CRA, ["my_sites", "visits", "risks"]),
-        (Role.CTA, ["etmf", "studies", "sops"]),
-        (Role.DATA_MANAGER, ["deviations"]),  # its Data Management sections need the module switched on
-        (Role.SAFETY, ["safety_db", "deviations", "sops"]),
-        (Role.QA, ["sops", "deviations", "team_tasks", "risks"]),
-        (Role.VIEWER, ["studies"]),
+        (
+            Role.ADMIN,
+            ["connectors", "studies", "risks", "deviations", "etmf", "sops", "team_tasks", "conferences"],
+        ),
+        (
+            Role.PROJECT_MANAGER,
+            ["studies", "risks", "deviations", "etmf", "team_tasks", "sops", "conferences"],
+        ),
+        (Role.CRA, ["my_sites", "visits", "risks", "conferences"]),
+        (Role.CTA, ["etmf", "studies", "sops", "conferences"]),
+        (
+            Role.DATA_MANAGER,
+            ["deviations", "conferences"],
+        ),  # its Data Management sections need the module switched on
+        (Role.SAFETY, ["safety_db", "deviations", "sops", "conferences"]),
+        (Role.QA, ["sops", "deviations", "team_tasks", "risks", "conferences"]),
+        (Role.VIEWER, ["studies", "conferences"]),
     ],
 )
 def test_each_role_has_its_own_page(make_client, role: Role, expected: list[str]) -> None:  # type: ignore[no-untyped-def]
@@ -43,7 +52,8 @@ def test_each_role_has_its_own_page(make_client, role: Role, expected: list[str]
     assert body["view"] == role.value and _keys(body) == expected
     assert len(body["attention"]["counts"]) == 3
     assert [s["name"] for s in body["sources"]][:2] == ["SimpleTrials", "SharePoint"]
-    assert all(not s["notice"] or s["key"] in ("my_sites", "safety_db") for s in body["sections"])
+    allowed = ("my_sites", "safety_db", "conferences")  # conferences: "demo data until the list is connected"
+    assert all(not s["notice"] or s["key"] in allowed for s in body["sections"])
 
 
 def test_only_administrators_may_preview_other_roles(make_client) -> None:  # type: ignore[no-untyped-def]
@@ -133,8 +143,8 @@ def test_data_management_sections_when_the_module_is_on(make_client, monkeypatch
     dm = make_client(Role.DATA_MANAGER)
     dm.app.dependency_overrides[get_settings] = lambda: on
     body = dm.get(API).json()
-    assert _keys(body) == ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations"]
+    assert _keys(body) == ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations", "conferences"]
     assert body["attention"]["counts"][2]["label"].startswith("Answered")
     assert "Viedoc" in [s["name"] for s in body["sources"]]
     viewer = make_client(Role.VIEWER).get(API).json()  # viewers see no Data Management on the Overview
-    assert _keys(viewer) == ["studies"]
+    assert _keys(viewer) == ["studies", "conferences"]

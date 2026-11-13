@@ -47,6 +47,10 @@ class Permission(StrEnum):
     """Create tasks assigned only to yourself, for your own tracking (never Procedures and SOPs)."""
     STUDY_SYNC = "study.sync"
     """Press Sync now to refresh the SimpleTrials copy (everyone; read-only towards SimpleTrials)."""
+    CONFERENCE_VIEW = "conference.view"
+    """See the Conferences page (where Avion's BD team is going): everyone."""
+    CONFERENCE_COST = "conference.cost"
+    """See conference costs: administrators only for now (no BD role yet)."""
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
     DM_SYNC = "dm.sync"
@@ -75,6 +79,7 @@ _ALL_STAFF = {
     Permission.DM_VIEW,  # user decision: everyone may view Data Management (read-only)
     Permission.DM_SYNC,  # user decision: everyone may press Sync now
     Permission.STUDY_SYNC,  # user decision: everyone may sync SimpleTrials from a report
+    Permission.CONFERENCE_VIEW,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -113,6 +118,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DM_VIEW,
             Permission.DM_SYNC,
             Permission.STUDY_SYNC,
+            Permission.CONFERENCE_VIEW,
         }
     ),
 }

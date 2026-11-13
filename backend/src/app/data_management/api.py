@@ -1096,3 +1096,6 @@ from . import checks_api  # noqa: E402, F401
 
 # The module's sections on the role-based Overview register themselves with the Overview here.
 from . import overview_section  # noqa: E402, F401  # isort: skip
+
+# Its answers in Ask Avi.Intelligence register themselves with the assistant here.
+from . import assistant_topic  # noqa: E402, F401  # isort: skip

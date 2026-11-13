@@ -192,7 +192,8 @@ export interface StudyAnswerTable {
 
 /** A study question answered from the SimpleTrials copy by fixed rules (no AI). */
 export interface StudyAnswer {
-  intent: 'status' | 'due' | 'behind' | 'milestone' | 'enrolment' | 'activation' | 'tasks' | 'risks'
+  /** A study intent, or a module's topic (e.g. 'conferences', 'dm_queries'). */
+  intent: string
   /** How the question was read, e.g. "What is due · close-out · next 90 days · all studies". */
   understood: string
   headline: string
@@ -822,6 +823,45 @@ export interface SiteAssignments {
   people: { id: string; name: string; job_title: string }[]
   sites: { key: string; label: string }[]
   assignments: Record<string, string[]>
+}
+
+export type AvionRole = 'Exhibiting' | 'Speaking' | 'Attending' | 'Considering'
+
+export interface Conference {
+  id: string
+  name: string
+  city: string | null
+  country: string | null
+  lat: number | null
+  lon: number | null
+  starts_on: string
+  ends_on: string
+  role: AvionRole
+  team: string | null
+  booth: string | null
+  register_by: string | null
+  website: string | null
+  notes: string | null
+  source_url: string | null
+  /** Only for people who may see costs. */
+  cost: number | null
+  currency: string | null
+  past: boolean
+  days_until: number
+  register_soon: boolean
+}
+
+/** Conferences (BD): from the BD team's SharePoint list, or demo data until it is connected. */
+export interface ConferencesReport {
+  year: number
+  years: number[]
+  tiles: ReportTile[]
+  conferences: Conference[]
+  next_id: string | null
+  not_on_map: number
+  can_see_cost: boolean
+  rules: Record<string, string>
+  source: { mode: 'demo' | 'sharepoint'; reason: string | null; fetched_at: string | null }
 }
 
 export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'

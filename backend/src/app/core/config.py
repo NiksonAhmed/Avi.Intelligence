@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     dm_site_answer_days: int = Field(default=5, ge=1, le=60)
     dm_approval_days: int = Field(default=3, ge=1, le=60)
 
+    # --- Conferences (BD): read-only from a SharePoint list; demo data until the list is set ---
+    conferences_enabled: bool = True
+    # "mock" always shows demo conferences (tests and browser tests).
+    conferences_mode: Literal["auto", "mock"] = "auto"
+    conferences_sharepoint_list: str | None = None
+    # The site that holds the list; defaults to SHAREPOINT_SITE_URL.
+    conferences_sharepoint_site_url: str | None = None
+    # JSON: our field -> the list's column internal name(s), e.g. {"role": "AvionRole"}.
+    conferences_field_map: str | None = None
+
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None
     assistant_model: str = "claude-opus-5-5"
