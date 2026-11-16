@@ -7,7 +7,7 @@ import type { IssueRow, ReportFilters, RisksIssuesReport } from '../../api/types
 import { formatDay } from '../../lib/format'
 import { INK, todayIso } from '../../lib/reports'
 import { Counts, monthLabel } from './DeviationsTab'
-import { Bar, ChartCard, Legend, ReportTiles, ReportToolbar } from './ReportParts'
+import { Bar, ChartCard, ChartRow, Legend, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar } from './ReportParts'
 
 interface Props {
   filters: ReportFilters
@@ -137,6 +137,7 @@ export function RisksIssuesTab({ filters, onFilters }: Props) {
           },
         ]}
         source={data.source}
+        about={data.rules.source}
         sync="simpletrials"
         excelUrl={reportExportUrl('risks-issues', { study_id: filters.study_id, site_id: filters.site_id })}
       />
@@ -148,15 +149,6 @@ export function RisksIssuesTab({ filters, onFilters }: Props) {
           {data.study_options.find((o) => o.id === filters.study_id)?.label ?? 'All studies'} · {formatDay(todayIso())}
         </Typography.Text>
       </div>
-      {data.source.mode !== 'api' && <Alert type="warning" showIcon title="Demo data: SimpleTrials is not connected" />}
-      {data.source.mode === 'api' && data.source.sandbox_only && (
-        <Alert
-          type="info"
-          showIcon
-          title="SimpleTrials sandbox study"
-          description="Figures come from the sandbox study only. All studies appear once the Workspace (all studies) read-only key is enabled."
-        />
-      )}
       {!data.has_issues && (
         <Alert
           type="info"
@@ -165,45 +157,20 @@ export function RisksIssuesTab({ filters, onFilters }: Props) {
           description="Once action items are entered in SimpleTrials, press Sync now (or wait for the hourly sync) to see them here."
         />
       )}
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {data.rules.source}
-      </Typography.Text>
 
-      <ReportTiles tiles={data.tiles} />
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles tiles={data.tiles} trends={data.insights?.trends} targets={{ open: 'ri-list', overdue: 'ri-sites', high: 'ri-priority', due_soon: 'ri-list', closed: 'ri-trend' }} />
 
-      <Flex gap={18} wrap>
-        <ChartCard title="By priority" rule={data.rules.priority} flex="1 1 380px">
-          <Counts
-            rows={data.by_priority}
-            colourFor={(l) => PRIORITY_COLOUR[l] ?? GREY}
-            testId="issue-priority-row"
-            empty="No issues in this selection."
-          />
-        </ChartCard>
-        <ChartCard title="By category" flex="1 1 380px">
-          <Counts rows={data.by_category} colourFor={() => INK.info} testId="issue-category-row" empty="No issues in this selection." />
-        </ChartCard>
-      </Flex>
-
-      <Flex gap={18} wrap>
-        <ChartCard title="Opened and closed by month" rule={data.rules.trend} flex="2 1 520px">
+      <ChartRow>
+        <ChartCard id="ri-trend" title="Opened and closed by month" rule={data.rules.trend} flex="1 1 440px">
           <Trend report={data} />
         </ChartCard>
-        <ChartCard title="Open issues by age" rule={data.rules.ageing} flex="1 1 300px">
-          <Counts
-            rows={data.ageing}
-            colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)}
-            testId="issue-ageing-row"
-            empty="No open issues."
-          />
+        <ChartCard flex="1 1 440px" id="ri-sites" title="Sites (most overdue first)" rule={data.rules.overdue}>
+          <Sites report={data} />
         </ChartCard>
-      </Flex>
+      </ChartRow>
 
-      <ChartCard title="Sites (most overdue first)" rule={data.rules.overdue}>
-        <Sites report={data} />
-      </ChartCard>
-
-      <ChartCard title={`All risks and issues (${data.issues.length})`} rule="Open first, most overdue first, then by priority and due date.">
+      <ChartCard id="ri-list" title={`All risks and issues (${data.issues.length})`} rule="Open first, most overdue first, then by priority and due date.">
         <Table<IssueRow>
           size="small"
           rowKey="id"
@@ -269,6 +236,30 @@ export function RisksIssuesTab({ filters, onFilters }: Props) {
           ]}
         />
       </ChartCard>
+
+      <MoreDetail summary="More detail: by priority, by category and by age">
+        <ChartRow>
+          <ChartCard id="ri-priority" title="By priority" rule={data.rules.priority} flex="1 1 380px">
+            <Counts
+              rows={data.by_priority}
+              colourFor={(l) => PRIORITY_COLOUR[l] ?? GREY}
+              testId="issue-priority-row"
+              empty="No issues in this selection."
+            />
+          </ChartCard>
+          <ChartCard title="By category" flex="1 1 380px">
+            <Counts rows={data.by_category} colourFor={() => INK.info} testId="issue-category-row" empty="No issues in this selection." />
+          </ChartCard>
+          <ChartCard title="Open issues by age" rule={data.rules.ageing} flex="1 1 300px">
+            <Counts
+              rows={data.ageing}
+              colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)}
+              testId="issue-ageing-row"
+              empty="No open issues."
+            />
+          </ChartCard>
+        </ChartRow>
+      </MoreDetail>
     </Flex>
   )
 }

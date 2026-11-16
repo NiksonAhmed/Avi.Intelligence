@@ -68,6 +68,7 @@ function report(overrides: Partial<StudyDeliveryReport> = {}): StudyDeliveryRepo
       activation: 'Activated: SimpleTrials has an actual activation date.',
     },
     source: { mode: 'mock', as_of: '2026-11-09T00:00:00Z', sandbox_only: false, snapshot_days: 1 },
+    enrolment_history: [{ day: '2026-11-16', enrolled: 9, target: 80 }],
     ...overrides,
   }
 }
@@ -99,7 +100,7 @@ describe('Reports and Insights page', () => {
     renderRoute('/reports')
 
     expect(await screen.findByTestId('tile-on_plan')).toHaveTextContent('2 of 4')
-    expect(screen.getByText('Demo data: SimpleTrials is not connected')).toBeInTheDocument()
+    expect(screen.getByText('Demo data')).toBeInTheDocument()
     expect(screen.getAllByTestId('timeline-row')).toHaveLength(2)
     expect(screen.getByText('Slipped +66d')).toBeInTheDocument()
     expect(screen.getByText(/0 of 1 completed key milestones were on time/)).toBeInTheDocument()
@@ -110,7 +111,10 @@ describe('Reports and Insights page', () => {
 
     expect(screen.getByTestId('activation-figure')).toHaveTextContent('5 of 7')
     expect(screen.getByText('5 days late')).toBeInTheDocument()
-    expect(screen.getByText(/Trend charts .* appear after two weeks/)).toBeInTheDocument()
+    // The mock-up layout: two charts, the sites table, and the timeline folded under More detail.
+    expect(screen.getAllByTestId('site-table-row')).toHaveLength(3)
+    expect(screen.getByTestId('more-detail')).toHaveTextContent(/More detail: key milestone timeline/)
+    expect(screen.getByTestId('enrolment-history')).toHaveTextContent('The line builds up from')
   })
 
   it('filters by study and keeps the filter in the URL and the Excel link', async () => {
@@ -148,8 +152,7 @@ describe('Reports and Insights page', () => {
       '/reports/study-delivery': report({ source: { mode: 'api', as_of: '2026-11-09T00:00:00Z', sandbox_only: true, snapshot_days: 20 } }),
     })
     renderRoute('/reports')
-    expect(await screen.findByText('SimpleTrials sandbox study')).toBeInTheDocument()
-    expect(screen.getByText(/Source: SimpleTrials/)).toBeInTheDocument()
-    expect(screen.queryByText(/Trend charts/)).not.toBeInTheDocument()
+    expect(await screen.findByText('Sandbox study')).toBeInTheDocument()
+    expect(screen.getByText(/As of .* · SimpleTrials/)).toBeInTheDocument()
   })
 })

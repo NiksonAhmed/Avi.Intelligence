@@ -6,7 +6,7 @@ import { useDeviationsReport } from '../../api/hooks'
 import type { DeviationCount, DeviationRow, DeviationsReport, ReportFilters } from '../../api/types'
 import { formatDay } from '../../lib/format'
 import { INK, todayIso } from '../../lib/reports'
-import { Bar, ChartCard, Legend, ReportTiles, ReportToolbar, StackedBar } from './ReportParts'
+import { Bar, ChartCard, ChartRow, Legend, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar, StackedBar } from './ReportParts'
 
 interface Props {
   filters: ReportFilters
@@ -170,6 +170,7 @@ export function DeviationsTab({ filters, onFilters }: Props) {
           },
         ]}
         source={data.source}
+        about={data.rules.source}
         excelUrl={reportExportUrl('deviations', { study_id: filters.study_id, site_id: filters.site_id })}
         sync="simpletrials"
       />
@@ -181,15 +182,6 @@ export function DeviationsTab({ filters, onFilters }: Props) {
           {data.study_options.find((o) => o.id === filters.study_id)?.label ?? 'All studies'} · {formatDay(todayIso())}
         </Typography.Text>
       </div>
-      {data.source.mode !== 'api' && <Alert type="warning" showIcon title="Demo data: SimpleTrials is not connected" />}
-      {data.source.mode === 'api' && data.source.sandbox_only && (
-        <Alert
-          type="info"
-          showIcon
-          title="SimpleTrials sandbox study"
-          description="Figures come from the sandbox study only. All studies appear once the Workspace (all studies) read-only key is enabled."
-        />
-      )}
       {!data.has_deviations && (
         <Alert
           type="info"
@@ -198,35 +190,20 @@ export function DeviationsTab({ filters, onFilters }: Props) {
           description="Once deviations are entered in SimpleTrials, press Sync now (or wait for the hourly sync) to see them here."
         />
       )}
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {data.rules.source}
-      </Typography.Text>
 
-      <ReportTiles tiles={data.tiles} />
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles tiles={data.tiles} trends={data.insights?.trends} targets={{ total: 'dv-trend', open: 'dv-ageing', major: 'dv-severity', rate: 'dv-sites', identify: 'dv-list' }} />
 
-      <Flex gap={18} wrap>
-        <ChartCard title="By severity" rule={data.rules.severity} flex="1 1 380px">
-          <Counts rows={data.by_severity} colourFor={(l) => SEVERITY_COLOUR[l] ?? OTHER_COLOUR} testId="deviation-severity-row" empty="No deviations in this selection." />
-        </ChartCard>
-        <ChartCard title="By category" flex="1 1 380px">
-          <Counts rows={data.by_category} colourFor={() => INK.info} testId="deviation-category-row" empty="No deviations in this selection." />
-        </ChartCard>
-      </Flex>
-
-      <Flex gap={18} wrap>
-        <ChartCard title="Monthly trend" rule={data.rules.trend} flex="2 1 520px">
+      <ChartRow>
+        <ChartCard id="dv-trend" title="Monthly trend" rule={data.rules.trend} flex="1 1 440px">
           <Trend report={data} />
         </ChartCard>
-        <ChartCard title="Open deviations by age" rule={data.rules.ageing} flex="1 1 300px">
-          <Counts rows={data.ageing} colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)} testId="deviation-ageing-row" empty="No open deviations." />
+        <ChartCard flex="1 1 440px" id="dv-sites" title="Sites (highest rate first)" rule={data.rules.rate}>
+          <Sites report={data} />
         </ChartCard>
-      </Flex>
+      </ChartRow>
 
-      <ChartCard title="Sites (highest rate first)" rule={data.rules.rate}>
-        <Sites report={data} />
-      </ChartCard>
-
-      <ChartCard title={`All deviations (${data.deviations.length})`} rule="Open first, most severe first, then longest open.">
+      <ChartCard id="dv-list" title={`All deviations (${data.deviations.length})`} rule="Open first, most severe first, then longest open.">
         <Table<DeviationRow>
           size="small"
           rowKey="id"
@@ -278,6 +255,20 @@ export function DeviationsTab({ filters, onFilters }: Props) {
           ]}
         />
       </ChartCard>
+
+      <MoreDetail summary="More detail: by severity, by category and by age">
+        <ChartRow>
+          <ChartCard id="dv-severity" title="By severity" rule={data.rules.severity} flex="1 1 380px">
+            <Counts rows={data.by_severity} colourFor={(l) => SEVERITY_COLOUR[l] ?? OTHER_COLOUR} testId="deviation-severity-row" empty="No deviations in this selection." />
+          </ChartCard>
+          <ChartCard title="By category" flex="1 1 380px">
+            <Counts rows={data.by_category} colourFor={() => INK.info} testId="deviation-category-row" empty="No deviations in this selection." />
+          </ChartCard>
+          <ChartCard id="dv-ageing" title="Open deviations by age" rule={data.rules.ageing} flex="1 1 300px">
+            <Counts rows={data.ageing} colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)} testId="deviation-ageing-row" empty="No open deviations." />
+          </ChartCard>
+        </ChartRow>
+      </MoreDetail>
     </Flex>
   )
 }

@@ -12,7 +12,7 @@ import type {
 import { ToneTag } from '../../components/ToneTag'
 import { formatDay } from '../../lib/format'
 import { INK, todayIso, toneStyle } from '../../lib/reports'
-import { ChartCard, Legend, ReportTiles, ReportToolbar, StackedBar } from './ReportParts'
+import { ChartCard, ChartRow, Legend, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar, StackedBar } from './ReportParts'
 
 interface Props {
   filters: WorkReportFilters
@@ -193,26 +193,21 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
         </Typography.Text>
       </div>
 
-      <ReportTiles tiles={data.tiles} />
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles tiles={data.tiles} trends={data.insights?.trends} targets={{ open: 'wm-category', overdue: 'wm-overdue', due_soon: 'wm-people' }} />
 
-      <Flex gap={18} wrap>
+      <ChartRow>
         <ChartCard
+          id="wm-category"
           title="Open tasks by category"
           rule={`${data.rules.open ?? ''} ${data.rules.task_overdue ?? ''}`.trim()}
           extra={<Legend items={STATUS_KEY} />}
-          flex="1 1 480px"
+          flex="1 1 440px"
         >
           <StatusRows rows={data.by_category} empty="No task categories." testId="category-row" />
         </ChartCard>
-        {showStudies && (
-          <ChartCard title="Open study tasks by study" extra={<Legend items={STATUS_KEY} />} flex="1 1 480px">
-            <StatusRows rows={data.by_study} empty="No studies in this selection." testId="study-row" />
-          </ChartCard>
-        )}
-      </Flex>
-
-      <Flex gap={18} wrap>
-        <ChartCard
+        <ChartCard flex="1 1 440px"
+          id="wm-people"
           title="Open work by person"
           rule={data.rules.by_person}
           extra={
@@ -224,18 +219,24 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
               ]}
             />
           }
-          flex="1 1 480px"
         >
           <PeopleRows people={data.by_person} />
         </ChartCard>
-        <ChartCard title="Overdue tasks" rule={data.rules.due_soon} flex="1 1 480px">
-          <OverdueList report={data} />
-        </ChartCard>
-      </Flex>
+      </ChartRow>
 
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {data.rules.completed}
-      </Typography.Text>
+      <ChartCard id="wm-overdue" title="Overdue tasks" rule={data.rules.due_soon}>
+        <OverdueList report={data} />
+      </ChartCard>
+
+      {showStudies && (
+        <MoreDetail summary="More detail: open study tasks by study">
+          <ChartRow>
+            <ChartCard title="Open study tasks by study" extra={<Legend items={STATUS_KEY} />} flex="1 1 480px">
+              <StatusRows rows={data.by_study} empty="No studies in this selection." testId="study-row" />
+            </ChartCard>
+          </ChartRow>
+        </MoreDetail>
+      )}
     </Flex>
   )
 }

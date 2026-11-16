@@ -82,7 +82,7 @@ describe('Quality (SOPs) report', () => {
     renderRoute('/reports?tab=quality')
 
     expect(await screen.findByTestId('tile-review_overdue')).toHaveTextContent('6')
-    expect(screen.getByText('Demo data: SharePoint is not connected')).toBeInTheDocument()
+    expect(screen.getByText('Demo data')).toBeInTheDocument()
 
     const months = screen.getAllByTestId('review-month')
     expect(months).toHaveLength(13)

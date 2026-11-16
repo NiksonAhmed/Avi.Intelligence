@@ -531,6 +531,24 @@ export interface ReportTile {
   tone: ReportTone
 }
 
+/** A tile's trend: one point a week (oldest first) and the change since about 30 days ago. */
+export interface TileTrend {
+  points: number[]
+  change: number | null
+  change_text: string | null
+  tone: 'good' | 'bad' | 'neutral'
+}
+
+/** The top of every report: a headline sentence by fixed rules, and tile trends (all studies only). */
+export interface ReportInsights {
+  headline: string
+  detail: string | null
+  tone: ReportTone
+  trends: Record<string, TileTrend>
+  /** The first day figures were saved for this report; null when trends are not shown (a filtered view). */
+  history_since: string | null
+}
+
 export interface ReportOption {
   id: string
   label: string
@@ -587,11 +605,14 @@ export interface PendingSite {
 
 export interface StudyDeliveryReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   milestones: DeliveryMilestone[]
   on_time: { completed: number; on_time: number; with_original_date: number }
   sites: DeliverySite[]
   activation: { total: number; activated: number; percent: number | null; with_target: number; on_time: number }
   pending_sites: PendingSite[]
+  /** Enrolled and target on each day a figure was saved (daily snapshot; nothing estimated). */
+  enrolment_history?: { day: string; enrolled: number; target: number | null }[]
   study_options: ReportOption[]
   site_options: ReportOption[]
   rules: Record<string, string>
@@ -638,6 +659,7 @@ export interface WorkOverdueTask {
 
 export interface WorkManagementReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   by_category: WorkStatusCounts[]
   by_study: WorkStatusCounts[]
   by_person: WorkPersonLoad[]
@@ -679,6 +701,7 @@ export interface EtmfExpiring {
 
 export interface EtmfReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   overall: EtmfCompleteness
   by_study: EtmfCompleteness[]
   sites_missing: EtmfCompleteness[]
@@ -727,6 +750,7 @@ export interface DeviationRow {
 /** Protocol deviations report: SimpleTrials deviations (read-only copy; no subject IDs or people). */
 export interface DeviationsReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   by_severity: DeviationCount[]
   by_category: DeviationCount[]
   by_site: { key: string; label: string; protocol_number: string; total: number; open: number; major: number; enrolled: number | null; per_10: number | null }[]
@@ -763,6 +787,7 @@ export interface IssueRow {
 /** Risks and issues report: SimpleTrials action items (read-only copy; nothing raised in Avi.Intelligence). */
 export interface RisksIssuesReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   by_priority: (DeviationCount & { overdue: number })[]
   by_category: DeviationCount[]
   by_site: { key: string; label: string; protocol_number: string; open: number; overdue: number; total: number }[]
@@ -906,6 +931,7 @@ export interface QualityChange {
 
 export interface QualityReport {
   tiles: ReportTile[]
+  insights?: ReportInsights
   schedule: QualityScheduleRow[]
   by_month: QualityMonth[]
   /** Reviews due after the months shown. */

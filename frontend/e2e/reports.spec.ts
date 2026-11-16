@@ -3,8 +3,12 @@ import { expect, test } from '@playwright/test'
 test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
   await page.goto('/reports')
   await expect(page.getByRole('heading', { name: 'Reports and Insights' })).toBeVisible()
-  await expect(page.getByText('Demo data: SimpleTrials is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-on_plan')).toContainText('of 4')
+  await expect(page.getByTestId('report-headline')).toContainText('key milestone')
+  await expect(page.getByTestId('site-table-row').first()).toBeVisible()
+  // The timeline and site activation are folded under More detail.
+  await page.getByText(/^More detail: key milestone timeline/).click()
   await expect(page.getByTestId('timeline-row').first()).toBeVisible()
   await expect(page.getByTestId('activation-figure')).toContainText('5 of 7')
 
@@ -12,6 +16,7 @@ test('Study delivery report: figures, filter by study and Excel export', async (
   await page.getByRole('combobox', { name: 'Filter by study' }).click()
   await page.getByTitle(/^DEMO-ONC-301 ·/).click()
   await expect(page).toHaveURL(/study=/)
+  await page.getByText(/^More detail: key milestone timeline/).click()
   await expect(page.getByTestId('timeline-row').first()).toContainText('DEMO-ONC-301')
   await expect(page.getByTestId('timeline-row').filter({ hasText: 'DEMO-CV-201' })).toHaveCount(0)
 
@@ -67,7 +72,7 @@ test('Quality (SOPs) report: review schedule, department filter and Excel export
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'Quality (SOPs)' }).click()
   await expect(page).toHaveURL(/tab=quality/)
-  await expect(page.getByText('Demo data: SharePoint is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-approved')).toHaveText('11')
   await expect(page.getByTestId('review-month')).toHaveCount(13)
   const sop001 = page.getByTestId('schedule-row').filter({ hasText: 'SOP-001' })
@@ -94,10 +99,11 @@ test('eTMF report: completeness, heat map, expiring documents and Excel export',
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'eTMF' }).click()
   await expect(page).toHaveURL(/tab=etmf/)
-  await expect(page.getByText('Demo data: SimpleTrials is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-completeness')).toContainText('%')
   await expect(page.getByRole('img', { name: /^eTMF completeness: \d+ of \d+/ })).toBeVisible()
   await expect(page.getByTestId('study-completeness-row')).toHaveCount(4)
+  await page.getByText(/^More detail: completeness by TMF section/).click()
   await expect(page.getByTestId('heat-row').first()).toBeVisible()
   await expect(page.getByTestId('expiring-row').first()).toBeVisible()
 

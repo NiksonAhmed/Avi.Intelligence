@@ -23,6 +23,28 @@ A running log of design decisions, assumptions and known limitations. Newest fir
 - **Ask Avi.Intelligence has its own page** (`/ask`; `/documents/ask` redirects) and menu item, since it
   answers about everything, not only SOPs. The top bar's SOP-only search is now one **"Search or ask
   anything"** box (Ctrl K) that opens Ask with the question. The SOP list keeps its own search.
+- **Livelier reports** (same mock-up), on every tab:
+  - **Headline sentence** first: what matters most (e.g. "3 major or critical deviations still open, 5 open
+    in all."), worked out by fixed rules from the tile figures (`app/reports/insights.py`; no AI), with a
+    short second line. No person is named in a headline.
+  - **Tile trends:** each tile's figure is saved once a day (`report_snapshots`, kind `tiles:<report>`,
+    last value of the day, all studies only), giving a small trend line (one point a week, up to 12 weeks)
+    and the change since about 30 days ago (at least 7), green when better and red when worse. **History
+    starts on 16 Nov 2026; nothing is back-filled or estimated**, so lines appear after two weeks and the
+    "since" figure after a week. A filtered view (one study, site or department; Quality other than 12
+    months) shows no trend. Figures are saved whenever a report or the Overview is opened.
+  - **Tiles jump to their chart** (the chart or list behind the number). The existing charts stay.
+  - Not done: clicking a chart bar to filter the list below (the tabs' own filters do this today).
+  - **Same layout as the mock-up on every tab** (user: "looks different than the mock-up"): one-line toolbar
+    (filters, a small "Demo data"/"Sandbox study" tag instead of a banner, as-of, Sync now, Excel, PDF);
+    headline; tiles; **two charts side by side; one table; then "More detail" folded** (opened for the PDF
+    and when a tile points into it). The rule behind each chart moved behind an ⓘ (still printed in the PDF).
+  - Study delivery: **Enrolment over time** (enrolled on each saved day against the final target; SimpleTrials
+    has no monthly plan, so there is no plan curve) and a **Sites** table with activation status; the
+    milestone timeline and site activation are under More detail.
+  - Quality: **change log trimmed** (user: "do we need so much detail of the change log?"): the count and the
+    latest 5 under More detail, with "Show all"; the full log stays in Excel. Library health lists 3 names per
+    check (and "N more").
 
 ## 2026-11-13: Ask Avi.Intelligence answers across the whole app
 

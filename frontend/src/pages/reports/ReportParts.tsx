@@ -1,43 +1,168 @@
-import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
-import { Button, Card, Flex, Select, Typography } from 'antd'
+import {
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  InfoCircleOutlined,
+  WarningOutlined,
+} from '@ant-design/icons'
+import { Button, Card, Flex, Select, Tag, Tooltip, Typography } from 'antd'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 
-import type { ReportOption, ReportSource, ReportTile } from '../../api/types'
-import { formatDateTime } from '../../lib/format'
+import type { ReportInsights, ReportOption, ReportSource, ReportTile, TileTrend } from '../../api/types'
+import { formatDateTime, formatDay } from '../../lib/format'
 import { SyncNowButton, type ReportSync } from '../../components/SyncNowButton'
 import { INK } from '../../lib/reports'
 
-/** Big-number tiles across the top of a report. */
-export function ReportTiles({ tiles }: { tiles: ReportTile[] }) {
+const HEADLINE_ICON = {
+  good: <CheckCircleOutlined />,
+  info: <InfoCircleOutlined />,
+  neutral: <InfoCircleOutlined />,
+  warn: <ExclamationCircleOutlined />,
+  bad: <WarningOutlined />,
+}
+const HEADLINE_BG = { good: '#E7F6EE', info: '#E8F1FF', neutral: '#EEF1F5', warn: '#FFF4DE', bad: '#FDE8E4' }
+const TREND_INK = { good: '#1A7F4B', bad: '#B42318', neutral: '#5B6B82' }
+
+/** The headline sentence at the top of a report: what matters most, by fixed rules (no AI). */
+export function ReportHeadline({ insights }: { insights?: ReportInsights }) {
+  if (!insights) return null
+  const since = insights.history_since
+  // Until a few weeks of figures are saved, say when the history started.
+  const young = since && Object.values(insights.trends).some((t) => t.points.length < 4)
+  return (
+    <Card size="small" data-testid="report-headline" styles={{ body: { padding: '16px 20px' } }}>
+      <Flex gap={16} align="flex-start">
+        <span
+          aria-hidden
+          style={{
+            flexShrink: 0,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+            background: HEADLINE_BG[insights.tone],
+            color: INK[insights.tone],
+          }}
+        >
+          {HEADLINE_ICON[insights.tone]}
+        </span>
+        <Flex vertical gap={4}>
+          <Typography.Text strong style={{ fontSize: 18, lineHeight: 1.4 }}>
+            {insights.headline}
+          </Typography.Text>
+          {insights.detail && <Typography.Text type="secondary">{insights.detail}</Typography.Text>}
+          {young && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Trend lines build up from {formatDay(since)}: Avi.Intelligence saves these figures once a day.
+            </Typography.Text>
+          )}
+        </Flex>
+      </Flex>
+    </Card>
+  )
+}
+
+/** A small trend line: one point a week. */
+export function Sparkline({ points, color }: { points: number[]; color: string }) {
+  if (points.length < 2) return null
+  const min = Math.min(...points)
+  const span = Math.max(...points) - min || 1
+  const step = 92 / (points.length - 1)
+  const line = points.map((v, i) => `${(2 + i * step).toFixed(1)},${(27 - ((v - min) / span) * 24).toFixed(1)}`).join(' ')
+  return (
+    <svg width="96" height="30" viewBox="0 0 96 30" aria-hidden data-testid="sparkline">
+      <polyline points={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function TileBody({ t, trend }: { t: ReportTile; trend?: TileTrend }) {
+  return (
+    <Flex vertical gap={4}>
+      <Typography.Text type="secondary" style={{ fontSize: 13, fontWeight: 600 }}>
+        {t.label}
+      </Typography.Text>
+      <Flex justify="space-between" align="flex-end" gap={8}>
+        <span data-testid={`tile-${t.key}`} style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.15, color: INK[t.tone] }}>
+          {t.value}
+        </span>
+        {trend && <Sparkline points={trend.points} color={INK[t.tone === 'neutral' ? 'info' : t.tone]} />}
+      </Flex>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {t.note}
+      </Typography.Text>
+      {trend?.change_text && (
+        <span data-testid={`trend-${t.key}`} style={{ fontSize: 12, fontWeight: 600, color: TREND_INK[trend.tone] }}>
+          {trend.change_text}
+        </span>
+      )}
+    </Flex>
+  )
+}
+
+/**
+ * Big-number tiles across the top of a report, with their trend when there is history. A tile with a
+ * `targets` entry jumps to the chart or list behind its number.
+ */
+export function ReportTiles({
+  tiles,
+  trends,
+  targets,
+}: {
+  tiles: ReportTile[]
+  trends?: Record<string, TileTrend>
+  targets?: Record<string, string>
+}) {
   return (
     <Flex gap={14} wrap>
-      {tiles.map((t) => (
-        <Card key={t.key} size="small" style={{ flex: '1 1 210px', minWidth: 0 }} styles={{ body: { padding: '14px 18px' } }}>
-          <Flex vertical gap={4}>
-            <Typography.Text type="secondary" style={{ fontSize: 13, fontWeight: 600 }}>
-              {t.label}
-            </Typography.Text>
-            <span data-testid={`tile-${t.key}`} style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.15, color: INK[t.tone] }}>
-              {t.value}
-            </span>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t.note}
-            </Typography.Text>
-          </Flex>
-        </Card>
-      ))}
+      {tiles.map((t) => {
+        const target = targets?.[t.key]
+        const card = (
+          <Card size="small" hoverable={Boolean(target)} style={{ height: '100%' }} styles={{ body: { padding: '14px 18px' } }}>
+            <TileBody t={t} trend={trends?.[t.key]} />
+          </Card>
+        )
+        return (
+          <div key={t.key} style={{ flex: '1 1 210px', minWidth: 0 }}>
+            {target ? (
+              <button
+                type="button"
+                className="tile-button"
+                aria-label={`${t.label}: ${t.value}. Show the detail`}
+                onClick={() => {
+                  const el = document.getElementById(target)
+                  el?.closest('details')?.setAttribute('open', '')
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+              >
+                {card}
+              </button>
+            ) : (
+              card
+            )}
+          </div>
+        )
+      })}
     </Flex>
   )
 }
 
 /** A chart card: title, the rule behind its numbers, then the chart. */
 export function ChartCard({
+  id,
   title,
   rule,
   extra,
   children,
   flex,
 }: {
+  /** Lets a tile jump here. */
+  id?: string
   title: string
   rule?: string
   extra?: ReactNode
@@ -46,20 +171,24 @@ export function ChartCard({
 }) {
   return (
     <Card
+      id={id}
       size="small"
-      style={{ flex: flex ?? '1 1 100%', minWidth: 0 }}
-      styles={{ body: { padding: 20 } }}
+      style={{ flex: flex ?? '1 1 100%', minWidth: 0, scrollMarginTop: 80 }}
+      styles={{ body: { padding: '16px 20px' } }}
       className="report-card"
     >
       <Flex vertical gap={12}>
-        <Flex justify="space-between" align="baseline" gap={8} wrap>
-          <Typography.Title level={2} style={{ margin: 0, fontSize: 17 }}>
-            {title}
-          </Typography.Title>
+        <Flex justify="space-between" align="center" gap={8} wrap>
+          <Flex align="center" gap={6}>
+            <Typography.Title level={2} style={{ margin: 0, fontSize: 16 }}>
+              {title}
+            </Typography.Title>
+            {rule && <RuleInfo rule={rule} />}
+          </Flex>
           {extra}
         </Flex>
         {rule && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" className="print-only" style={{ fontSize: 12 }}>
             {rule}
           </Typography.Text>
         )}
@@ -67,6 +196,63 @@ export function ChartCard({
       </Flex>
     </Card>
   )
+}
+
+/** How a number is worked out, behind a small ⓘ (shown in full in the PDF). */
+export function RuleInfo({ rule }: { rule: string }) {
+  return (
+    <Tooltip title={rule} placement="topLeft" styles={{ root: { maxWidth: 420 } }}>
+      <button type="button" className="rule-info no-print" aria-label="How this is worked out" title={rule}>
+        <InfoCircleOutlined />
+      </button>
+    </Tooltip>
+  )
+}
+
+/** Two charts side by side (stacked on narrow screens). */
+export function ChartRow({ children }: { children: ReactNode }) {
+  return (
+    <Flex gap={18} wrap>
+      {children}
+    </Flex>
+  )
+}
+
+/** Everything beyond the main charts and table, folded away until wanted. */
+export function MoreDetail({ summary, children }: { summary: string; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    // The PDF (browser print) shows everything, folded or not.
+    const open = () => ref.current?.setAttribute('open', '')
+    window.addEventListener('beforeprint', open)
+    return () => window.removeEventListener('beforeprint', open)
+  }, [])
+  return (
+    <details ref={ref} className="report-more" data-testid="more-detail">
+      <summary>{summary}</summary>
+      <Flex vertical gap={18} style={{ marginTop: 14 }}>
+        {children}
+      </Flex>
+    </details>
+  )
+}
+
+/** A small tag saying the figures are demo or sandbox data (instead of a large banner). */
+export function SourceBadge({ source }: { source?: ReportSource }) {
+  if (!source) return null
+  if (source.mode !== 'api')
+    return (
+      <Tooltip title="SimpleTrials is not connected: these are demo figures.">
+        <Tag color="orange" style={{ marginInlineEnd: 0 }}>Demo data</Tag>
+      </Tooltip>
+    )
+  if (source.sandbox_only)
+    return (
+      <Tooltip title="Figures come from the SimpleTrials sandbox study only. All studies appear once the Workspace (all studies) read-only key is enabled.">
+        <Tag color="purple" style={{ marginInlineEnd: 0 }}>Sandbox study</Tag>
+      </Tooltip>
+    )
+  return null
 }
 
 /** A thin horizontal progress bar (percent 0–100+), with its colour. */
@@ -142,50 +328,56 @@ interface ToolbarProps {
   source?: ReportSource
   /** Overrides the "As of … · Source …" line. */
   sourceText?: string
+  /** Where the figures come from, behind an ⓘ beside the "as of" line. */
+  about?: string
+  /** A small tag beside the filters, e.g. "Sandbox study" (defaults to the SimpleTrials source tag). */
+  badge?: ReactNode
   excelUrl: string
   /** Where Sync now pulls from: SimpleTrials, the SharePoint SOP library, or live app data (re-read). */
   sync: ReportSync
 }
 
-/** Filters, "as of" line and exports (Excel download; PDF via the browser's Save as PDF). */
+/** One line: filters, the source tag and "as of", then Sync now, Excel and PDF (browser Save as PDF). */
 export function ReportToolbar(p: ToolbarProps) {
   return (
-    <Card size="small" styles={{ body: { padding: '12px 16px' } }} className="no-print">
-      <Flex gap={12} wrap align="flex-end">
-        {p.filters.map((f) => (
-          <Flex key={f.id} vertical gap={4}>
-            <label htmlFor={f.id} style={{ fontSize: 12, fontWeight: 600, color: '#5B6B82' }}>
-              {f.label}
-            </label>
-            <Select
-              id={f.id}
-              aria-label={f.ariaLabel}
-              allowClear
-              placeholder={f.placeholder}
-              value={f.value}
-              onChange={(v?: string) => f.onChange(v)}
-              options={f.options.map((o) => ({ value: o.id, label: o.label }))}
-              style={{ width: f.width ?? 280, maxWidth: '100%' }}
-              popupMatchSelectWidth={false}
-            />
-          </Flex>
-        ))}
-        <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
+    <Flex gap={12} wrap align="center" className="no-print report-toolbar">
+      {p.filters.map((f) => (
+        <Flex key={f.id} align="center" gap={6}>
+          <label htmlFor={f.id} style={{ fontSize: 13, color: '#5B6B82' }}>
+            {f.label}
+          </label>
+          <Select
+            id={f.id}
+            aria-label={f.ariaLabel}
+            allowClear
+            placeholder={f.placeholder}
+            value={f.value}
+            onChange={(v?: string) => f.onChange(v)}
+            options={f.options.map((o) => ({ value: o.id, label: o.label }))}
+            style={{ width: Math.min(f.width ?? 200, 200), maxWidth: '100%' }}
+            popupMatchSelectWidth={false}
+          />
+        </Flex>
+      ))}
+      {p.badge ?? <SourceBadge source={p.source} />}
+      <Flex align="center" gap={6} style={{ marginLeft: 'auto' }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {p.sourceText ??
             `${p.source?.as_of ? `As of ${formatDateTime(p.source.as_of)}` : 'Not synced yet'} · ${
-              p.source?.mode === 'api' ? 'Source: SimpleTrials (read-only copy)' : 'Source: demo data'
+              p.source?.mode === 'api' ? 'SimpleTrials' : 'demo data'
             }`}
         </Typography.Text>
-        <Flex gap={8}>
-          <SyncNowButton kind={p.sync} />
-          <Button icon={<FileExcelOutlined />} href={p.excelUrl}>
-            Excel
-          </Button>
-          <Button icon={<FilePdfOutlined />} onClick={() => window.print()}>
-            PDF
-          </Button>
-        </Flex>
+        {p.about && <RuleInfo rule={p.about} />}
       </Flex>
-    </Card>
+      <Flex gap={8}>
+        <SyncNowButton kind={p.sync} />
+        <Button type="primary" icon={<FileExcelOutlined />} href={p.excelUrl}>
+          Excel
+        </Button>
+        <Button icon={<FilePdfOutlined />} onClick={() => window.print()}>
+          PDF
+        </Button>
+      </Flex>
+    </Flex>
   )
 }

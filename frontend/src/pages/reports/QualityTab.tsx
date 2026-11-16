@@ -1,4 +1,5 @@
-import { Alert, Button, Empty, Flex, Skeleton, Table, Typography } from 'antd'
+import { Alert, Button, Empty, Flex, Skeleton, Table, Tag, Typography } from 'antd'
+import { useState } from 'react'
 import type { HTMLAttributes } from 'react'
 import { Link } from 'react-router'
 
@@ -8,7 +9,7 @@ import type { QualityChange, QualityMonth, QualityReport, QualityReportFilters, 
 import { ToneTag } from '../../components/ToneTag'
 import { formatDateTime, formatDay } from '../../lib/format'
 import { CHANGE_PERIODS as PERIODS, INK, todayIso, toneStyle } from '../../lib/reports'
-import { ChartCard, ReportTiles, ReportToolbar } from './ReportParts'
+import { ChartCard, ChartRow, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar } from './ReportParts'
 
 interface Props {
   filters: QualityReportFilters
@@ -112,6 +113,9 @@ function ReviewSchedule({ rows }: { rows: QualityScheduleRow[] }) {
   )
 }
 
+/** Names shown per check on the dashboard; the Excel export lists them all. */
+const HEALTH_SHOWN = 3
+
 function LibraryHealth({ report }: { report: QualityReport }) {
   const checks = [...report.health].sort((a, b) => Number(b.count > 0) - Number(a.count > 0))
   return (
@@ -129,13 +133,13 @@ function LibraryHealth({ report }: { report: QualityReport }) {
           </Flex>
           {c.items.length > 0 && (
             <Flex gap={4} wrap style={{ fontSize: 13 }}>
-              {c.items.slice(0, 12).map((i, n) => (
+              {c.items.slice(0, HEALTH_SHOWN).map((i, n) => (
                 <span key={i.id}>
                   {sopLink(i.id, i.label)}
                   {n < Math.min(c.items.length, 12) - 1 ? ',' : ''}
                 </span>
               ))}
-              {c.items.length > 12 && <Typography.Text type="secondary">and {c.items.length - 12} more</Typography.Text>}
+              {c.items.length > HEALTH_SHOWN && <Typography.Text type="secondary">and {c.items.length - HEALTH_SHOWN} more</Typography.Text>}
             </Flex>
           )}
         </Flex>
@@ -144,13 +148,22 @@ function LibraryHealth({ report }: { report: QualityReport }) {
   )
 }
 
+const CHANGES_SHOWN = 5
+
+/** The latest changes only (user decision 2026-11-16); "Show all" for the rest, and all of them in Excel. */
 function ChangeLog({ changes, months }: { changes: QualityChange[]; months: number }) {
+  const [all, setAll] = useState(false)
   if (changes.length === 0) {
     return <Typography.Text type="secondary">No changes in the last {months} months.</Typography.Text>
   }
+  const shown = all ? changes : changes.slice(0, CHANGES_SHOWN)
   return (
     <Flex vertical>
-      {changes.map((c) => (
+      <Typography.Text type="secondary" style={{ fontSize: 13, marginBottom: 4 }}>
+        {changes.length} change{changes.length === 1 ? '' : 's'} in the last {months} months
+        {changes.length > CHANGES_SHOWN && !all ? `; the latest ${CHANGES_SHOWN} are shown` : ''}.
+      </Typography.Text>
+      {shown.map((c) => (
         <Flex
           key={`${c.id}-${c.version}-${c.issued}`}
           gap={14}
@@ -169,6 +182,11 @@ function ChangeLog({ changes, months }: { changes: QualityChange[]; months: numb
           </Flex>
         </Flex>
       ))}
+      {changes.length > CHANGES_SHOWN && (
+        <Button type="link" style={{ alignSelf: 'flex-start', paddingInline: 0 }} onClick={() => setAll(!all)}>
+          {all ? `Show the latest ${CHANGES_SHOWN}` : `Show all ${changes.length}`}
+        </Button>
+      )}
     </Flex>
   )
 }
@@ -215,8 +233,16 @@ export function QualityTab({ filters, onFilters }: Props) {
             width: 180,
           },
         ]}
-        sourceText={`As of ${formatDateTime(data.fetched_at)} · ${live ? 'Source: SharePoint SOP library (approved documents)' : 'Source: demo data'}`}
+        sourceText={`As of ${formatDateTime(data.fetched_at)} · ${live ? 'SharePoint' : 'demo data'}`}
+        about="Approved documents in the SharePoint SOP library."
         sync="sharepoint"
+        badge={
+          live ? null : (
+            <Tag color="orange" style={{ marginInlineEnd: 0 }}>
+              Demo data
+            </Tag>
+          )
+        }
         excelUrl={reportExportUrl('quality', {
           department: filters.department,
           months: filters.months ? String(filters.months) : undefined,
@@ -230,26 +256,30 @@ export function QualityTab({ filters, onFilters }: Props) {
           {filters.department ?? 'All departments'} · {formatDay(todayIso())}
         </Typography.Text>
       </div>
-      {!live && <Alert type="warning" showIcon title="Demo data: SharePoint is not connected" />}
 
-      <ReportTiles tiles={data.tiles} />
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles tiles={data.tiles} trends={data.insights?.trends} targets={{ approved: 'q-health', review_overdue: 'q-schedule', review_due_soon: 'q-months', changes: 'q-changes', health: 'q-health' }} />
 
-      <ChartCard title="Reviews due by month" rule={data.rules.review}>
-        <ReviewsByMonth months={data.by_month} later={data.later} />
-      </ChartCard>
+      <ChartRow>
+        <ChartCard flex="1 1 440px" id="q-months" title="Reviews due by month" rule={data.rules.review}>
+          <ReviewsByMonth months={data.by_month} later={data.later} />
+        </ChartCard>
+        <ChartCard id="q-health" title="Library health" rule={data.rules.health} flex="1 1 440px">
+          <LibraryHealth report={data} />
+        </ChartCard>
+      </ChartRow>
 
-      <ChartCard title="Review schedule" rule={data.rules.tasks}>
+      <ChartCard id="q-schedule" title="Review schedule" rule={data.rules.tasks}>
         <ReviewSchedule rows={data.schedule} />
       </ChartCard>
 
-      <Flex gap={18} wrap>
-        <ChartCard title="Library health" rule={data.rules.health} flex="1 1 460px">
-          <LibraryHealth report={data} />
-        </ChartCard>
-        <ChartCard title={`Change log · last ${data.months} months`} rule={data.rules.change_log} flex="1 1 460px">
-          <ChangeLog changes={data.changes} months={data.months} />
-        </ChartCard>
-      </Flex>
+      <MoreDetail summary={`More detail: change log (${data.changes.length} change${data.changes.length === 1 ? '' : 's'} in the last ${data.months} months)`}>
+        <ChartRow>
+          <ChartCard id="q-changes" title={`Change log · last ${data.months} months`} rule={data.rules.change_log} flex="1 1 460px">
+            <ChangeLog changes={data.changes} months={data.months} />
+          </ChartCard>
+        </ChartRow>
+      </MoreDetail>
     </Flex>
   )
 }

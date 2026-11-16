@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -24,8 +24,9 @@ from app.db.session import get_db
 from app.reports.deviations import Deviations, build_deviations
 from app.reports.etmf import Etmf, build_etmf
 from app.reports.excel import Sheet, build_workbook
-from app.reports.history import snapshot_days
-from app.reports.models import MilestoneCompletion
+from app.reports.history import STUDY_DELIVERY, snapshot_days
+from app.reports.insights import Insights, build_insights
+from app.reports.models import MilestoneCompletion, ReportSnapshot
 from app.reports.quality import REVIEW_WINDOW_DAYS, Quality, build_quality
 from app.reports.risks_issues import RisksIssues, build_risks_issues
 from app.reports.study_delivery import StudyDelivery, build_study_delivery
@@ -53,8 +54,50 @@ class ReportSource(BaseModel):
     """Days of history kept so far (trend charts need a few weeks)."""
 
 
+class EnrolmentPoint(BaseModel):
+    day: date
+    enrolled: int
+    target: int | None
+
+
 class StudyDeliveryResponse(StudyDelivery):
     source: ReportSource
+    insights: Insights
+    enrolment_history: list[EnrolmentPoint]
+    """Enrolled and target on each day a figure was saved (daily snapshot; nothing estimated)."""
+
+
+def _enrolment_history(
+    db: Session, tenant_id: str, source: str, studies: list[Study], study_id: str | None, site_id: str | None
+) -> list[EnrolmentPoint]:
+    site_number = next(
+        (site.site_number for s in studies for site in s.sites if site_id and site.id == site_id), None
+    )
+    out = []
+    for snap in db.scalars(
+        select(ReportSnapshot)
+        .where(
+            ReportSnapshot.tenant_id == tenant_id,
+            ReportSnapshot.kind == STUDY_DELIVERY,
+            ReportSnapshot.source == source,
+        )
+        .order_by(ReportSnapshot.day)
+    ):
+        rows = [s for s in snap.data.get("studies", []) if not study_id or s.get("id") == study_id]
+        if site_id:
+            sites = [x for s in rows for x in s.get("sites", []) if x.get("number") == site_number]
+            enrolled = sum(x.get("enrolled") or 0 for x in sites)
+            targets = [x["target"] for x in sites if x.get("target") is not None]
+        else:
+            enrolled = sum(
+                s["enrolled"]
+                if s.get("enrolled") is not None
+                else sum(x.get("enrolled") or 0 for x in s.get("sites", []))
+                for s in rows
+            )
+            targets = [s["target"] for s in rows if s.get("target") is not None]
+        out.append(EnrolmentPoint(day=snap.day, enrolled=enrolled, target=sum(targets) if targets else None))
+    return out
 
 
 def _studies(db: Session, tenant_id: str, source: str) -> list[Study]:
@@ -81,6 +124,16 @@ async def _study_delivery(
     info = study_source(db, connector, user.tenant_id)
     return StudyDeliveryResponse(
         **report.model_dump(),
+        enrolment_history=_enrolment_history(db, user.tenant_id, source, studies, study_id, site_id),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="study-delivery",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -251,6 +304,7 @@ async def study_delivery_export(
 
 class WorkManagementResponse(WorkManagement):
     source: ReportSource
+    insights: Insights
 
 
 async def _work_management(
@@ -274,6 +328,15 @@ async def _work_management(
     info = study_source(db, connector, user.tenant_id)
     return WorkManagementResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="work-management",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and category is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=datetime.now(UTC),
@@ -369,11 +432,13 @@ SopConnectorDep = Annotated[SopConnector, Depends(get_sop_connector)]
 SopReader = Annotated[CurrentUser, Depends(require(Permission.SOP_READ))]
 Department = Annotated[str | None, Query(max_length=200)]
 Months = Annotated[int, Query(ge=1, le=24, description="Change log period: 3, 6, 12 or 24 months")]
+DEFAULT_MONTHS = 12
 
 
 class QualityResponse(Quality):
     source: SopSource
     fetched_at: datetime
+    insights: Insights
 
 
 async def _quality(
@@ -393,14 +458,30 @@ async def _quality(
     ):
         open_tasks[doc.sop_id] = open_tasks.get(doc.sop_id, 0) + 1
     report = build_quality(docs, open_tasks, today(), department=department, months=months)
+    source = connector.info().mode
     return QualityResponse(
-        **report.model_dump(), source=sop_source(connector.info()), fetched_at=result.fetched_at
+        **report.model_dump(),
+        source=sop_source(connector.info()),
+        fetched_at=result.fetched_at,
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="quality",
+            built=report,
+            today=today(),
+            all_studies=department is None and months == DEFAULT_MONTHS,
+        ),
     )
 
 
 @router.get("/quality", response_model=QualityResponse)
 async def quality(
-    db: Db, connector: SopConnectorDep, user: SopReader, department: Department = None, months: Months = 12
+    db: Db,
+    connector: SopConnectorDep,
+    user: SopReader,
+    department: Department = None,
+    months: Months = DEFAULT_MONTHS,
 ) -> QualityResponse:
     return await _quality(db, connector, user, department, months)
 
@@ -420,7 +501,7 @@ async def quality_export(
     connector: SopConnectorDep,
     user: SopReader,
     department: Department = None,
-    months: Months = 12,
+    months: Months = DEFAULT_MONTHS,
 ) -> Response:
     r = await _quality(db, connector, user, department, months)
     sheets = [
@@ -514,6 +595,7 @@ async def quality_export(
 
 class EtmfResponse(Etmf):
     source: ReportSource
+    insights: Insights
 
 
 async def _etmf(
@@ -533,6 +615,15 @@ async def _etmf(
     info = study_source(db, connector, user.tenant_id)
     return EtmfResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="etmf",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -644,6 +735,7 @@ async def etmf_export(
 
 class DeviationsResponse(Deviations):
     source: ReportSource
+    insights: Insights
 
 
 async def _deviations(
@@ -663,6 +755,15 @@ async def _deviations(
     info = study_source(db, connector, user.tenant_id)
     return DeviationsResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="deviations",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -759,6 +860,7 @@ async def deviations_export(
 
 class RisksIssuesResponse(RisksIssues):
     source: ReportSource
+    insights: Insights
 
 
 async def _risks_issues(
@@ -778,6 +880,15 @@ async def _risks_issues(
     info = study_source(db, connector, user.tenant_id)
     return RisksIssuesResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="risks-issues",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -863,3 +974,4 @@ async def risks_issues_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
     )
+

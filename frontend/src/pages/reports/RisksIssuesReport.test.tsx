@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { RisksIssuesReport } from '../../api/types'
 import { adminUser, mockApi, renderRoute, viewerUser } from '../../test/utils'
@@ -53,6 +54,29 @@ describe('Risks and issues report', () => {
     expect(row).toHaveTextContent('Demo: chase missing ISF delegation log signatures')
     expect(row).toHaveTextContent('6 days overdue')
     expect(screen.getByRole('link', { name: /Excel/ })).toHaveAttribute('href', '/api/v1/reports/risks-issues/export.xlsx')
+  })
+
+  it('leads with a headline, shows tile trends, and a tile jumps to its chart', async () => {
+    const insights = {
+      headline: '1 of 2 open issues is overdue; 1 high priority.',
+      detail: '1 closed in the last 30 days: median 28 days to close.',
+      tone: 'bad' as const,
+      trends: {
+        open: { points: [5, 4, 3, 2], change: -3, change_text: '-3 since 17 Oct', tone: 'good' as const },
+        overdue: { points: [], change: null, change_text: null, tone: 'neutral' as const },
+      },
+      history_since: '2026-10-17',
+    }
+    mockApi({ '/me': adminUser, '/reports/risks-issues': report({ insights }) })
+    renderRoute('/reports?tab=risks')
+    expect(await screen.findByTestId('report-headline')).toHaveTextContent('1 of 2 open issues is overdue; 1 high priority.')
+    expect(screen.getAllByTestId('sparkline')).toHaveLength(1) // no line until there are two weeks
+    expect(screen.getByTestId('trend-open')).toHaveTextContent('-3 since 17 Oct')
+    expect(screen.queryByTestId('trend-overdue')).not.toBeInTheDocument()
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    await userEvent.click(screen.getByRole('button', { name: /Overdue: 1\. Show the detail/ }))
+    expect(scroll).toHaveBeenCalled()
   })
 
   it('lets everyone sync from SimpleTrials', async () => {

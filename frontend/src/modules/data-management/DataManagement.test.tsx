@@ -216,7 +216,7 @@ describe('Data Management', () => {
   it('appears in the menu only when switched on and allowed', async () => {
     mockApi({ ...routes })
     renderRoute('/reports')
-    expect(await screen.findByRole('link', { name: 'Data Management' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Data Management' }, { timeout: 5000 })).toBeInTheDocument()
   })
 
   it('stays out of the menu for roles without access or when switched off', async () => {

@@ -6,7 +6,7 @@ import type { DeliveryMilestone, DeliverySite, PendingSite, ReportFilters, Study
 import { ToneTag } from '../../components/ToneTag'
 import { formatDay, formatDayShort } from '../../lib/format'
 import { INK, axisTicks, milestoneTone, positionPct, timelineRange, todayIso, toneStyle } from '../../lib/reports'
-import { Bar, ChartCard, ReportTiles, ReportToolbar } from './ReportParts'
+import { Bar, ChartCard, ChartRow, Legend, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar } from './ReportParts'
 
 interface Props {
   filters: ReportFilters
@@ -173,6 +173,125 @@ function SiteActivation({ report }: { report: StudyDeliveryReport }) {
   )
 }
 
+const ENROLMENT_HISTORY_RULE =
+  'Enrolled subjects on each day Avi.Intelligence saved the figures (once a day, from SimpleTrials), against the enrolment target. SimpleTrials has no month-by-month enrolment plan, so the target is the final target. Nothing is estimated or back-filled.'
+
+/** Enrolled over time against the target: from the daily snapshot. */
+function EnrolmentOverTime({ history }: { history: { day: string; enrolled: number; target: number | null }[] }) {
+  const last = history.at(-1)
+  const first = history[0]
+  if (!last || !first) return <Empty description="No enrolment figures saved yet." />
+  if (history.length < 2)
+    return (
+      <Flex vertical gap={6} data-testid="enrolment-history">
+        <span style={{ fontSize: 28, fontWeight: 700 }}>
+          {last.enrolled}
+          {last.target !== null ? ` of ${last.target}` : ''}
+        </span>
+        <Typography.Text type="secondary">
+          The line builds up from {formatDay(first.day)}: one point for each day the figures are saved.
+        </Typography.Text>
+      </Flex>
+    )
+  const W = 640
+  const H = 220
+  const L = 44
+  const R = 12
+  const T = 12
+  const B = 196
+  const max = Math.max(1, ...history.map((p) => Math.max(p.enrolled, p.target ?? 0))) * 1.1
+  const x = (i: number) => L + (i * (W - L - R)) / (history.length - 1)
+  const y = (v: number) => B - (v / max) * (B - T)
+  const line = history.map((p, i) => `${x(i).toFixed(1)},${y(p.enrolled).toFixed(1)}`).join(' ')
+  const target = last.target
+  const ticks = [...new Set([0, Math.round(max / 2.2), Math.round(max / 1.1)])]
+  const labelAt = [...new Set([0, Math.floor((history.length - 1) / 2), history.length - 1])]
+  return (
+    <Flex vertical gap={8} data-testid="enrolment-history">
+      <svg
+        viewBox={`0 0 ${W} ${H + 18}`}
+        style={{ width: '100%', height: 'auto' }}
+        role="img"
+        aria-label={`Enrolment from ${formatDay(first.day)} to ${formatDay(last.day)}: ${first.enrolled} to ${last.enrolled}${target !== null ? `, target ${target}` : ''}.`}
+      >
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#EDF0F5" />
+            <text x={L - 8} y={y(v) + 4} fontSize="11" fill="#5B6B82" textAnchor="end">
+              {v}
+            </text>
+          </g>
+        ))}
+        {target !== null && (
+          <>
+            <line x1={L} x2={W - R} y1={y(target)} y2={y(target)} stroke="#8A97A8" strokeWidth="2" strokeDasharray="6 5" />
+            <text x={W - R} y={y(target) - 6} fontSize="11" fill="#5B6B82" textAnchor="end">
+              Target {target}
+            </text>
+          </>
+        )}
+        <polygon points={`${line} ${x(history.length - 1)},${B} ${x(0)},${B}`} fill={INK.info} fillOpacity="0.1" />
+        <polyline points={line} fill="none" stroke={INK.info} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(history.length - 1)} cy={y(last.enrolled)} r="5" fill={INK.info} stroke="#fff" strokeWidth="2" />
+        {labelAt.map((i) => (
+          <text
+            key={i}
+            x={x(i)}
+            y={H + 12}
+            fontSize="11"
+            fill="#5B6B82"
+            textAnchor={i === 0 ? 'start' : i === history.length - 1 ? 'end' : 'middle'}
+          >
+            {formatDay(history[i]?.day ?? last.day)}
+          </text>
+        ))}
+      </svg>
+      <Legend items={[{ label: 'Enrolled', color: INK.info }, ...(target !== null ? [{ label: 'Target', color: '#8A97A8' }] : [])]} />
+    </Flex>
+  )
+}
+
+const ACTIVATED = { tone: 'good' as const, label: 'Activated' }
+
+/** One row per site: enrolment against target and where activation stands. */
+function SitesTable({ report }: { report: StudyDeliveryReport }) {
+  const pending = new Map(report.pending_sites.map((p) => [p.site_id, p]))
+  if (report.sites.length === 0) return <Empty description="No sites for this selection." />
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="report-table" style={{ minWidth: 640 }}>
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>Study</th>
+            <th>Enrolled</th>
+            <th>Activation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {report.sites.map((s) => {
+            const p = pending.get(s.site_id)
+            const state = p ? { tone: PENDING[p.state].tone, label: PENDING[p.state].label(p) } : ACTIVATED
+            const f = siteFigure(s)
+            return (
+              <tr key={s.site_id} data-testid="site-table-row">
+                <td style={{ fontWeight: 600 }}>
+                  {s.site_number} · {s.name}
+                </td>
+                <td>{s.protocol_number}</td>
+                <td style={{ color: f.tone === 'neutral' ? undefined : toneStyle(f.tone, '').color, fontWeight: 600 }}>{f.text}</td>
+                <td>
+                  <ToneTag tone={toneStyle(state.tone, state.label)} />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function StudyDeliveryTab({ filters, onFilters }: Props) {
   const { data, isLoading, isError, error, refetch } = useStudyDelivery(filters)
 
@@ -229,59 +348,62 @@ export function StudyDeliveryTab({ filters, onFilters }: Props) {
           {data.source.as_of ? formatDay(data.source.as_of.slice(0, 10)) : '—'}
         </Typography.Text>
       </div>
-      {data.source.mode !== 'api' && (
-        <Alert type="warning" showIcon title="Demo data: SimpleTrials is not connected" />
-      )}
-      {data.source.mode === 'api' && data.source.sandbox_only && (
-        <Alert
-          type="info"
-          showIcon
-          title="SimpleTrials sandbox study"
-          description="Figures come from the sandbox study only. All studies appear once the Workspace (all studies) read-only key is enabled."
-        />
-      )}
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles
+        tiles={data.tiles}
+        trends={data.insights?.trends}
+        targets={{ on_plan: 'sd-milestones', overdue: 'sd-milestones', slipped_major: 'sd-milestones', enrolment: 'sd-enrolment' }}
+      />
 
-      <ReportTiles tiles={data.tiles} />
-
-      <ChartCard
-        title="Key milestone timeline"
-        rule={`${data.rules.schedule_slipped ?? ''} ${data.rules.study_on_plan ?? ''}`.trim()}
-        extra={
-          <Flex gap={14} wrap style={{ fontSize: 12, color: '#3E4C5E' }} aria-hidden>
-            <Flex align="center" gap={6}>
-              <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #8A97A8', boxSizing: 'border-box' }} />
-              Original date
-            </Flex>
-            <Flex align="center" gap={6}>
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: INK.info }} />
-              Current date
-            </Flex>
-            <Flex align="center" gap={6}>
-              <span style={{ width: 2, height: 14, background: '#B42318' }} />
-              Today
-            </Flex>
-          </Flex>
-        }
-      >
-        <MilestoneTimeline rows={data.milestones} today={today} />
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {ot.with_original_date > 0
-            ? `${ot.on_time} of ${ot.with_original_date} completed key milestones were on time. `
-            : 'On-time completion appears as milestones are completed. '}
-          {data.rules.on_time}
-          {data.source.snapshot_days < 14 &&
-            ` Trend charts (slippage over time) appear after two weeks of daily history (${data.source.snapshot_days} day${data.source.snapshot_days === 1 ? '' : 's'} so far).`}
-        </Typography.Text>
-      </ChartCard>
-
-      <Flex gap={18} wrap>
-        <ChartCard title="Enrolment by site" rule={data.rules.enrolment} flex="1 1 520px">
+      <ChartRow>
+        <ChartCard id="sd-enrolment" title="Enrolment over time" rule={ENROLMENT_HISTORY_RULE} flex="1 1 440px">
+          <EnrolmentOverTime history={data.enrolment_history ?? []} />
+        </ChartCard>
+        <ChartCard title="Enrolment by site" rule={data.rules.enrolment} flex="1 1 440px">
           <EnrolmentBySite sites={data.sites} />
         </ChartCard>
-        <ChartCard title="Site activation" rule={data.rules.activation} flex="1 1 380px">
+      </ChartRow>
+
+      <ChartCard id="sd-sites" title="Sites" rule={data.rules.activation}>
+        <SitesTable report={data} />
+      </ChartCard>
+
+      <MoreDetail
+        summary={`More detail: key milestone timeline (${data.milestones.filter((m) => m.state === 'overdue').length} overdue) and site activation`}
+      >
+        <ChartCard
+          id="sd-milestones"
+          title="Key milestone timeline"
+          rule={`${data.rules.schedule_slipped ?? ''} ${data.rules.study_on_plan ?? ''}`.trim()}
+          extra={
+            <Flex gap={14} wrap style={{ fontSize: 12, color: '#3E4C5E' }} aria-hidden>
+              <Flex align="center" gap={6}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #8A97A8', boxSizing: 'border-box' }} />
+                Original date
+              </Flex>
+              <Flex align="center" gap={6}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', background: INK.info }} />
+                Current date
+              </Flex>
+              <Flex align="center" gap={6}>
+                <span style={{ width: 2, height: 14, background: '#B42318' }} />
+                Today
+              </Flex>
+            </Flex>
+          }
+        >
+          <MilestoneTimeline rows={data.milestones} today={today} />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {ot.with_original_date > 0
+              ? `${ot.on_time} of ${ot.with_original_date} completed key milestones were on time. `
+              : 'On-time completion appears as milestones are completed. '}
+            {data.rules.on_time}
+          </Typography.Text>
+        </ChartCard>
+        <ChartCard title="Site activation" rule={data.rules.activation}>
           <SiteActivation report={data} />
         </ChartCard>
-      </Flex>
+      </MoreDetail>
     </Flex>
   )
 }

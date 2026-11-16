@@ -7,7 +7,7 @@ import { ToneTag } from '../../components/ToneTag'
 import { formatDay } from '../../lib/format'
 import { INK, completenessTone, todayIso, toneStyle } from '../../lib/reports'
 import { TONES } from '../../lib/studies'
-import { Bar, ChartCard, ReportTiles, ReportToolbar } from './ReportParts'
+import { Bar, ChartCard, ChartRow, MoreDetail, ReportHeadline, ReportTiles, ReportToolbar } from './ReportParts'
 
 interface Props {
   filters: ReportFilters
@@ -225,15 +225,6 @@ export function EtmfTab({ filters, onFilters }: Props) {
           {data.study_options.find((o) => o.id === filters.study_id)?.label ?? 'All studies'} · {formatDay(todayIso())}
         </Typography.Text>
       </div>
-      {data.source.mode !== 'api' && <Alert type="warning" showIcon title="Demo data: SimpleTrials is not connected" />}
-      {data.source.mode === 'api' && data.source.sandbox_only && (
-        <Alert
-          type="info"
-          showIcon
-          title="SimpleTrials sandbox study"
-          description="Figures come from the sandbox study only. All studies appear once the Workspace (all studies) read-only key is enabled."
-        />
-      )}
       {!data.has_documents && (
         <Alert
           type="info"
@@ -246,41 +237,43 @@ export function EtmfTab({ filters, onFilters }: Props) {
         Document metadata only: Avi.Intelligence never downloads eTMF files.
       </Typography.Text>
 
-      <ReportTiles tiles={data.tiles} />
+      <ReportHeadline insights={data.insights} />
+      <ReportTiles tiles={data.tiles} trends={data.insights?.trends} targets={{ completeness: 'tmf-completeness', missing: 'tmf-missing', on_time: 'tmf-timeliness', expiring: 'tmf-expiring' }} />
 
-      <Flex gap={18} wrap>
-        <ChartCard title="Completeness" rule={data.rules.completeness} flex="1 1 520px">
+      <ChartRow>
+        <ChartCard id="tmf-completeness" title="Completeness" rule={data.rules.completeness} flex="1 1 440px">
           <Flex gap={24} wrap align="center">
             <Donut c={data.overall} />
             <CompletenessRows rows={data.by_study} testId="study-completeness-row" empty="No studies in this selection." />
           </Flex>
         </ChartCard>
-        <ChartCard title="Sites with the most missing documents" flex="1 1 380px">
+        <ChartCard id="tmf-missing" title="Sites with the most missing documents" flex="1 1 440px">
           <CompletenessRows rows={data.sites_missing} testId="site-missing-row" empty="No missing site documents." />
         </ChartCard>
-      </Flex>
+      </ChartRow>
 
-      <ChartCard title="Completeness by site and TMF section" rule={data.rules.heat_map}>
-        <SectionHeatMap report={data} />
-      </ChartCard>
-
-      <Flex gap={18} wrap>
-        <ChartCard title="QC status" rule={data.rules.qc} flex="1 1 420px">
-          <CountBars rows={data.qc} colorFor={(l) => QC_COLOR[l] ?? INK.info} testId="qc-row" />
-        </ChartCard>
-        <ChartCard title="Filing timeliness" rule={data.rules.timeliness} flex="1 1 420px">
-          <CountBars rows={data.timeliness} colorFor={(_l, k) => TIMELY[k ?? ''] ?? INK.info} testId="timeliness-row" />
-          {data.timeliness_measured > 0 && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {data.timeliness_on_time} of {data.timeliness_measured} dated documents filed within the target.
-            </Typography.Text>
-          )}
-        </ChartCard>
-      </Flex>
-
-      <ChartCard title="Expired and expiring documents" rule={data.rules.expiring}>
+      <ChartCard id="tmf-expiring" title="Expired and expiring documents" rule={data.rules.expiring}>
         <Expiring report={data} />
       </ChartCard>
+
+      <MoreDetail summary="More detail: completeness by TMF section, QC status and filing timeliness">
+        <ChartRow>
+          <ChartCard title="Completeness by site and TMF section" rule={data.rules.heat_map}>
+            <SectionHeatMap report={data} />
+          </ChartCard>
+          <ChartCard title="QC status" rule={data.rules.qc} flex="1 1 420px">
+            <CountBars rows={data.qc} colorFor={(l) => QC_COLOR[l] ?? INK.info} testId="qc-row" />
+          </ChartCard>
+          <ChartCard id="tmf-timeliness" title="Filing timeliness" rule={data.rules.timeliness} flex="1 1 420px">
+            <CountBars rows={data.timeliness} colorFor={(_l, k) => TIMELY[k ?? ''] ?? INK.info} testId="timeliness-row" />
+            {data.timeliness_measured > 0 && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {data.timeliness_on_time} of {data.timeliness_measured} dated documents filed within the target.
+              </Typography.Text>
+            )}
+          </ChartCard>
+        </ChartRow>
+      </MoreDetail>
     </Flex>
   )
 }
