@@ -47,9 +47,7 @@ async def _conferences(
     source: ConferenceSource, user: CurrentUser, year: int | None, role: AvionRole | None
 ) -> ConferencesResponse:
     records = await source.list_conferences()
-    report = build_conferences(
-        records, today(), year=year, role=role, can_see_cost=user.can(Permission.CONFERENCE_COST)
-    )
+    report = build_conferences(records, today(), year=year, role=role)
     return ConferencesResponse(**report.model_dump(), source=source.info())
 
 
@@ -78,11 +76,9 @@ async def export(
     r = await _conferences(source, user, year, role)
     header = ["Starts", "Ends", "Conference", "City", "Country", "Avion's role", "Who is going", "Booth",
               "Register by", "Website", "Notes"]  # fmt: skip
-    if r.can_see_cost:
-        header += ["Cost", "Currency"]
     rows = [
         [c.starts_on, c.ends_on, c.name, c.city, c.country, c.role.value, c.team, c.booth, c.register_by,
-         c.website, c.notes] + ([c.cost, c.currency] if r.can_see_cost else [])
+         c.website, c.notes]
         for c in r.conferences
     ]  # fmt: skip
     about = [
@@ -104,7 +100,6 @@ async def export(
             "format": "xlsx",
             "year": r.year,
             "role": role.value if role else None,
-            "cost": r.can_see_cost,
         },
         request=request,
     )
@@ -155,7 +150,21 @@ async def contribute(_db: Session, user: CurrentUser) -> providers.Contribution:
     sources = (
         [SourceInfo(name="Conferences", as_of=r.source.fetched_at)] if r.source.mode == "sharepoint" else []
     )
-    return providers.Contribution(sections={"conferences": section}, sources=sources)
+    register = tiles.get("register")
+    highlights = (
+        {
+            "conf_register": Kpi(
+                label="Conference registrations due",
+                value=register.value,
+                note=register.note,
+                tone=register.tone,
+                link="/conferences",
+            )
+        }
+        if register is not None
+        else {}
+    )
+    return providers.Contribution(sections={"conferences": section}, sources=sources, highlights=highlights)
 
 
 providers.register(contribute)

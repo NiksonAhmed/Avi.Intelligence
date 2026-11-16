@@ -4,8 +4,8 @@ test('find an SOP, open it, download it and see the download in the audit trail'
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Needs your attention' })).toBeVisible()
 
-  // Navigate via global search (works on desktop and tablet layouts).
-  await page.getByRole('searchbox', { name: 'Global search' }).fill('site activation')
+  await page.goto('/documents/sops')
+  await page.getByRole('searchbox', { name: 'Search SOPs' }).fill('site activation')
   await page.keyboard.press('Enter')
 
   await expect(page).toHaveURL(/\/documents\/sops\?q=site/)

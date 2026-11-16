@@ -1,4 +1,4 @@
-import { BellOutlined, MenuOutlined, MessageOutlined } from '@ant-design/icons'
+import { BellOutlined, MenuOutlined } from '@ant-design/icons'
 import {
   Avatar,
   Button,
@@ -12,7 +12,9 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { useState } from 'react'
+import type { InputRef } from 'antd'
+import type { MenuProps } from 'antd'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
 import { useConferences, useMe } from '../api/hooks'
@@ -20,9 +22,53 @@ import { BrandMark } from '../components/BrandMark'
 import { initials } from '../lib/format'
 import { brand } from '../theme'
 import { useDmStatus } from '../modules/data-management/api'
-import { NAV_ITEMS, activeNavKey } from './navigation'
+import { NAV_GROUPS, NAV_ITEMS, activeNavKey } from './navigation'
+import type { NavItem } from './navigation'
 
 const { Sider, Header, Content } = Layout
+
+function menuItems(items: NavItem[]): MenuProps['items'] {
+  const entry = (item: NavItem) => ({ key: item.key, icon: item.icon, label: <Link to={item.path}>{item.label}</Link> })
+  return [
+    ...items.filter((i) => !i.group).map(entry),
+    ...NAV_GROUPS.flatMap((g) => {
+      const children = items.filter((i) => i.group === g.key).map(entry)
+      return children.length ? [{ type: 'group' as const, key: `group-${g.key}`, label: g.label, children }] : []
+    }),
+  ]
+}
+
+/** One box for everything: a question, an SOP number, a site or a study, answered on the Ask page. */
+function SearchOrAsk() {
+  const navigate = useNavigate()
+  const ref = useRef<InputRef>(null)
+  const [value, setValue] = useState('')
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        ref.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  return (
+    <Input.Search
+      ref={ref}
+      placeholder="Search or ask anything (Ctrl K)"
+      aria-label="Search or ask anything"
+      allowClear
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      style={{ maxWidth: 480 }}
+      onSearch={(text) => {
+        const q = text.trim()
+        void navigate(q ? `/ask?q=${encodeURIComponent(q)}` : '/ask')
+      }}
+    />
+  )
+}
 
 function NotificationCentre() {
   // No notification source exists yet; show an honest empty state rather than sample alerts.
@@ -85,7 +131,6 @@ function UserMenu() {
 
 export function AppLayout() {
   const location = useLocation()
-  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [narrow, setNarrow] = useState(false)
   const { data: me } = useMe()
@@ -124,11 +169,7 @@ export function AppLayout() {
             theme="dark"
             mode="inline"
             selectedKeys={[activeNavKey(location.pathname)]}
-            items={navItems.map((item) => ({
-              key: item.key,
-              icon: item.icon,
-              label: <Link to={item.path}>{item.label}</Link>,
-            }))}
+            items={menuItems(navItems)}
             onClick={() => narrow && setCollapsed(true)}
           />
         </nav>
@@ -149,25 +190,9 @@ export function AppLayout() {
                   onClick={() => setCollapsed((c) => !c)}
                 />
               )}
-              <Input.Search
-                placeholder="Search SOPs by number, title or department"
-                aria-label="Global search"
-                allowClear
-                style={{ maxWidth: 440 }}
-                onSearch={(value) => {
-                  const q = value.trim()
-                  void navigate(q ? `/documents/sops?q=${encodeURIComponent(q)}` : '/documents/sops')
-                }}
-              />
+              <SearchOrAsk />
             </Flex>
             <Flex align="center" gap={8}>
-              <Button
-                icon={<MessageOutlined />}
-                aria-label="Ask Avi.Intelligence"
-                onClick={() => void navigate('/documents/ask')}
-              >
-                <span className="hide-on-tablet">Ask Avi.Intelligence</span>
-              </Button>
               {me?.auth_mode === 'development' && (
                 <Tag color="gold" className="hide-on-tablet">Development mode</Tag>
               )}

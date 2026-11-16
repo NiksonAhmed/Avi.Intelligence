@@ -2,6 +2,28 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-16: Business Development role; grouped menu; Ask Avi.Intelligence on its own; no conference costs
+
+**Decisions (user, 16 Nov 2026)**, mock-up approved: https://claude.ai/artifact/6v46oTbdBtEHbskDtySwL7.
+- **Business Development role from the start** (`business_development`): conferences, SOPs, their own
+  tasks, Ask Avi.Intelligence, and the **study portfolio at portfolio level only** (status, phase, sites,
+  enrolment). No Study Command Centre, reports, risks and issues, deviations, eTMF, Data Management or audit
+  trail. New permissions: `portfolio.read` (the portfolio list and the Overview; everyone) and `task.view`
+  (My Tasks; everyone); `study.read` now means study detail. BD's Overview: Next conferences, then Study
+  portfolio; its third "Needs your attention" figure is conference registrations due.
+- **Conferences are edited only in SharePoint** by the BD team; Avi.Intelligence stays read-only.
+- **No conference costs** ("we are not having any cost"): `conference.cost`, the cost fields, the Excel cost
+  column and the cost answers are removed (supersedes 13 Nov).
+- **Menu grouped** and the same order for everyone: Overview, My Tasks, Ask Avi.Intelligence; Studies
+  (Portfolio, Command Centre, Risks and Issues, Reports, Data Management); Knowledge (Documents); Business
+  (Conferences); Admin (Administration, Audit Trail). Each person sees only the items their role allows
+  (Administration only with `connector.manage`, Audit Trail only with `audit.read`; both pages already
+  refused others). Business stays below Studies: most staff never use it, and BD land on it via their
+  Overview.
+- **Ask Avi.Intelligence has its own page** (`/ask`; `/documents/ask` redirects) and menu item, since it
+  answers about everything, not only SOPs. The top bar's SOP-only search is now one **"Search or ask
+  anything"** box (Ctrl K) that opens Ask with the question. The SOP list keeps its own search.
+
 ## 2026-11-13: Ask Avi.Intelligence answers across the whole app
 
 **Decision (user, 13 Nov 2026): "if I ask anything regarding conference or study or task or risk or SOP or
@@ -18,7 +40,7 @@ records, using the same rules as the reports.
   context (upcoming, monitoring, eTMF, expiring, a study or site...).
 - **Tasks:** every category, not only study tasks; "my tasks" means the asker's own open tasks.
 - **Conferences** (module topic): next conference, the year's list, by city or country, by Avion's role,
-  registration deadlines; costs only for `conference.cost`. Demo data is said to be demo.
+  registration deadlines. Demo data is said to be demo. (Costs removed on 16 Nov.)
 - **Data Management** (module topic, only while the module is on and for `dm.view`): queries, missing
   data, SDV and lab flags for the default study scope, with per-site tables. **Counts and sites only: no
   subject IDs in answers** (open Data Management for subject-level detail), and no EDC data is sent to AI.

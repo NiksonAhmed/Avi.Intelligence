@@ -46,10 +46,7 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
     records = await source.list_conferences()
     years = [int(y) for y in re.findall(r"\b(20\d\d)\b", q)]
     role = next((r for w, r in ROLE_WORDS.items() if w in words), None)
-    can_cost = user.can(Permission.CONFERENCE_COST)
-    r = build_conferences(
-        records, today(), year=years[0] if years else None, role=role, can_see_cost=can_cost
-    )
+    r = build_conferences(records, today(), year=years[0] if years else None, role=role)
     rows = r.conferences
     place = [c for c in rows if (c.city and c.city.lower() in q) or (c.country and c.country.lower() in q)]
     if place:
@@ -60,11 +57,8 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
         rows.sort(key=lambda c: c.register_by or c.starts_on)
     elif words & {"next", "upcoming", "coming"}:
         rows = [c for c in rows if not c.past]
-    show_cost = can_cost and bool(words & {"cost", "costs", "budget", "spend", "price"})
 
     columns = ["Dates", "Conference", "Where", "Avion's role", "Who is going", "Register by"]
-    if show_cost:
-        columns.append("Cost")
     table = AnswerTable(
         title="Registration deadlines" if deadlines else f"Conferences in {r.year}",
         columns=columns,
@@ -77,11 +71,6 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
                 c.team or "—",
                 day(c.register_by),
             ]
-            + (
-                [f"{c.cost:,.0f} {c.currency or ''}".strip() if c.cost is not None else "—"]
-                if show_cost
-                else []
-            )
             for c in rows[:25]
         ],
         links=[f"/conferences?year={r.year}&id={c.id}" for c in rows[:25]],
@@ -101,8 +90,6 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
     lines = []
     if source.info().mode == "demo":
         lines.append("These are demo conferences: the BD team's SharePoint list is not connected yet.")
-    if words & {"cost", "costs", "budget", "spend", "price"} and not can_cost:
-        lines.append("Costs are shown only to people allowed to see them.")
     understood = "Registration deadlines" if deadlines else "Conferences"
     understood += (
         f" · {r.year}"

@@ -32,8 +32,6 @@ DEFAULT_FIELDS: dict[str, list[str]] = {
     "register_by": ["RegistrationDeadline", "Registration_x0020_Deadline", "RegisterBy", "Deadline"],
     "website": ["Website", "URL", "Link"],
     "notes": ["Notes", "Comments", "Description"],
-    "cost": ["Cost", "Budget", "TotalCost", "Total_x0020_Cost"],
-    "currency": ["Currency"],
 }
 
 _ROLE_WORDS = {
@@ -93,13 +91,6 @@ def _text(value: Any, limit: int = 500) -> str | None:
     return text[:limit] or None
 
 
-def _number(value: Any) -> float | None:
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
 def map_item(item: dict[str, Any], fields: dict[str, list[str]]) -> ConferenceRecord | None:
     values: dict[str, Any] = item.get("fields") or {}
 
@@ -129,8 +120,6 @@ def map_item(item: dict[str, Any], fields: dict[str, list[str]]) -> ConferenceRe
         register_by=_date(pick("register_by")),
         website=_text(pick("website"), 500),
         notes=_text(pick("notes"), 1000),
-        cost=_number(pick("cost")),
-        currency=_text(pick("currency"), 8),
         source_url=_text(item.get("webUrl"), 1000),
     )
 

@@ -25,7 +25,17 @@ export const adminUser: Me = {
   email: 'jane@example.com',
   role: 'admin',
   role_label: 'Administrator',
-  permissions: ['audit.read', 'connector.manage', 'sop.download', 'sop.read', 'study.read', 'work.manage'],
+  permissions: [
+    'assistant.use',
+    'audit.read',
+    'connector.manage',
+    'portfolio.read',
+    'sop.download',
+    'sop.read',
+    'study.read',
+    'task.view',
+    'work.manage',
+  ],
   auth_mode: 'development',
 }
 
@@ -35,7 +45,10 @@ export const qaUser: Me = {
   role: 'qa',
   role_label: 'Quality Assurance',
   permissions: [
+    'assistant.use',
     'audit.read',
+    'portfolio.read',
+    'task.view',
     'sop.download',
     'sop.read',
     'study.read',
@@ -51,7 +64,15 @@ export const viewerUser: Me = {
   ...adminUser,
   role: 'viewer',
   role_label: 'Viewer',
-  permissions: ['sop.read', 'study.read'],
+  permissions: ['assistant.use', 'portfolio.read', 'sop.read', 'study.read', 'task.view'],
+}
+
+export const bdUser: Me = {
+  ...adminUser,
+  id: 'bd1',
+  role: 'business_development',
+  role_label: 'Business Development',
+  permissions: ['assistant.use', 'conference.view', 'portfolio.read', 'sop.download', 'sop.read', 'task.create_own', 'task.view', 'study.sync'],
 }
 
 export function makeSop(overrides: Partial<SopDocument> = {}): SopDocument {

@@ -541,7 +541,12 @@ def test_download_only_for_admin_and_data_manager() -> None:
 
     can_download = {role for role, perms in ROLE_PERMISSIONS.items() if Permission.DM_EXPORT in perms}
     assert can_download == {Role.ADMIN, Role.DATA_MANAGER}  # never CRAs (user decision)
-    assert all(Permission.DM_VIEW in perms for perms in ROLE_PERMISSIONS.values())
+    # Everyone views Data Management except Business Development (portfolio level only, 2026-11-16).
+    assert all(
+        Permission.DM_VIEW in perms
+        for role, perms in ROLE_PERMISSIONS.items()
+        if role != Role.BUSINESS_DEVELOPMENT
+    )
 
 
 def test_staff_names_are_never_stored(db_session: Session) -> None:

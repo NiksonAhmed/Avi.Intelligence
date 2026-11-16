@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.reports import _deviations, _etmf, _quality, _risks_issues, _study_delivery, _work_management
-from app.api.studies import current_source_label, study_source
+from app.api.studies import current_source_label, study_source, summarise
 from app.audit.service import record_event
 from app.auth.directory import list_people
 from app.auth.rbac import ROLE_LABELS, CurrentUser, Permission, Role, require
@@ -45,7 +45,7 @@ router = APIRouter(tags=["Overview"])
 Connector = Annotated[StudyConnector, Depends(get_study_connector)]
 SopConnectorDep = Annotated[SopConnector, Depends(get_sop_connector)]
 Db = Annotated[Session, Depends(get_db)]
-Reader = Annotated[CurrentUser, Depends(require(Permission.STUDY_READ))]
+Reader = Annotated[CurrentUser, Depends(require(Permission.PORTFOLIO_READ))]
 Manager = Annotated[CurrentUser, Depends(require(Permission.WORK_MANAGE))]
 
 VISIT_WINDOW_DAYS = 14
@@ -60,6 +60,7 @@ PURPOSE: dict[Role, str] = {
     Role.DATA_MANAGER: "Data quality: queries to review, missing data, lab flags and SDV.",
     Role.SAFETY: "Safety signals across studies, and your safety SOPs and tasks.",
     Role.QA: "SOPs due for review, serious deviations, and the tasks you assign.",
+    Role.BUSINESS_DEVELOPMENT: "Where Avion is going next, and how our studies are doing.",
     Role.VIEWER: "How the studies are doing (read-only).",
 }
 
@@ -92,6 +93,7 @@ LAYOUT: dict[Role, list[str]] = {
     Role.DATA_MANAGER: ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations", "conferences"],
     Role.SAFETY: ["safety_db", "dm_labs", "deviations", "sops", "conferences"],
     Role.QA: ["sops", "deviations", "team_tasks", "risks", "conferences"],
+    Role.BUSINESS_DEVELOPMENT: ["conferences", "portfolio"],
     Role.VIEWER: ["studies", "conferences"],
 }
 
@@ -104,6 +106,7 @@ HIGHLIGHT: dict[Role, str] = {
     Role.DATA_MANAGER: "dm_awaiting",
     Role.SAFETY: "dm_clin_sig",
     Role.QA: "sop_reviews_overdue",
+    Role.BUSINESS_DEVELOPMENT: "conf_register",
     Role.VIEWER: "milestones_overdue",
 }
 
@@ -176,6 +179,56 @@ async def _studies(c: _Ctx) -> Section:
             for m in upcoming[:4]
         ],
         empty=f"No milestones in the next {MILESTONE_WINDOW_DAYS} days.",
+    )
+
+
+async def _portfolio(c: _Ctx) -> Section:
+    """Portfolio level only (Business Development): status, sites and enrolment; no study detail."""
+    studies = [summarise(s, c.now, 0, 0) for s in c.studies()]
+    enrolled = sum(s.enrolled or 0 for s in studies)
+    target = sum(s.enrolment_target or 0 for s in studies)
+    kpis = [
+        Kpi(label="Studies", value=str(len(studies)), tone="info", link="/portfolio"),
+        Kpi(label="Sites", value=str(sum(s.site_count for s in studies)), tone="neutral", link="/portfolio"),
+        Kpi(
+            label="Patients enrolled",
+            value=str(enrolled),
+            note=f"of {target} planned ({round(enrolled * 100 / target)}%)" if target else None,
+            tone="neutral",
+            link="/portfolio",
+        ),
+    ]
+    rows = [
+        Row(
+            label=f"{s.protocol_number} · {s.title}",
+            detail=" · ".join(
+                x
+                for x in (
+                    f"Phase {s.phase}" if s.phase else None,
+                    _days(s.site_count, "site"),
+                    s.status,
+                )
+                if x
+            ),
+            chip=(
+                f"{s.enrolled or 0} of {s.enrolment_target} enrolled"
+                if s.enrolment_target
+                else (f"{s.enrolled} enrolled" if s.enrolled else "Not enrolling yet")
+            ),
+            tone="info",
+            link="/portfolio",
+        )
+        for s in studies
+    ]
+    return Section(
+        key="portfolio",
+        title="Study portfolio",
+        source="from SimpleTrials",
+        link="/portfolio",
+        link_label="Study Portfolio",
+        kpis=kpis,
+        rows=rows[:6],
+        empty="No studies yet.",
     )
 
 
@@ -532,6 +585,7 @@ async def _safety_db(_c: _Ctx) -> Section:
 
 BUILDERS: dict[str, Callable[[_Ctx], Awaitable[Section]]] = {
     "studies": _studies,
+    "portfolio": _portfolio,
     "risks": _risks,
     "deviations": _deviations_section,
     "etmf": _etmf_section,
@@ -544,6 +598,7 @@ BUILDERS: dict[str, Callable[[_Ctx], Awaitable[Section]]] = {
 }
 TITLES = {
     "studies": "Studies at a glance",
+    "portfolio": "Study portfolio",
     "risks": "Risks and issues",
     "deviations": "Protocol deviations",
     "etmf": "eTMF",

@@ -22,8 +22,6 @@ function conf(overrides: Partial<Conference>): Conference {
     website: null,
     notes: 'Clinical operations',
     source_url: null,
-    cost: null,
-    currency: null,
     past: false,
     days_until: 80,
     register_soon: true,
@@ -46,7 +44,6 @@ function report(overrides: Partial<ConferencesReport> = {}): ConferencesReport {
     ],
     next_id: 'c1',
     not_on_map: 1,
-    can_see_cost: false,
     rules: { source: 'Conferences as recorded by the BD team.' },
     source: { mode: 'demo', reason: 'The BD team’s SharePoint conference list is not connected yet.', fetched_at: null },
     ...overrides,
@@ -78,16 +75,15 @@ describe('Conferences', () => {
     expect(screen.getByRole('link', { name: /Excel/ })).toHaveAttribute('href', '/api/v1/conferences/export.xlsx?year=2027&role=Speaking')
   })
 
-  it('shows costs only to those allowed, and the SharePoint link for real items', async () => {
+  it('shows no costs, and the SharePoint link for real items', async () => {
     const live = report({
-      can_see_cost: true,
       source: { mode: 'sharepoint', reason: null, fetched_at: '2026-11-13T09:00:00Z' },
-      conferences: [conf({ cost: 4200, currency: 'USD', source_url: 'https://example.sharepoint.com/item/1' })],
+      conferences: [conf({ source_url: 'https://example.sharepoint.com/item/1' })],
     })
     mockApi({ '/me': adminUser, '/conferences': live })
     renderRoute('/conferences')
     const details = await screen.findByTestId('conference-details')
-    expect(within(details).getByText('4,200 USD')).toBeInTheDocument()
+    expect(within(details).queryByText('Cost')).not.toBeInTheDocument()
     expect(within(details).getByRole('link', { name: 'Open in SharePoint' })).toHaveAttribute('href', 'https://example.sharepoint.com/item/1')
     expect(screen.queryByText(/Demo conferences/)).not.toBeInTheDocument()
   })

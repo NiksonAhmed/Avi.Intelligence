@@ -84,10 +84,8 @@ def test_conferences(make_client) -> None:  # type: ignore[no-untyped-def]
     )
     exhibiting = study(ask(viewer, "Where are we exhibiting at conferences?"))
     assert all(row[3] == "Exhibiting" for row in exhibiting["tables"][0]["rows"])
-    cost = study(ask(viewer, "What is the budget for conferences?"))
-    assert "Cost" not in cost["tables"][0]["columns"] and any("allowed" in line for line in cost["lines"])
-    admin_cost = study(ask(make_client(Role.ADMIN), "What is the budget for conferences?"))
-    assert "Cost" in admin_cost["tables"][0]["columns"]
+    cost = study(ask(make_client(Role.ADMIN), "What is the budget for conferences?"))
+    assert "Cost" not in cost["tables"][0]["columns"]  # no conference costs in Avi.Intelligence
 
 
 def test_data_management_when_switched_on(make_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]

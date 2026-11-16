@@ -264,7 +264,7 @@ def _load_studies(db: Session, tenant_id: str, source: str) -> list[Study]:
 async def list_studies(
     db: Db,
     connector: Connector,
-    user: Annotated[CurrentUser, Depends(require(Permission.STUDY_READ))],
+    user: Annotated[CurrentUser, Depends(require(Permission.PORTFOLIO_READ))],
     q: Annotated[str | None, Query(max_length=200)] = None,
     status: Annotated[str | None, Query(max_length=64)] = None,
     phase: Annotated[str | None, Query(max_length=32)] = None,

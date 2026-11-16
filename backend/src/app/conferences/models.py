@@ -33,9 +33,6 @@ class ConferenceRecord(BaseModel):
     register_by: date | None = None
     website: str | None = None
     notes: str | None = None
-    cost: float | None = None
-    """Shown only to people with `conference.cost`."""
-    currency: str | None = None
     source_url: str | None = None
     """The item in SharePoint ("Open in SharePoint"); None for demo data."""
 

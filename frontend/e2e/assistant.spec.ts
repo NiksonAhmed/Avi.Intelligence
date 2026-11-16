@@ -2,9 +2,8 @@ import { expect, test } from '@playwright/test'
 
 // Runs against the demo SOPs without an Anthropic key, so the assistant returns SOP passages.
 test('ask a question and get relevant SOP passages linked to the SOP', async ({ page }) => {
-  await page.goto('/documents/sops')
-  await page.getByRole('tab', { name: 'Ask Avi.Intelligence' }).click()
-  await expect(page).toHaveURL(/\/documents\/ask/)
+  await page.goto('/ask')
+  await expect(page.getByRole('heading', { name: 'Ask Avi.Intelligence', level: 2 })).toBeVisible()
 
   await page.getByRole('textbox', { name: 'Your question' }).fill('How quickly must an SAE be reported?')
   await page.getByRole('button', { name: /Ask$/ }).click()
@@ -15,16 +14,23 @@ test('ask a question and get relevant SOP passages linked to the SOP', async ({ 
   await expect(page.getByRole('heading', { name: /SOP-030 · Safety Reporting/ })).toBeVisible()
 })
 
-test('the header button opens the assistant from any page', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Ask Avi.Intelligence' }).click()
-  await expect(page).toHaveURL(/\/documents\/ask/)
+test('the top-bar box asks from any page', async ({ page }) => {
+  await page.goto('/portfolio')
+  await page.getByRole('searchbox', { name: 'Search or ask anything' }).fill('How quickly must an SAE be reported?')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/ask\?q=How/)
+  await expect(page.getByText(/reports an SAE to Avion Safety within 24 hours/)).toBeVisible()
+})
+
+test('the old Documents address still opens Ask', async ({ page }) => {
+  await page.goto('/ask')
+  await expect(page).toHaveURL(/\/ask$/)
   await expect(page.getByRole('textbox', { name: 'Your question' })).toBeVisible()
 })
 
 // Study questions are answered from the (demo) SimpleTrials copy by fixed rules: no AI key needed.
 test('ask about studies and follow a link to the Study Command Centre', async ({ page }) => {
-  await page.goto('/documents/ask')
+  await page.goto('/ask')
   await page.getByRole('textbox', { name: 'Your question' }).fill('Is anything due for study close-out?')
   await page.getByRole('button', { name: /Ask$/ }).click()
   await expect(page.getByTestId('study-understood')).toContainText('What is due · close-out')
@@ -42,7 +48,7 @@ test('ask about studies and follow a link to the Study Command Centre', async ({
 
 // Every area answers by fixed rules from Avi.Intelligence's own data: no AI key needed.
 test('ask about tasks, risks, deviations, conferences and Data Management', async ({ page }) => {
-  await page.goto('/documents/ask')
+  await page.goto('/ask')
   const ask = async (question: string) => {
     await page.getByRole('textbox', { name: 'Your question' }).fill(question)
     await page.getByRole('button', { name: /Ask$/ }).click()

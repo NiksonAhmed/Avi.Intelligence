@@ -37,9 +37,6 @@ class ConferenceRow(BaseModel):
     website: str | None
     notes: str | None
     source_url: str | None
-    cost: float | None
-    """Only for people who may see costs; None otherwise."""
-    currency: str | None
     past: bool
     days_until: int
     """Days until it starts (negative once started)."""
@@ -53,7 +50,6 @@ class Conferences(BaseModel):
     conferences: list[ConferenceRow]
     next_id: str | None
     not_on_map: int
-    can_see_cost: bool
     rules: dict[str, str]
 
 
@@ -63,7 +59,6 @@ def build_conferences(
     *,
     year: int | None,
     role: AvionRole | None,
-    can_see_cost: bool,
 ) -> Conferences:
     years = sorted({r.starts_on.year for r in records} | {today.year, today.year + 1})
     chosen = year or (today.year if any(r.starts_on.year == today.year and (r.ends_on or r.starts_on) >= today
@@ -78,7 +73,6 @@ def build_conferences(
                 id=r.id, name=r.name, city=r.city, country=r.country, lat=r.lat, lon=r.lon,
                 starts_on=r.starts_on, ends_on=end, role=r.role, team=r.team, booth=r.booth,
                 register_by=r.register_by, website=r.website, notes=r.notes, source_url=r.source_url,
-                cost=r.cost if can_see_cost else None, currency=r.currency if can_see_cost else None,
                 past=end < today, days_until=(r.starts_on - today).days,
                 register_soon=bool(r.register_by and end >= today and 0 <= (r.register_by - today).days
                                    <= DEADLINE_WINDOW_DAYS),
@@ -110,6 +104,5 @@ def build_conferences(
         conferences=rows,
         next_id=nxt.id if nxt else None,
         not_on_map=sum(1 for r in rows if r.lat is None),
-        can_see_cost=can_see_cost,
         rules=CONFERENCE_RULES,
     )

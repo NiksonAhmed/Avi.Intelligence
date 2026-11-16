@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router'
 
 const TABS = [
   { key: 'sops', label: 'SOPs', path: '/documents/sops' },
-  { key: 'ask', label: 'Ask Avi.Intelligence', path: '/documents/ask' },
   { key: 'templates', label: 'Templates (coming next)', disabled: true },
   { key: 'study', label: 'Study documents (coming next)', disabled: true },
 ]
 
-export function DocumentsTabs({ active }: { active: 'sops' | 'ask' }) {
+export function DocumentsTabs({ active }: { active: 'sops' }) {
   const navigate = useNavigate()
   return (
     <Tabs

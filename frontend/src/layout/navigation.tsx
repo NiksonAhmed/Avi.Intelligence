@@ -8,49 +8,95 @@ import {
   DashboardOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
+  MessageOutlined,
   ProjectOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
+
+export type NavGroup = 'studies' | 'knowledge' | 'business' | 'admin'
 
 export interface NavItem {
   key: string
   path: string
   label: string
   icon: ReactNode
+  /** The menu heading it sits under; none for the top items (Overview, My Tasks, Ask). */
+  group?: NavGroup
   /** Shown only to users with this permission. */
   permission?: string
   /** Shown only while this optional module is switched on. */
   module?: 'data-management' | 'conferences'
 }
 
-/** Main navigation, in the order defined by the product brief. */
+export const NAV_GROUPS: { key: NavGroup; label: string }[] = [
+  { key: 'studies', label: 'Studies' },
+  { key: 'knowledge', label: 'Knowledge' },
+  { key: 'business', label: 'Business' },
+  { key: 'admin', label: 'Admin' },
+]
+
+/**
+ * Main navigation (user decision 2026-11-16): the daily items first, then grouped by subject. The same
+ * order for everyone; each person sees only the items their role allows.
+ */
 export const NAV_ITEMS: NavItem[] = [
   { key: 'overview', path: '/', label: 'Overview', icon: <DashboardOutlined /> },
+  { key: 'tasks', path: '/tasks', label: 'My Tasks', icon: <CheckSquareOutlined />, permission: 'task.view' },
+  { key: 'ask', path: '/ask', label: 'Ask Avi.Intelligence', icon: <MessageOutlined />, permission: 'assistant.use' },
   {
-    key: 'conferences',
-    path: '/conferences',
-    label: 'Conferences',
-    icon: <GlobalOutlined />,
-    permission: 'conference.view',
-    module: 'conferences',
+    key: 'portfolio',
+    path: '/portfolio',
+    label: 'Study Portfolio',
+    icon: <AppstoreOutlined />,
+    group: 'studies',
+    permission: 'portfolio.read',
   },
-  { key: 'portfolio', path: '/portfolio', label: 'Study Portfolio', icon: <AppstoreOutlined /> },
-  { key: 'command-centre', path: '/command-centre', label: 'Study Command Centre', icon: <ProjectOutlined /> },
-  { key: 'tasks', path: '/tasks', label: 'My Tasks', icon: <CheckSquareOutlined /> },
-  { key: 'risks', path: '/risks', label: 'Risks and Issues', icon: <AlertOutlined /> },
-  { key: 'documents', path: '/documents', label: 'Documents and Knowledge', icon: <FolderOpenOutlined /> },
-  { key: 'reports', path: '/reports', label: 'Reports and Insights', icon: <BarChartOutlined /> },
+  {
+    key: 'command-centre',
+    path: '/command-centre',
+    label: 'Study Command Centre',
+    icon: <ProjectOutlined />,
+    group: 'studies',
+    permission: 'study.read',
+  },
+  { key: 'risks', path: '/risks', label: 'Risks and Issues', icon: <AlertOutlined />, group: 'studies', permission: 'study.read' },
+  {
+    key: 'reports',
+    path: '/reports',
+    label: 'Reports and Insights',
+    icon: <BarChartOutlined />,
+    group: 'studies',
+    permission: 'study.read',
+  },
   {
     key: 'data-management',
     path: '/data-management',
     label: 'Data Management',
     icon: <DatabaseOutlined />,
+    group: 'studies',
     permission: 'dm.view',
     module: 'data-management',
   },
-  { key: 'admin', path: '/admin', label: 'Administration', icon: <SettingOutlined /> },
-  { key: 'audit', path: '/audit', label: 'Audit Trail', icon: <AuditOutlined /> },
+  {
+    key: 'documents',
+    path: '/documents',
+    label: 'Documents and Knowledge',
+    icon: <FolderOpenOutlined />,
+    group: 'knowledge',
+    permission: 'sop.read',
+  },
+  {
+    key: 'conferences',
+    path: '/conferences',
+    label: 'Conferences',
+    icon: <GlobalOutlined />,
+    group: 'business',
+    permission: 'conference.view',
+    module: 'conferences',
+  },
+  { key: 'admin', path: '/admin', label: 'Administration', icon: <SettingOutlined />, group: 'admin', permission: 'connector.manage' },
+  { key: 'audit', path: '/audit', label: 'Audit Trail', icon: <AuditOutlined />, group: 'admin', permission: 'audit.read' },
 ]
 
 export function activeNavKey(pathname: string): string {

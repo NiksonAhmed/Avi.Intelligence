@@ -843,9 +843,6 @@ export interface Conference {
   website: string | null
   notes: string | null
   source_url: string | null
-  /** Only for people who may see costs. */
-  cost: number | null
-  currency: string | null
   past: boolean
   days_until: number
   register_soon: boolean
@@ -859,7 +856,6 @@ export interface ConferencesReport {
   conferences: Conference[]
   next_id: string | null
   not_on_map: number
-  can_see_cost: boolean
   rules: Record<string, string>
   source: { mode: 'demo' | 'sharepoint'; reason: string | null; fetched_at: string | null }
 }

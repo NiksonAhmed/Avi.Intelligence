@@ -56,7 +56,8 @@ router = APIRouter(tags=["Tasks and risks"])
 
 ItemId = Annotated[str, Path(pattern=r"^[0-9a-f\-]{36}$")]
 Db = Annotated[Session, Depends(get_db)]
-Reader = Annotated[CurrentUser, Depends(require(Permission.STUDY_READ))]
+Reader = Annotated[CurrentUser, Depends(require(Permission.TASK_VIEW))]
+StudyReader = Annotated[CurrentUser, Depends(require(Permission.STUDY_READ))]
 Manager = Annotated[CurrentUser, Depends(require(Permission.WORK_MANAGE))]
 SopSource = Annotated[SopConnector, Depends(get_sop_connector)]
 MAX_TASK_DOCUMENTS = 20
@@ -746,7 +747,7 @@ class RiskListResponse(BaseModel):
 @router.get("/risks", response_model=RiskListResponse)
 def list_risks(
     db: Db,
-    user: Reader,
+    user: StudyReader,
     study_id: Annotated[str | None, Query(max_length=36)] = None,
     include_closed: bool = False,
 ) -> RiskListResponse:

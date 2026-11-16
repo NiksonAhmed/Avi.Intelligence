@@ -25,6 +25,7 @@ class Role(StrEnum):
     DATA_MANAGER = "data_manager"
     SAFETY = "safety"
     QA = "qa"
+    BUSINESS_DEVELOPMENT = "business_development"
     VIEWER = "viewer"
 
 
@@ -35,6 +36,11 @@ class Permission(StrEnum):
     AUDIT_READ = "audit.read"
     ASSISTANT_USE = "assistant.use"
     STUDY_READ = "study.read"
+    """Study detail: Command Centre, reports, risks and issues, deviations, eTMF (not BD)."""
+    PORTFOLIO_READ = "portfolio.read"
+    """The Study Portfolio list and the Overview: status, sites and enrolment per study (everyone)."""
+    TASK_VIEW = "task.view"
+    """See My Tasks (everyone)."""
     WORK_MANAGE = "work.manage"
     """Administrators: manage every task, risk and issue."""
     TASK_ASSIGN_STUDY = "task.assign.study"
@@ -49,8 +55,6 @@ class Permission(StrEnum):
     """Press Sync now to refresh the SimpleTrials copy (everyone; read-only towards SimpleTrials)."""
     CONFERENCE_VIEW = "conference.view"
     """See the Conferences page (where Avion's BD team is going): everyone."""
-    CONFERENCE_COST = "conference.cost"
-    """See conference costs: administrators only for now (no BD role yet)."""
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
     DM_SYNC = "dm.sync"
@@ -67,6 +71,7 @@ ROLE_LABELS: dict[Role, str] = {
     Role.DATA_MANAGER: "Data Manager",
     Role.SAFETY: "Pharmacovigilance",
     Role.QA: "Quality Assurance",
+    Role.BUSINESS_DEVELOPMENT: "Business Development",
     Role.VIEWER: "Viewer",
 }
 
@@ -75,6 +80,8 @@ _ALL_STAFF = {
     Permission.SOP_DOWNLOAD,
     Permission.ASSISTANT_USE,
     Permission.STUDY_READ,
+    Permission.PORTFOLIO_READ,
+    Permission.TASK_VIEW,
     Permission.TASK_CREATE_OWN,
     Permission.DM_VIEW,  # user decision: everyone may view Data Management (read-only)
     Permission.DM_SYNC,  # user decision: everyone may press Sync now
@@ -110,11 +117,27 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DM_VIEW,
         }
     ),
+    # Business Development (user decision 2026-11-16): conferences, SOPs, their own tasks and the study
+    # portfolio at portfolio level only (no Command Centre, reports, deviations, Data Management or audit).
+    Role.BUSINESS_DEVELOPMENT: frozenset(
+        {
+            Permission.SOP_READ,
+            Permission.SOP_DOWNLOAD,
+            Permission.ASSISTANT_USE,
+            Permission.PORTFOLIO_READ,
+            Permission.TASK_VIEW,
+            Permission.TASK_CREATE_OWN,
+            Permission.STUDY_SYNC,
+            Permission.CONFERENCE_VIEW,
+        }
+    ),
     Role.VIEWER: frozenset(
         {
             Permission.SOP_READ,
             Permission.ASSISTANT_USE,
             Permission.STUDY_READ,
+            Permission.PORTFOLIO_READ,
+            Permission.TASK_VIEW,
             Permission.DM_VIEW,
             Permission.DM_SYNC,
             Permission.STUDY_SYNC,

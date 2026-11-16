@@ -40,7 +40,7 @@ def test_reads_likely_column_names_and_skips_unusable_rows() -> None:
             "Title": "Rare Disease Congress", "City": "Boston", "Country": "USA",
             "StartDate": "2027-04-20T00:00:00Z", "EndDate": "2027-04-22T00:00:00Z",
             "Participation": "Speaking slot confirmed", "Attendees": [{"LookupValue": "A. Person"}],
-            "BoothNumber": "B12", "RegistrationDeadline": "2027-02-01T00:00:00Z", "Budget": "5100",
+            "BoothNumber": "B12", "RegistrationDeadline": "2027-02-01T00:00:00Z",
         },
     }  # fmt: skip
     row = map_item(item, fields)
@@ -52,12 +52,7 @@ def test_reads_likely_column_names_and_skips_unusable_rows() -> None:
         date(2027, 4, 22),
     )
     assert row.role == AvionRole.SPEAKING and row.team == "A. Person" and row.booth == "B12"
-    assert (
-        (row.lat, row.lon) == (42.36, -71.06)
-        and row.cost == 5100.0
-        and row.source_url
-        and row.source_url.endswith("7_.000")
-    )
+    assert (row.lat, row.lon) == (42.36, -71.06) and row.source_url and row.source_url.endswith("7_.000")
     assert map_item({"id": "8", "fields": {"Title": "No date"}}, fields) is None
     assert map_item({"id": "9", "fields": {"StartDate": "2027-01-01"}}, fields) is None
 
@@ -92,25 +87,24 @@ def _records() -> list[ConferenceRecord]:
 
 
 def test_figures_year_role_and_registration_due() -> None:
-    r = build_conferences(_records(), TODAY, year=2027, role=None, can_see_cost=False)
+    r = build_conferences(_records(), TODAY, year=2027, role=None)
     tiles = {t.key: t for t in r.tiles}
     assert r.year == 2027 and len(r.conferences) == 10 and tiles["total"].value == "10"
     assert tiles["next"].value == "In 80 days" and r.next_id == r.conferences[0].id
     assert tiles["stage"].value == "4"  # 2 exhibiting + 2 speaking
-    assert all(c.cost is None for c in r.conferences) and r.not_on_map == 0
+    assert r.not_on_map == 0
     assert tiles["register"].value == "1" and r.conferences[0].register_soon  # registration closes in 25 days
-    speaking = build_conferences(_records(), TODAY, year=2027, role=AvionRole.SPEAKING, can_see_cost=True)
+    speaking = build_conferences(_records(), TODAY, year=2027, role=AvionRole.SPEAKING)
     assert [c.role for c in speaking.conferences] == [AvionRole.SPEAKING, AvionRole.SPEAKING]
-    assert speaking.conferences[0].cost is not None
-    past = build_conferences(_records(), TODAY, year=2026, role=None, can_see_cost=False)
+    past = build_conferences(_records(), TODAY, year=2026, role=None)
     assert all(c.past for c in past.conferences) and past.next_id is None
 
 
-def test_api_view_cost_and_export(make_client) -> None:  # type: ignore[no-untyped-def]
+def test_api_view_and_export_without_costs(make_client) -> None:  # type: ignore[no-untyped-def]
     viewer: TestClient = make_client(Role.VIEWER)
     body = viewer.get(API).json()
-    assert body["source"]["mode"] == "demo" and body["can_see_cost"] is False
-    assert all(c["cost"] is None for c in body["conferences"])
+    assert body["source"]["mode"] == "demo" and "can_see_cost" not in body
+    assert all("cost" not in c for c in body["conferences"])
     assert viewer.post(f"{API}/refresh").status_code == 204
     res = viewer.get(f"{API}/export.xlsx")
     assert res.status_code == 200
@@ -119,14 +113,13 @@ def test_api_view_cost_and_export(make_client) -> None:  # type: ignore[no-untyp
 
     admin: TestClient = make_client(Role.ADMIN)
     body = admin.get(API, params={"role": "Exhibiting"}).json()
-    assert body["can_see_cost"] is True and all(c["role"] == "Exhibiting" for c in body["conferences"])
-    assert any(c["cost"] for c in body["conferences"])
+    assert all(c["role"] == "Exhibiting" for c in body["conferences"])
     header = next(
         load_workbook(io.BytesIO(admin.get(f"{API}/export.xlsx").content))["Conferences"].iter_rows(
             values_only=True
         )
     )
-    assert "Cost" in header
+    assert "Cost" not in header  # Avion does not track conference costs
     events = admin.get("/api/v1/audit-events").json()["items"]
     assert any(e["action"] == "report.exported" and e["entity_id"] == "conferences" for e in events)
 

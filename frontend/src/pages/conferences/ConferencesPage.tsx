@@ -183,7 +183,7 @@ function WorldMap({
   )
 }
 
-function Details({ c, canSeeCost }: { c: Conference; canSeeCost: boolean }) {
+function Details({ c }: { c: Conference }) {
   const colour = colourOf(c)
   const rows: [string, string][] = [
     ['Who is going', c.team ?? '—'],
@@ -191,7 +191,6 @@ function Details({ c, canSeeCost }: { c: Conference; canSeeCost: boolean }) {
     ['Register by', c.register_by ? formatDay(c.register_by) : '—'],
     ['Notes', c.notes ?? '—'],
   ]
-  if (canSeeCost) rows.push(['Cost', c.cost !== null ? `${c.cost.toLocaleString()} ${c.currency ?? ''}`.trim() : '—'])
   return (
     <Card data-testid="conference-details" style={{ borderTop: `4px solid ${colour}` }} styles={{ body: { display: 'flex', flexDirection: 'column', gap: 8 } }}>
       <Tag style={{ alignSelf: 'flex-start', background: colour, color: '#0B1446', border: 0, fontWeight: 700 }}>
@@ -339,7 +338,7 @@ export function ConferencesPage() {
       <Flex gap={14} wrap align="flex-start">
         <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           {selected ? (
-            <Details c={selected} canSeeCost={data.can_see_cost} />
+            <Details c={selected} />
           ) : (
             <Card>
               <Typography.Text type="secondary">No conferences in this selection.</Typography.Text>

@@ -19,12 +19,12 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Link } from 'react-router'
 
 import { useAsk, useAssistantStatus } from '../../api/hooks'
 import type { AskResponse, AssistantCitation, AssistantExcerpt, StudyAnswerTable } from '../../api/types'
-import { DocumentsTabs } from '../../components/DocumentsTabs'
 import { PageHeader } from '../../components/PageHeader'
 import { ProvenanceTag } from '../../components/ProvenanceTag'
 import { answerAsText, sopLabel, studyAnswerAsText } from '../../lib/assistant'
@@ -326,15 +326,25 @@ export function AskPage() {
     })
   }
 
+  // A question typed in the top bar ("Search or ask anything") arrives as ?q= and is asked at once.
+  const [params] = useSearchParams()
+  const fromBar = params.get('q')?.trim() ?? ''
+  const askedFromBar = useRef('')
+  useEffect(() => {
+    if (fromBar && fromBar !== askedFromBar.current) {
+      askedFromBar.current = fromBar
+      submit(fromBar)
+    }
+  })
+
   const current = turns[shown]
 
   return (
     <>
       <PageHeader
-        title="Documents and Knowledge"
+        title="Ask Avi.Intelligence"
         subtitle="Ask about studies, tasks, risks and issues, deviations, the eTMF, site visits, conferences, Data Management or Avion's SOPs, with sources."
       />
-      <DocumentsTabs active="ask" />
 
       {status.data && !status.data.ai_enabled && (
         <Alert
