@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from './client'
 import type {
   ReportFilters,
+  ReportSummary,
   DeviationsReport,
   EtmfReport,
   QualityReport,
@@ -403,6 +404,14 @@ export function useWorkManagement(filters: WorkReportFilters) {
       apiRequest<WorkManagementReport>('/reports/work-management', {
         params: { study_id: filters.study_id, category: filters.category },
       }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useReportSummary(studyId?: string) {
+  return useQuery({
+    queryKey: ['reports', 'summary', studyId],
+    queryFn: () => apiRequest<ReportSummary>('/reports/summary', { params: { study_id: studyId } }),
     placeholderData: (previous) => previous,
   })
 }

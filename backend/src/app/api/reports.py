@@ -30,6 +30,7 @@ from app.reports.models import MilestoneCompletion, ReportSnapshot
 from app.reports.quality import REVIEW_WINDOW_DAYS, Quality, build_quality
 from app.reports.risks_issues import RisksIssues, build_risks_issues
 from app.reports.study_delivery import StudyDelivery, build_study_delivery
+from app.reports.summary import Summary, build_summary
 from app.reports.work_management import DUE_SOON_DAYS, WorkManagement, build_work_management
 from app.studies.clock import today
 from app.studies.models import Study, Task, TaskDocument
@@ -975,3 +976,35 @@ async def risks_issues_export(
         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
     )
 
+
+# ---- Summary: what everyone sees first (detail only when asked) ------------------------------------
+
+
+class SummaryResponse(Summary):
+    source: ReportSource
+
+
+@router.get("/summary", response_model=SummaryResponse)
+async def summary(db: Db, connector: Connector, user: Reader, study_id: IdParam = None) -> SummaryResponse:
+    """Built from the full reports, so both always agree."""
+    delivery = await _study_delivery(db, connector, user, study_id, None)
+    risks = await _risks_issues(db, connector, user, study_id, None)
+    deviations = await _deviations(db, connector, user, study_id, None)
+    etmf = await _etmf(db, connector, user, study_id, None)
+    work = await _work_management(db, connector, user, study_id, None)
+    studies = [
+        s
+        for s in _studies(db, user.tenant_id, current_source_label(connector))
+        if not study_id or s.id == study_id
+    ]
+    built = build_summary(
+        delivery=delivery,
+        risks=risks,
+        deviations=deviations,
+        etmf=etmf,
+        work=work,
+        studies=studies,
+        history=delivery.enrolment_history,
+        today=today(),
+    )
+    return SummaryResponse(**built.model_dump(), source=delivery.source)

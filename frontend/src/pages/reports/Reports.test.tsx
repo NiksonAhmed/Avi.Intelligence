@@ -97,7 +97,7 @@ describe('report chart helpers', () => {
 describe('Reports and Insights page', () => {
   it('shows the Study delivery tiles, timeline, enrolment and activation', async () => {
     mockApi({ '/me': adminUser, '/reports/study-delivery': report() })
-    renderRoute('/reports')
+    renderRoute('/reports?tab=study')
 
     expect(await screen.findByTestId('tile-on_plan')).toHaveTextContent('2 of 4')
     expect(screen.getByText('Demo data')).toBeInTheDocument()
@@ -119,13 +119,13 @@ describe('Reports and Insights page', () => {
 
   it('filters by study and keeps the filter in the URL and the Excel link', async () => {
     const fetchMock = mockApi({ '/me': viewerUser, '/reports/study-delivery': report() })
-    const { router } = renderRoute('/reports')
+    const { router } = renderRoute('/reports?tab=study')
     await screen.findByTestId('tile-on_plan')
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Filter by study' }))
     await userEvent.click(await screen.findByTitle('DEMO-CV-201 · Cardiology study'))
 
-    expect(router.state.location.search).toBe('?study=22222222-2222-2222-2222-222222222222')
+    expect(router.state.location.search).toBe('?tab=study&study=22222222-2222-2222-2222-222222222222')
     expect(
       fetchMock.mock.calls.some(([u]) =>
         String(u).includes('/api/v1/reports/study-delivery?study_id=22222222-2222-2222-2222-222222222222'),
@@ -140,7 +140,7 @@ describe('Reports and Insights page', () => {
   it('prints the report for PDF', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined)
     mockApi({ '/me': adminUser, '/reports/study-delivery': report() })
-    renderRoute('/reports')
+    renderRoute('/reports?tab=study')
     await screen.findByTestId('tile-on_plan')
     await userEvent.click(screen.getByRole('button', { name: /PDF/ }))
     expect(print).toHaveBeenCalled()
@@ -151,7 +151,7 @@ describe('Reports and Insights page', () => {
       '/me': adminUser,
       '/reports/study-delivery': report({ source: { mode: 'api', as_of: '2026-11-09T00:00:00Z', sandbox_only: true, snapshot_days: 20 } }),
     })
-    renderRoute('/reports')
+    renderRoute('/reports?tab=study')
     expect(await screen.findByText('Sandbox study')).toBeInTheDocument()
     expect(screen.getByText(/As of .* · SimpleTrials/)).toBeInTheDocument()
   })

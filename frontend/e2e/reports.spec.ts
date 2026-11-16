@@ -1,7 +1,20 @@
 import { expect, test } from '@playwright/test'
 
-test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
+test('Summary first: a card opens its detail, then the full report', async ({ page }) => {
   await page.goto('/reports')
+  await expect(page.getByRole('tab', { name: 'Summary', selected: true })).toBeVisible()
+  await expect(page.getByTestId('summary-card-enrolment')).toBeVisible()
+  await expect(page.getByTestId('summary-study').first()).toBeVisible()
+  await page.getByTestId('summary-card-issues').click()
+  const panel = page.getByTestId('summary-detail')
+  await expect(panel).toContainText('open in SimpleTrials')
+  await panel.getByRole('button', { name: 'Open the full report' }).click()
+  await expect(page).toHaveURL(/tab=risks/)
+  await expect(page.getByTestId('issue-row').first()).toBeVisible()
+})
+
+test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
+  await page.goto('/reports?tab=study')
   await expect(page.getByRole('heading', { name: 'Reports and Insights' })).toBeVisible()
   await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-on_plan')).toContainText('of 4')

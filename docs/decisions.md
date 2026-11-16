@@ -2,6 +2,28 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-16: Reports open on a Summary; full reports behind it; new tab order
+
+**Decision (user, 16 Nov 2026):** "too much information, we want information if someone requires it";
+keep both: a lively summary for everyone (and the executive team) and the detailed reports for those who
+work in them. Light theme. Mock-up: https://claude.ai/artifact/6v46oTbdBtEHbskDtySwL7 (second row).
+- **Reports opens on Summary** (`GET /reports/summary`, `app/reports/summary.py`). Every figure is taken from
+  the full reports, so both always agree: four cards (patients enrolled, key milestones overdue, open risks
+  and issues, open deviations, each with the change since about 30 days ago), **Studies at a glance** (one
+  card per study: Off track / At risk / On track with the reason), enrolment by month (new that month and
+  the total, against the target), three weekly trends, a sites ring, and four rings that are true
+  percentages and about studies only (eTMF complete, enrolment, sites activated, key milestones on time;
+  SOP reviews and tasks on time belong to the Quality and Work tabs).
+- **Study status rules:** Off track when a key milestone is overdue; otherwise At risk when a key milestone
+  still to complete has slipped more than 30 days, an open issue is overdue, a major or critical deviation
+  is open, or a site is late to activate; otherwise On track.
+- **Detail only when asked:** clicking a card, ring or study opens a side panel (a one-line summary and up
+  to six items behind the number) with **Open the full report** (that tab; a study opens Study delivery
+  filtered to it). No subject numbers anywhere.
+- **Tab order:** Summary, Study delivery, Risks and issues, Protocol deviations, eTMF, Quality (SOPs), Work
+  management: studies first (SimpleTrials), then company-wide (SharePoint, Avi.Intelligence tasks).
+- Enrolment by month and the weekly trends build up from the saved daily figures (nothing back-filled).
+
 ## 2026-11-16: Business Development role; grouped menu; Ask Avi.Intelligence on its own; no conference costs
 
 **Decisions (user, 16 Nov 2026)**, mock-up approved: https://claude.ai/artifact/6v46oTbdBtEHbskDtySwL7.

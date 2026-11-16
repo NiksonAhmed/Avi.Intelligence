@@ -9,15 +9,19 @@ import { EtmfTab } from './EtmfTab'
 import { RisksIssuesTab } from './RisksIssuesTab'
 import { QualityTab } from './QualityTab'
 import { StudyDeliveryTab } from './StudyDeliveryTab'
+import { SummaryTab } from './SummaryTab'
 import { WorkManagementTab } from './WorkManagementTab'
 
+// Summary first (what everyone sees), then the full reports: studies first, then company-wide (user
+// decision 2026-11-16).
 const TABS = [
+  { key: 'summary', label: 'Summary' },
   { key: 'study', label: 'Study delivery' },
-  { key: 'work', label: 'Work management' },
-  { key: 'quality', label: 'Quality (SOPs)' },
-  { key: 'etmf', label: 'eTMF' },
-  { key: 'deviations', label: 'Protocol deviations' },
   { key: 'risks', label: 'Risks and issues' },
+  { key: 'deviations', label: 'Protocol deviations' },
+  { key: 'etmf', label: 'eTMF' },
+  { key: 'quality', label: 'Quality (SOPs)' },
+  { key: 'work', label: 'Work management' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -26,7 +30,7 @@ const CATEGORIES: TaskCategory[] = ['study', 'sop', 'vendor', 'system', 'general
 export function ReportsPage() {
   const [params, setParams] = useSearchParams()
   const raw = params.get('tab')
-  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'study'
+  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
   const filters: ReportFilters = {
     study_id: params.get('study') ?? undefined,
     site_id: params.get('site') ?? undefined,
@@ -50,10 +54,16 @@ export function ReportsPage() {
       <Tabs
         className="no-print"
         activeKey={tab}
-        onChange={(key) => update({ tab: key === 'study' ? undefined : key })}
+        onChange={(key) => update({ tab: key === 'summary' ? undefined : key })}
         items={TABS.map((t) => ({ key: t.key, label: t.label }))}
       />
-      {tab === 'study' ? (
+      {tab === 'summary' ? (
+        <SummaryTab
+          studyId={filters.study_id}
+          onStudy={(id) => update({ study: id, site: undefined })}
+          onOpenReport={(report, studyId) => update({ tab: report, study: studyId ?? filters.study_id, site: undefined })}
+        />
+      ) : tab === 'study' ? (
         <StudyDeliveryTab
           filters={filters}
           onFilters={(f) => update({ study: f.study_id, site: f.site_id })}

@@ -954,3 +954,50 @@ export interface WorkReportFilters {
   study_id?: string
   category?: TaskCategory
 }
+
+// --- Reports summary: what everyone sees first; detail only when asked ----------------------------
+
+export type ReportTabKey = 'study' | 'risks' | 'deviations' | 'etmf' | 'quality' | 'work'
+
+export interface SummaryCard {
+  key: string
+  label: string
+  value: string
+  foot: string
+  tone: ReportTone
+  change: string | null
+  change_tone: 'good' | 'bad' | 'neutral'
+}
+
+export interface StudyStatus {
+  id: string
+  protocol_number: string
+  what: string
+  status: 'on_track' | 'at_risk' | 'off_track'
+  reason: string
+  enrolled: number
+  target: number | null
+  percent: number | null
+}
+
+export interface SummaryDetail {
+  title: string
+  summary: string
+  rows: { label: string; chip: string; tone: ReportTone }[]
+  report: ReportTabKey
+  study_id: string | null
+}
+
+export interface ReportSummary {
+  cards: SummaryCard[]
+  studies: StudyStatus[]
+  enrolment: { month: string; total: number; new: number | null }[]
+  enrolment_target: number | null
+  sparks: { key: string; label: string; value: string; points: number[] }[]
+  sites: { key: string; label: string; count: number }[]
+  rings: { key: string; label: string; percent: number | null; left: string; right: string }[]
+  details: Record<string, SummaryDetail>
+  history_since: string | null
+  rules: Record<string, string>
+  source: ReportSource
+}

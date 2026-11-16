@@ -332,7 +332,8 @@ interface ToolbarProps {
   about?: string
   /** A small tag beside the filters, e.g. "Sandbox study" (defaults to the SimpleTrials source tag). */
   badge?: ReactNode
-  excelUrl: string
+  /** No Excel button when left out (e.g. the summary). */
+  excelUrl?: string
   /** Where Sync now pulls from: SimpleTrials, the SharePoint SOP library, or live app data (re-read). */
   sync: ReportSync
 }
@@ -371,9 +372,11 @@ export function ReportToolbar(p: ToolbarProps) {
       </Flex>
       <Flex gap={8}>
         <SyncNowButton kind={p.sync} />
-        <Button type="primary" icon={<FileExcelOutlined />} href={p.excelUrl}>
-          Excel
-        </Button>
+        {p.excelUrl && (
+          <Button type="primary" icon={<FileExcelOutlined />} href={p.excelUrl}>
+            Excel
+          </Button>
+        )}
         <Button icon={<FilePdfOutlined />} onClick={() => window.print()}>
           PDF
         </Button>
