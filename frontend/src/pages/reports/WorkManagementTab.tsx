@@ -224,19 +224,19 @@ export function WorkManagementTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="wm-overdue" title="Overdue tasks" rule={data.rules.due_soon}>
-        <OverdueList report={data} />
-      </ChartCard>
-
       {showStudies && (
-        <MoreDetail summary="More detail: open study tasks by study">
-          <ChartRow>
-            <ChartCard title="Open study tasks by study" extra={<Legend items={STATUS_KEY} />} flex="1 1 480px">
-              <StatusRows rows={data.by_study} empty="No studies in this selection." testId="study-row" />
-            </ChartCard>
-          </ChartRow>
-        </MoreDetail>
+        <ChartRow>
+          <ChartCard title="Open study tasks by study" extra={<Legend items={STATUS_KEY} />} flex="1 1 480px">
+            <StatusRows rows={data.by_study} empty="No studies in this selection." testId="study-row" />
+          </ChartCard>
+        </ChartRow>
       )}
+
+      <MoreDetail summary="More detail: overdue tasks">
+        <ChartCard id="wm-overdue" title="Overdue tasks" rule={data.rules.due_soon}>
+          <OverdueList report={data} />
+        </ChartCard>
+      </MoreDetail>
     </Flex>
   )
 }

@@ -18,16 +18,15 @@ describe('App shell', () => {
       'Overview',
       'My Tasks',
       'Ask Avi.Intelligence',
+      'Reports and Insights',
       'Study Portfolio',
       'Study Command Centre',
       'Site validation',
-      'Risks and Issues',
-      'Reports and Insights',
       'Documents and Knowledge',
       'Administration',
       'Audit Trail',
     ])
-    for (const heading of ['Studies', 'Knowledge', 'Admin']) expect(within(nav).getByText(heading)).toBeInTheDocument()
+    for (const heading of ['Studies', 'Sites', 'Knowledge', 'Admin']) expect(within(nav).getByText(heading)).toBeInTheDocument()
     expect(screen.getByText('Skip to main content')).toBeInTheDocument()
   })
 

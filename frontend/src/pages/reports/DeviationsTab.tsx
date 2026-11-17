@@ -203,71 +203,71 @@ export function DeviationsTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="dv-list" title={`All deviations (${data.deviations.length})`} rule="Open first, most severe first, then longest open.">
-        <Table<DeviationRow>
-          size="small"
-          rowKey="id"
-          dataSource={data.deviations}
-          pagination={data.deviations.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
-          scroll={{ x: 1100 }}
-          locale={{ emptyText: 'No deviations in this selection.' }}
-          onRow={() => ({ 'data-testid': 'deviation-row' }) as HTMLAttributes<HTMLElement>}
-          columns={[
-            { title: 'No.', dataIndex: 'number', width: 80, render: (v: string | null) => v ?? '—' },
-            { title: 'Study', dataIndex: 'protocol_number', width: 130 },
-            { title: 'Site', dataIndex: 'where', width: 180 },
-            { title: 'Category', dataIndex: 'category', width: 150 },
-            {
-              title: 'Severity',
-              dataIndex: 'severity',
-              width: 100,
-              render: (v: string) => <Tag color={SEVERITY_TAG[v] ?? 'default'}>{v}</Tag>,
-            },
-            {
-              title: 'Description',
-              key: 'description',
-              render: (_, r) => (
-                <Flex vertical gap={2}>
-                  <span>{r.description ?? '—'}</span>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {r.subject_level ? 'Subject-level' : 'Site or study level'}
-                    {r.reportable ? ' · Reportable to ethics' : ''}
-                  </Typography.Text>
-                </Flex>
-              ),
-            },
-            { title: 'Occurred', dataIndex: 'occurred_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
-            { title: 'Identified', dataIndex: 'identified_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
-            {
-              title: 'Status',
-              key: 'status',
-              width: 130,
-              render: (_, r) =>
-                r.closed ? (
-                  <Tag>{r.status}{r.closed_on ? ` ${formatDay(r.closed_on)}` : ''}</Tag>
-                ) : (
-                  <Flex vertical gap={0}>
-                    <Tag color="gold" style={{ marginInlineEnd: 0, width: 'fit-content' }}>{r.status}</Tag>
-                    {r.days_open !== null && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.days_open} days open</Typography.Text>}
+      <ChartRow>
+        <ChartCard id="dv-severity" title="By severity" rule={data.rules.severity} flex="1 1 380px">
+          <Counts rows={data.by_severity} colourFor={(l) => SEVERITY_COLOUR[l] ?? OTHER_COLOUR} testId="deviation-severity-row" empty="No deviations in this selection." />
+        </ChartCard>
+        <ChartCard title="By category" flex="1 1 380px">
+          <Counts rows={data.by_category} colourFor={() => INK.info} testId="deviation-category-row" empty="No deviations in this selection." />
+        </ChartCard>
+        <ChartCard id="dv-ageing" title="Open deviations by age" rule={data.rules.ageing} flex="1 1 300px">
+          <Counts rows={data.ageing} colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)} testId="deviation-ageing-row" empty="No open deviations." />
+        </ChartCard>
+      </ChartRow>
+
+      <MoreDetail summary={`More detail: all deviations (${data.deviations.length})`}>
+        <ChartCard id="dv-list" title={`All deviations (${data.deviations.length})`} rule="Open first, most severe first, then longest open.">
+          <Table<DeviationRow>
+            size="small"
+            rowKey="id"
+            dataSource={data.deviations}
+            pagination={data.deviations.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
+            scroll={{ x: 1100 }}
+            locale={{ emptyText: 'No deviations in this selection.' }}
+            onRow={() => ({ 'data-testid': 'deviation-row' }) as HTMLAttributes<HTMLElement>}
+            columns={[
+              { title: 'No.', dataIndex: 'number', width: 80, render: (v: string | null) => v ?? '—' },
+              { title: 'Study', dataIndex: 'protocol_number', width: 130 },
+              { title: 'Site', dataIndex: 'where', width: 180 },
+              { title: 'Category', dataIndex: 'category', width: 150 },
+              {
+                title: 'Severity',
+                dataIndex: 'severity',
+                width: 100,
+                render: (v: string) => <Tag color={SEVERITY_TAG[v] ?? 'default'}>{v}</Tag>,
+              },
+              {
+                title: 'Description',
+                key: 'description',
+                render: (_, r) => (
+                  <Flex vertical gap={2}>
+                    <span>{r.description ?? '—'}</span>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {r.subject_level ? 'Subject-level' : 'Site or study level'}
+                      {r.reportable ? ' · Reportable to ethics' : ''}
+                    </Typography.Text>
                   </Flex>
                 ),
-            },
-          ]}
-        />
-      </ChartCard>
-
-      <MoreDetail summary="More detail: by severity, by category and by age">
-        <ChartRow>
-          <ChartCard id="dv-severity" title="By severity" rule={data.rules.severity} flex="1 1 380px">
-            <Counts rows={data.by_severity} colourFor={(l) => SEVERITY_COLOUR[l] ?? OTHER_COLOUR} testId="deviation-severity-row" empty="No deviations in this selection." />
-          </ChartCard>
-          <ChartCard title="By category" flex="1 1 380px">
-            <Counts rows={data.by_category} colourFor={() => INK.info} testId="deviation-category-row" empty="No deviations in this selection." />
-          </ChartCard>
-          <ChartCard id="dv-ageing" title="Open deviations by age" rule={data.rules.ageing} flex="1 1 300px">
-            <Counts rows={data.ageing} colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)} testId="deviation-ageing-row" empty="No open deviations." />
-          </ChartCard>
-        </ChartRow>
+              },
+              { title: 'Occurred', dataIndex: 'occurred_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
+              { title: 'Identified', dataIndex: 'identified_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
+              {
+                title: 'Status',
+                key: 'status',
+                width: 130,
+                render: (_, r) =>
+                  r.closed ? (
+                    <Tag>{r.status}{r.closed_on ? ` ${formatDay(r.closed_on)}` : ''}</Tag>
+                  ) : (
+                    <Flex vertical gap={0}>
+                      <Tag color="gold" style={{ marginInlineEnd: 0, width: 'fit-content' }}>{r.status}</Tag>
+                      {r.days_open !== null && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.days_open} days open</Typography.Text>}
+                    </Flex>
+                  ),
+              },
+            ]}
+          />
+        </ChartCard>
       </MoreDetail>
     </Flex>
   )

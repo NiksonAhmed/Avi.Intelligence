@@ -53,6 +53,10 @@ describe('Risks and issues report', () => {
     const row = screen.getByTestId('issue-row')
     expect(row).toHaveTextContent('Demo: chase missing ISF delegation log signatures')
     expect(row).toHaveTextContent('6 days overdue')
+    // Priority, category and age show; the full list is folded under More detail.
+    expect(screen.getAllByTestId('issue-priority-row')[0]?.closest('details')).toBeNull()
+    expect(screen.getByTestId('issue-ageing-row').closest('details')).toBeNull()
+    expect(row.closest('details')).not.toHaveAttribute('open')
     expect(screen.getByRole('link', { name: /Excel/ })).toHaveAttribute('href', '/api/v1/reports/risks-issues/export.xlsx')
   })
 

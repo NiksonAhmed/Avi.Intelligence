@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
@@ -13,6 +13,7 @@ import {
   renderRoute,
   viewerUser,
 } from '../../test/utils'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 import { enrolmentText, taskBucket } from '../../lib/studies'
 
 const study = makeStudy()
@@ -282,13 +283,12 @@ describe('Risks and Issues', () => {
     days_overdue: 6,
   }
 
-  it('shows SimpleTrials action items as read-only issues, with overdue days', async () => {
-    mockApi({ '/me': viewerUser, '/risks': { simpletrials_issues: [issue] } })
-    renderRoute('/risks')
-    const table = await screen.findByTestId('simpletrials-issues')
+  it('shows SimpleTrials action items as read-only issues, with overdue days', () => {
+    render(<SimpleTrialsIssues issues={[issue]} showStudy />)
+    const table = screen.getByTestId('simpletrials-issues')
     expect(table).toHaveTextContent('From SimpleTrials')
     expect(table).toHaveTextContent('Read-only')
-    const row = await screen.findByTestId('simpletrials-issue-row')
+    const row = screen.getByTestId('simpletrials-issue-row')
     expect(row).toHaveTextContent('DEMO-ONC-301')
     expect(row).toHaveTextContent('101 · Demo Hospital North')
     expect(row).toHaveTextContent('Demo: chase missing ISF delegation log signatures')
@@ -296,14 +296,9 @@ describe('Risks and Issues', () => {
     expect(screen.getByTestId('simpletrials-issue-overdue')).toHaveTextContent('6 days overdue')
   })
 
-  it('is read-only: no raising, everyone can sync, and links to the dashboard', async () => {
-    const admin = { ...adminUser, permissions: [...adminUser.permissions, 'study.sync'] }
-    mockApi({ '/me': admin, '/risks': { simpletrials_issues: [] }, '/studies': { studies: [] } })
+  it('has no page of its own: old links open Reports, Risks and issues', async () => {
+    mockApi({ '/me': adminUser })
     renderRoute('/risks')
-    expect(await screen.findByText('Risks and issues are managed in SimpleTrials')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: /Sync now/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Raise risk or issue/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Dashboard/ })).toHaveAttribute('href', '/reports?tab=risks')
-    expect(await screen.findByText('No open SimpleTrials action items.')).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Risks and issues', selected: true })).toBeInTheDocument()
   })
 })

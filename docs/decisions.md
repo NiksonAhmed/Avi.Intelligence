@@ -2,6 +2,24 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-18: One Risks and Issues view; charts first in every report; Sites menu group
+
+**Decisions (user, 18 Nov 2026):**
+- **Risks and Issues has no page of its own.** It repeated the Reports tab. The menu item is gone;
+  `/risks` (old links, bookmarks) opens Reports → Risks and issues, and the Overview card and Ask
+  Avi.Intelligence answers link there. Study Command Centre keeps its per-study list.
+- **Charts first, long lists folded, on every report tab.** The breakdown charts always show; the full
+  lists sit under "More detail" (a tile still opens the fold and scrolls to it; the PDF prints everything).
+  Risks and issues and Deviations: priority/severity, category and age shown, the full list folded.
+  Study delivery: milestone timeline and site activation shown, the sites table folded. Work management:
+  tasks by study shown, overdue tasks folded. eTMF: completeness by site and TMF section and QC status
+  shown; expiring documents and filing timeliness folded. Quality: review schedule and change log folded.
+- **Menu.** A new **Sites** group holds Site validation, which is about sites across all studies, not one
+  study. Later site feasibility work joins it. Studies is ordered widest view first: Reports and Insights,
+  Study Portfolio, Study Command Centre, Data Management. Group order stays Studies, Sites, Knowledge,
+  Business, Admin: Business has one occasional item and most staff never use it; revisit (perhaps a
+  role-based order) if Business grows.
+
 ## 2026-11-17: Site validation status (physics request), demo data first
 
 **Decision (user, 17 Nov 2026):** a graphical, site-based view of each site's validation status and
@@ -9,7 +27,7 @@ capabilities: equipment (PET/CT, SPECT/CT, dose calibrator, gamma counter), isot
 Click a site on a big map of Australia and its capabilities pop up. A front end to the site validation
 tracker plus the physics phantom status, which should be site-based. Everyone may view. Demo data until the
 tracker is in SharePoint. Mock-up: https://claude.ai/artifact/6v46oTbdBtEHbskDtySwL7 (third row).
-- **Menu:** Studies → Site validation (`/site-validation`), permission `site_validation.view` (all roles).
+- **Menu:** Sites → Site validation (`/site-validation`; moved from Studies on 18 Nov), permission `site_validation.view` (all roles).
 - **Source:** `app/site_validation/`. Fields follow the Site Feasibility Tracker's sections: Site Details,
   Equipment, PET/CT, SPECT/CT, Dose Calibrator (PET and SPECT), Gamma Counter System, Phantoms and QA/QC,
   Image Data Storage and Transfer, plus isotope licences (IP). Its "117Lu" is read as 177Lu.

@@ -111,9 +111,10 @@ describe('Reports and Insights page', () => {
 
     expect(screen.getByTestId('activation-figure')).toHaveTextContent('5 of 7')
     expect(screen.getByText('5 days late')).toBeInTheDocument()
-    // The mock-up layout: two charts, the sites table, and the timeline folded under More detail.
+    // Charts show (enrolment, milestone timeline, site activation); the sites table is folded under More detail.
+    expect(screen.getAllByTestId('timeline-row')[0]?.closest('details')).toBeNull()
     expect(screen.getAllByTestId('site-table-row')).toHaveLength(3)
-    expect(screen.getByTestId('more-detail')).toHaveTextContent(/More detail: key milestone timeline/)
+    expect(screen.getByTestId('more-detail')).toHaveTextContent(/More detail: all sites \(3\)/)
     expect(screen.getByTestId('enrolment-history')).toHaveTextContent('The line builds up from')
   })
 

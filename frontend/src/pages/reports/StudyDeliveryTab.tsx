@@ -364,44 +364,42 @@ export function StudyDeliveryTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="sd-sites" title="Sites" rule={data.rules.activation}>
-        <SitesTable report={data} />
+      <ChartCard
+        id="sd-milestones"
+        title="Key milestone timeline"
+        rule={`${data.rules.schedule_slipped ?? ''} ${data.rules.study_on_plan ?? ''}`.trim()}
+        extra={
+          <Flex gap={14} wrap style={{ fontSize: 12, color: '#3E4C5E' }} aria-hidden>
+            <Flex align="center" gap={6}>
+              <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #8A97A8', boxSizing: 'border-box' }} />
+              Original date
+            </Flex>
+            <Flex align="center" gap={6}>
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: INK.info }} />
+              Current date
+            </Flex>
+            <Flex align="center" gap={6}>
+              <span style={{ width: 2, height: 14, background: '#B42318' }} />
+              Today
+            </Flex>
+          </Flex>
+        }
+      >
+        <MilestoneTimeline rows={data.milestones} today={today} />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {ot.with_original_date > 0
+            ? `${ot.on_time} of ${ot.with_original_date} completed key milestones were on time. `
+            : 'On-time completion appears as milestones are completed. '}
+          {data.rules.on_time}
+        </Typography.Text>
+      </ChartCard>
+      <ChartCard title="Site activation" rule={data.rules.activation}>
+        <SiteActivation report={data} />
       </ChartCard>
 
-      <MoreDetail
-        summary={`More detail: key milestone timeline (${data.milestones.filter((m) => m.state === 'overdue').length} overdue) and site activation`}
-      >
-        <ChartCard
-          id="sd-milestones"
-          title="Key milestone timeline"
-          rule={`${data.rules.schedule_slipped ?? ''} ${data.rules.study_on_plan ?? ''}`.trim()}
-          extra={
-            <Flex gap={14} wrap style={{ fontSize: 12, color: '#3E4C5E' }} aria-hidden>
-              <Flex align="center" gap={6}>
-                <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #8A97A8', boxSizing: 'border-box' }} />
-                Original date
-              </Flex>
-              <Flex align="center" gap={6}>
-                <span style={{ width: 12, height: 12, borderRadius: '50%', background: INK.info }} />
-                Current date
-              </Flex>
-              <Flex align="center" gap={6}>
-                <span style={{ width: 2, height: 14, background: '#B42318' }} />
-                Today
-              </Flex>
-            </Flex>
-          }
-        >
-          <MilestoneTimeline rows={data.milestones} today={today} />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {ot.with_original_date > 0
-              ? `${ot.on_time} of ${ot.with_original_date} completed key milestones were on time. `
-              : 'On-time completion appears as milestones are completed. '}
-            {data.rules.on_time}
-          </Typography.Text>
-        </ChartCard>
-        <ChartCard title="Site activation" rule={data.rules.activation}>
-          <SiteActivation report={data} />
+      <MoreDetail summary={`More detail: all sites (${data.sites.length})`}>
+        <ChartCard id="sd-sites" title="Sites" rule={data.rules.activation}>
+          <SitesTable report={data} />
         </ChartCard>
       </MoreDetail>
     </Flex>

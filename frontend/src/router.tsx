@@ -16,7 +16,6 @@ import { ReportsPage } from './pages/reports/ReportsPage'
 import { CommandCentreIndexPage, StudyCommandCentrePage } from './pages/studies/StudyCommandCentrePage'
 import { StudyPortfolioPage } from './pages/studies/StudyPortfolioPage'
 import { MyTasksPage } from './pages/work/MyTasksPage'
-import { RisksPage } from './pages/work/RisksPage'
 
 export const routes: RouteObject[] = [
   {
@@ -32,7 +31,7 @@ export const routes: RouteObject[] = [
       { path: 'command-centre', element: <CommandCentreIndexPage /> },
       { path: 'command-centre/:studyId', element: <StudyCommandCentrePage /> },
       { path: 'tasks', element: <MyTasksPage /> },
-      { path: 'risks', element: <RisksPage /> },
+      { path: 'risks', element: <Navigate to="/reports?tab=risks" replace /> },
       { path: 'documents', element: <Navigate to="/documents/sops" replace /> },
       { path: 'documents/sops', element: <SopListPage /> },
       { path: 'documents/sops/:sopId', element: <SopDetailPage /> },

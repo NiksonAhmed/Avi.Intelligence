@@ -47,7 +47,7 @@ def test_my_overdue_tasks_any_category(make_client) -> None:  # type: ignore[no-
 def test_risks_and_issues_come_from_simpletrials(client: TestClient) -> None:
     answer = study(ask(client, "Any open risks or issues?"))
     assert answer["intent"] == "risks" and answer["headline"] == "2 open risks and issues, 1 overdue."
-    assert "SimpleTrials" in answer["lines"][0] and answer["tables"][0]["links"][0] == "/risks"
+    assert "SimpleTrials" in answer["lines"][0] and answer["tables"][0]["links"][0] == "/reports?tab=risks"
 
 
 def test_protocol_deviations(client: TestClient) -> None:

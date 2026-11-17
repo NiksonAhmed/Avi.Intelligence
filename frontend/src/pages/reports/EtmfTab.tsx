@@ -252,27 +252,26 @@ export function EtmfTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="tmf-expiring" title="Expired and expiring documents" rule={data.rules.expiring}>
-        <Expiring report={data} />
+      <ChartCard title="Completeness by site and TMF section" rule={data.rules.heat_map}>
+        <SectionHeatMap report={data} />
       </ChartCard>
 
-      <MoreDetail summary="More detail: completeness by TMF section, QC status and filing timeliness">
-        <ChartRow>
-          <ChartCard title="Completeness by site and TMF section" rule={data.rules.heat_map}>
-            <SectionHeatMap report={data} />
-          </ChartCard>
-          <ChartCard title="QC status" rule={data.rules.qc} flex="1 1 420px">
-            <CountBars rows={data.qc} colorFor={(l) => QC_COLOR[l] ?? INK.info} testId="qc-row" />
-          </ChartCard>
-          <ChartCard id="tmf-timeliness" title="Filing timeliness" rule={data.rules.timeliness} flex="1 1 420px">
-            <CountBars rows={data.timeliness} colorFor={(_l, k) => TIMELY[k ?? ''] ?? INK.info} testId="timeliness-row" />
-            {data.timeliness_measured > 0 && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {data.timeliness_on_time} of {data.timeliness_measured} dated documents filed within the target.
-              </Typography.Text>
-            )}
-          </ChartCard>
-        </ChartRow>
+      <ChartCard title="QC status" rule={data.rules.qc}>
+        <CountBars rows={data.qc} colorFor={(l) => QC_COLOR[l] ?? INK.info} testId="qc-row" />
+      </ChartCard>
+
+      <MoreDetail summary="More detail: expired and expiring documents, and filing timeliness">
+        <ChartCard id="tmf-expiring" title="Expired and expiring documents" rule={data.rules.expiring}>
+          <Expiring report={data} />
+        </ChartCard>
+        <ChartCard id="tmf-timeliness" title="Filing timeliness" rule={data.rules.timeliness}>
+          <CountBars rows={data.timeliness} colorFor={(_l, k) => TIMELY[k ?? ''] ?? INK.info} testId="timeliness-row" />
+          {data.timeliness_measured > 0 && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {data.timeliness_on_time} of {data.timeliness_measured} dated documents filed within the target.
+            </Typography.Text>
+          )}
+        </ChartCard>
       </MoreDetail>
     </Flex>
   )

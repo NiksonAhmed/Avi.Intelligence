@@ -1,5 +1,4 @@
 import {
-  AlertOutlined,
   AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
@@ -15,7 +14,7 @@ import {
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 
-export type NavGroup = 'studies' | 'knowledge' | 'business' | 'admin'
+export type NavGroup = 'studies' | 'sites' | 'knowledge' | 'business' | 'admin'
 
 export interface NavItem {
   key: string
@@ -32,6 +31,7 @@ export interface NavItem {
 
 export const NAV_GROUPS: { key: NavGroup; label: string }[] = [
   { key: 'studies', label: 'Studies' },
+  { key: 'sites', label: 'Sites' },
   { key: 'knowledge', label: 'Knowledge' },
   { key: 'business', label: 'Business' },
   { key: 'admin', label: 'Admin' },
@@ -45,6 +45,14 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'overview', path: '/', label: 'Overview', icon: <DashboardOutlined /> },
   { key: 'tasks', path: '/tasks', label: 'My Tasks', icon: <CheckSquareOutlined />, permission: 'task.view' },
   { key: 'ask', path: '/ask', label: 'Ask Avi.Intelligence', icon: <MessageOutlined />, permission: 'assistant.use' },
+  {
+    key: 'reports',
+    path: '/reports',
+    label: 'Reports and Insights',
+    icon: <BarChartOutlined />,
+    group: 'studies',
+    permission: 'study.read',
+  },
   {
     key: 'portfolio',
     path: '/portfolio',
@@ -62,23 +70,6 @@ export const NAV_ITEMS: NavItem[] = [
     permission: 'study.read',
   },
   {
-    key: 'site-validation',
-    path: '/site-validation',
-    label: 'Site validation',
-    icon: <EnvironmentOutlined />,
-    group: 'studies',
-    permission: 'site_validation.view',
-  },
-  { key: 'risks', path: '/risks', label: 'Risks and Issues', icon: <AlertOutlined />, group: 'studies', permission: 'study.read' },
-  {
-    key: 'reports',
-    path: '/reports',
-    label: 'Reports and Insights',
-    icon: <BarChartOutlined />,
-    group: 'studies',
-    permission: 'study.read',
-  },
-  {
     key: 'data-management',
     path: '/data-management',
     label: 'Data Management',
@@ -86,6 +77,14 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'studies',
     permission: 'dm.view',
     module: 'data-management',
+  },
+  {
+    key: 'site-validation',
+    path: '/site-validation',
+    label: 'Site validation',
+    icon: <EnvironmentOutlined />,
+    group: 'sites',
+    permission: 'site_validation.view',
   },
   {
     key: 'documents',

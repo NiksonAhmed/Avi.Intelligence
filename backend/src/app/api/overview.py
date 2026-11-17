@@ -244,7 +244,7 @@ async def _risks(c: _Ctx) -> Section:
                 else (f"Due {_day(i.due_on)}" if i.due_on else i.status)
             ),
             tone="bad" if i.days_overdue is not None else "warn",
-            link="/risks",
+            link="/reports?tab=risks",
         )
         for i in r.issues
         if not i.closed

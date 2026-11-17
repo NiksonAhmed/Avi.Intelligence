@@ -978,7 +978,7 @@ def _answer_risks(data: StudyData, q: StudyQuestion) -> tuple[str, list[str], li
             ]
             for i in open_rows[:MAX_ROWS]
         ],
-        links=["/risks"] * min(len(open_rows), MAX_ROWS),
+        links=["/reports?tab=risks"] * min(len(open_rows), MAX_ROWS),
         more=max(0, len(open_rows) - MAX_ROWS),
     )
     noun = "risk" if len(open_rows) == 1 else "risks"

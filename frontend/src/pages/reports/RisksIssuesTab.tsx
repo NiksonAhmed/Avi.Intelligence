@@ -170,95 +170,95 @@ export function RisksIssuesTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="ri-list" title={`All risks and issues (${data.issues.length})`} rule="Open first, most overdue first, then by priority and due date.">
-        <Table<IssueRow>
-          size="small"
-          rowKey="id"
-          dataSource={data.issues}
-          pagination={data.issues.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
-          scroll={{ x: 1100 }}
-          locale={{ emptyText: 'No issues in this selection.' }}
-          onRow={() => ({ 'data-testid': 'issue-row' }) as HTMLAttributes<HTMLElement>}
-          columns={[
-            { title: 'No.', dataIndex: 'number', width: 60, render: (v: string | null) => v ?? '—' },
-            { title: 'Study', dataIndex: 'protocol_number', width: 130 },
-            { title: 'Site', dataIndex: 'where', width: 170 },
-            {
-              title: 'Issue',
-              key: 'description',
-              render: (_, r) => (
-                <Flex vertical gap={2}>
-                  <span>{r.description ?? '—'}</span>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {[r.category, r.subcategory].filter(Boolean).join(' · ')}
-                    {r.response ? ` · Response: ${r.response}` : ''}
-                  </Typography.Text>
-                </Flex>
-              ),
-            },
-            {
-              title: 'Priority',
-              dataIndex: 'priority',
-              width: 100,
-              render: (v: string) => <Tag color={PRIORITY_TAG[v] ?? 'default'}>{v}</Tag>,
-            },
-            { title: 'Assigned to', dataIndex: 'assignee', width: 140, render: (v: string | null) => v ?? '—' },
-            { title: 'Opened', dataIndex: 'opened_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
-            {
-              title: 'Due',
-              key: 'due',
-              width: 140,
-              render: (_, r) => (
-                <Flex vertical gap={0}>
-                  <span>{r.due_on ? formatDay(r.due_on) : '—'}</span>
-                  {r.days_overdue !== null && (
-                    <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                      {r.days_overdue} day{r.days_overdue === 1 ? '' : 's'} overdue
-                    </Typography.Text>
-                  )}
-                </Flex>
-              ),
-            },
-            {
-              title: 'Status',
-              key: 'status',
-              width: 130,
-              render: (_, r) =>
-                r.closed ? (
-                  <Tag>
-                    {r.status}
-                    {r.closed_on ? ` ${formatDay(r.closed_on)}` : ''}
-                  </Tag>
-                ) : (
-                  <Tag color="gold">{r.status}</Tag>
-                ),
-            },
-          ]}
-        />
-      </ChartCard>
+      <ChartRow>
+        <ChartCard id="ri-priority" title="By priority" rule={data.rules.priority} flex="1 1 380px">
+          <Counts
+            rows={data.by_priority}
+            colourFor={(l) => PRIORITY_COLOUR[l] ?? GREY}
+            testId="issue-priority-row"
+            empty="No issues in this selection."
+          />
+        </ChartCard>
+        <ChartCard title="By category" flex="1 1 380px">
+          <Counts rows={data.by_category} colourFor={() => INK.info} testId="issue-category-row" empty="No issues in this selection." />
+        </ChartCard>
+        <ChartCard title="Open issues by age" rule={data.rules.ageing} flex="1 1 300px">
+          <Counts
+            rows={data.ageing}
+            colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)}
+            testId="issue-ageing-row"
+            empty="No open issues."
+          />
+        </ChartCard>
+      </ChartRow>
 
-      <MoreDetail summary="More detail: by priority, by category and by age">
-        <ChartRow>
-          <ChartCard id="ri-priority" title="By priority" rule={data.rules.priority} flex="1 1 380px">
-            <Counts
-              rows={data.by_priority}
-              colourFor={(l) => PRIORITY_COLOUR[l] ?? GREY}
-              testId="issue-priority-row"
-              empty="No issues in this selection."
-            />
-          </ChartCard>
-          <ChartCard title="By category" flex="1 1 380px">
-            <Counts rows={data.by_category} colourFor={() => INK.info} testId="issue-category-row" empty="No issues in this selection." />
-          </ChartCard>
-          <ChartCard title="Open issues by age" rule={data.rules.ageing} flex="1 1 300px">
-            <Counts
-              rows={data.ageing}
-              colourFor={(l) => (l.startsWith('Over') ? INK.bad : l.startsWith('61') ? INK.warn : INK.info)}
-              testId="issue-ageing-row"
-              empty="No open issues."
-            />
-          </ChartCard>
-        </ChartRow>
+      <MoreDetail summary={`More detail: all risks and issues (${data.issues.length})`}>
+        <ChartCard id="ri-list" title={`All risks and issues (${data.issues.length})`} rule="Open first, most overdue first, then by priority and due date.">
+          <Table<IssueRow>
+            size="small"
+            rowKey="id"
+            dataSource={data.issues}
+            pagination={data.issues.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
+            scroll={{ x: 1100 }}
+            locale={{ emptyText: 'No issues in this selection.' }}
+            onRow={() => ({ 'data-testid': 'issue-row' }) as HTMLAttributes<HTMLElement>}
+            columns={[
+              { title: 'No.', dataIndex: 'number', width: 60, render: (v: string | null) => v ?? '—' },
+              { title: 'Study', dataIndex: 'protocol_number', width: 130 },
+              { title: 'Site', dataIndex: 'where', width: 170 },
+              {
+                title: 'Issue',
+                key: 'description',
+                render: (_, r) => (
+                  <Flex vertical gap={2}>
+                    <span>{r.description ?? '—'}</span>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {[r.category, r.subcategory].filter(Boolean).join(' · ')}
+                      {r.response ? ` · Response: ${r.response}` : ''}
+                    </Typography.Text>
+                  </Flex>
+                ),
+              },
+              {
+                title: 'Priority',
+                dataIndex: 'priority',
+                width: 100,
+                render: (v: string) => <Tag color={PRIORITY_TAG[v] ?? 'default'}>{v}</Tag>,
+              },
+              { title: 'Assigned to', dataIndex: 'assignee', width: 140, render: (v: string | null) => v ?? '—' },
+              { title: 'Opened', dataIndex: 'opened_on', width: 110, render: (v: string | null) => (v ? formatDay(v) : '—') },
+              {
+                title: 'Due',
+                key: 'due',
+                width: 140,
+                render: (_, r) => (
+                  <Flex vertical gap={0}>
+                    <span>{r.due_on ? formatDay(r.due_on) : '—'}</span>
+                    {r.days_overdue !== null && (
+                      <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                        {r.days_overdue} day{r.days_overdue === 1 ? '' : 's'} overdue
+                      </Typography.Text>
+                    )}
+                  </Flex>
+                ),
+              },
+              {
+                title: 'Status',
+                key: 'status',
+                width: 130,
+                render: (_, r) =>
+                  r.closed ? (
+                    <Tag>
+                      {r.status}
+                      {r.closed_on ? ` ${formatDay(r.closed_on)}` : ''}
+                    </Tag>
+                  ) : (
+                    <Tag color="gold">{r.status}</Tag>
+                  ),
+              },
+            ]}
+          />
+        </ChartCard>
       </MoreDetail>
     </Flex>
   )

@@ -10,7 +10,7 @@ test('Summary first: a card opens its detail, then the full report', async ({ pa
   await expect(panel).toContainText('open in SimpleTrials')
   await panel.getByRole('button', { name: 'Open the full report' }).click()
   await expect(page).toHaveURL(/tab=risks/)
-  await expect(page.getByTestId('issue-row').first()).toBeVisible()
+  await expect(page.getByTestId('issue-priority-row').first()).toBeVisible()
 })
 
 test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
@@ -19,17 +19,17 @@ test('Study delivery report: figures, filter by study and Excel export', async (
   await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-on_plan')).toContainText('of 4')
   await expect(page.getByTestId('report-headline')).toContainText('key milestone')
-  await expect(page.getByTestId('site-table-row').first()).toBeVisible()
-  // The timeline and site activation are folded under More detail.
-  await page.getByText(/^More detail: key milestone timeline/).click()
+  // The timeline and site activation show; the sites table is folded under More detail.
   await expect(page.getByTestId('timeline-row').first()).toBeVisible()
   await expect(page.getByTestId('activation-figure')).toContainText('5 of 7')
+  await expect(page.getByTestId('site-table-row').first()).toBeHidden()
+  await page.getByText(/^More detail: all sites/).click()
+  await expect(page.getByTestId('site-table-row').first()).toBeVisible()
 
   // Filter to one study: only its milestones remain.
   await page.getByRole('combobox', { name: 'Filter by study' }).click()
   await page.getByTitle(/^DEMO-ONC-301 ·/).click()
   await expect(page).toHaveURL(/study=/)
-  await page.getByText(/^More detail: key milestone timeline/).click()
   await expect(page.getByTestId('timeline-row').first()).toContainText('DEMO-ONC-301')
   await expect(page.getByTestId('timeline-row').filter({ hasText: 'DEMO-CV-201' })).toHaveCount(0)
 
@@ -74,6 +74,11 @@ test('Work management report: overdue task and person', async ({ page }, testInf
 test('Risks and issues report: SimpleTrials issues, overdue first, with Excel export', async ({ page }) => {
   await page.goto('/reports?tab=risks')
   await expect(page.getByRole('tab', { name: 'Risks and issues', selected: true })).toBeVisible()
+  // Priority, category and age show; the full list is folded under More detail.
+  await expect(page.getByTestId('issue-priority-row').first()).toBeVisible()
+  await expect(page.getByTestId('issue-ageing-row').first()).toBeVisible()
+  await expect(page.getByTestId('issue-row').first()).toBeHidden()
+  await page.getByText(/More detail: all risks and issues/).click()
   await expect(page.getByTestId('issue-row').first()).toContainText('days overdue')
   await expect(page.getByRole('button', { name: /Sync now/ })).toBeVisible()
   const downloadPromise = page.waitForEvent('download')
@@ -88,6 +93,8 @@ test('Quality (SOPs) report: review schedule, department filter and Excel export
   await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-approved')).toHaveText('11')
   await expect(page.getByTestId('review-month')).toHaveCount(13)
+  // The review schedule is folded under More detail.
+  await page.getByText(/^More detail: review schedule/).click()
   const sop001 = page.getByTestId('schedule-row').filter({ hasText: 'SOP-001' })
   await expect(sop001).toContainText('Overdue')
 
@@ -116,8 +123,12 @@ test('eTMF report: completeness, heat map, expiring documents and Excel export',
   await expect(page.getByTestId('tile-completeness')).toContainText('%')
   await expect(page.getByRole('img', { name: /^eTMF completeness: \d+ of \d+/ })).toBeVisible()
   await expect(page.getByTestId('study-completeness-row')).toHaveCount(4)
-  await page.getByText(/^More detail: completeness by TMF section/).click()
   await expect(page.getByTestId('heat-row').first()).toBeVisible()
+  await expect(page.getByTestId('qc-row').first()).toBeVisible()
+  // Expiring documents and filing timeliness are folded under More detail.
+  await expect(page.getByTestId('timeliness-row').first()).toBeHidden()
+  await page.getByText(/^More detail: expired and expiring documents/).click()
+  await expect(page.getByTestId('timeliness-row').first()).toBeVisible()
   await expect(page.getByTestId('expiring-row').first()).toBeVisible()
 
   await page.getByRole('combobox', { name: 'Filter by study' }).click()

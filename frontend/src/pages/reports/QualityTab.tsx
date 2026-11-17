@@ -269,11 +269,10 @@ export function QualityTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard id="q-schedule" title="Review schedule" rule={data.rules.tasks}>
-        <ReviewSchedule rows={data.schedule} />
-      </ChartCard>
-
-      <MoreDetail summary={`More detail: change log (${data.changes.length} change${data.changes.length === 1 ? '' : 's'} in the last ${data.months} months)`}>
+      <MoreDetail summary={`More detail: review schedule (${data.schedule.length}) and change log (${data.changes.length})`}>
+        <ChartCard id="q-schedule" title="Review schedule" rule={data.rules.tasks}>
+          <ReviewSchedule rows={data.schedule} />
+        </ChartCard>
         <ChartRow>
           <ChartCard id="q-changes" title={`Change log · last ${data.months} months`} rule={data.rules.change_log} flex="1 1 460px">
             <ChangeLog changes={data.changes} months={data.months} />
