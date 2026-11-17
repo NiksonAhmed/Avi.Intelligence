@@ -2,6 +2,29 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-17: Site validation status (physics request), demo data first
+
+**Decision (user, 17 Nov 2026):** a graphical, site-based view of each site's validation status and
+capabilities: equipment (PET/CT, SPECT/CT, dose calibrator, gamma counter), isotope validations and phantoms.
+Click a site on a big map of Australia and its capabilities pop up. A front end to the site validation
+tracker plus the physics phantom status, which should be site-based. Everyone may view. Demo data until the
+tracker is in SharePoint. Mock-up: https://claude.ai/artifact/6v46oTbdBtEHbskDtySwL7 (third row).
+- **Menu:** Studies → Site validation (`/site-validation`), permission `site_validation.view` (all roles).
+- **Source:** `app/site_validation/`. Fields follow the Site Feasibility Tracker's sections: Site Details,
+  Equipment, PET/CT, SPECT/CT, Dose Calibrator (PET and SPECT), Gamma Counter System, Phantoms and QA/QC,
+  Image Data Storage and Transfer, plus isotope licences (IP). Its "117Lu" is read as 177Lu.
+- **Rules:** next review is the date the physicist or core lab gave, otherwise 12 months after validation.
+  Overdue: the date has passed. Files missing: validated but the certificate is not on file. Due soon: within
+  60 days. Booked: a phantom scan is booked and nothing is validated yet. A pin's colour is the site's worst
+  status for the filters chosen; sites needing attention pulse.
+- **Site panel:** facts, an equipment × isotope grid with a "Licensed for" row, scanner details (installed,
+  last calibration, maintenance, replacement plans), phantoms and QA/QC, phantom scans, image transfer.
+- **Map:** drawn from approximate coastline points (no map service), styled like the Conferences map.
+- **Not yet:** the physics work tracker's phantom scan columns (statuses are a placeholder: Booked → Scanned
+  → Submitted to core lab → Passed / Failed); the rest of the feasibility tracker (experience, IP,
+  administrative, post-activation, scoring) is a later stage. The tracker is marked sensitive: real data only
+  after Microsoft sign-in.
+
 ## 2026-11-16: Reports open on a Summary; full reports behind it; new tab order
 
 **Decision (user, 16 Nov 2026):** "too much information, we want information if someone requires it";

@@ -56,6 +56,13 @@ export function reportExportUrl(report: 'study-delivery' | 'work-management' | '
   return `/api/v1/reports/${report}/export.xlsx${query ? `?${query}` : ''}`
 }
 
+export function siteValidationExportUrl(filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  const query = params.toString()
+  return `/api/v1/site-validation/export.xlsx${query ? `?${query}` : ''}`
+}
+
 export function conferencesExportUrl(filters: Record<string, string | undefined>): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)

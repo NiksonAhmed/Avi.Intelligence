@@ -1001,3 +1001,97 @@ export interface ReportSummary {
   rules: Record<string, string>
   source: ReportSource
 }
+
+// --- Site validation status (physics request 2026-11-17) ------------------------------------------
+
+export type EquipmentKind = 'PET/CT' | 'SPECT/CT' | 'Dose calibrator' | 'Gamma counter'
+export type ValidationStatus = 'overdue' | 'files_missing' | 'due_soon' | 'booked' | 'in_date' | 'none'
+export type ScanStatus = 'Booked' | 'Scanned' | 'Submitted to core lab' | 'Passed' | 'Failed'
+
+export interface SiteSourceInfo {
+  mode: 'demo' | 'sharepoint'
+  reason: string | null
+  fetched_at: string | null
+}
+
+export interface ValidationRow {
+  site_id: string
+  site: string
+  city: string
+  state: string
+  equipment: EquipmentKind
+  isotope: string
+  validated_by: string | null
+  validated_on: string | null
+  files_available: boolean | null
+  next_review: string | null
+  days_to_review: number | null
+  scan_on: string | null
+  status: ValidationStatus
+}
+
+export interface SitePin {
+  id: string
+  name: string
+  city: string
+  state: string
+  lat: number
+  lon: number
+  status: ValidationStatus
+  equipment: string[]
+  attention: boolean
+}
+
+export interface SiteValidationReport {
+  headline: string
+  tiles: ReportTile[]
+  sites: SitePin[]
+  reviews: { site_id: string; site: string; city: string; equipment: EquipmentKind; isotope: string; physicist: string | null; next_review: string; days: number }[]
+  scans: { site_id: string; site: string; city: string; study: string; equipment: EquipmentKind; isotope: string; status: ScanStatus; on: string }[]
+  rows: ValidationRow[]
+  equipment_options: EquipmentKind[]
+  isotope_options: string[]
+  rules: Record<string, string>
+  source: SiteSourceInfo
+}
+
+export interface SiteEquipment {
+  kind: EquipmentKind
+  manufacturer: string | null
+  model: string | null
+  installed: string | null
+  last_calibration: string | null
+  maintenance: string | null
+  replacement: string | null
+}
+
+export interface SiteDetail {
+  id: string
+  name: string
+  department: string | null
+  city: string
+  state: string
+  status: ValidationStatus
+  last_survey: string | null
+  artnet_accreditation: string | null
+  physicist: string | null
+  radiopharmacy: boolean | null
+  licensed: string[]
+  equipment: SiteEquipment[]
+  missing_equipment: EquipmentKind[]
+  isotopes: string[]
+  grid: { equipment: EquipmentKind; isotope: string; state: ValidationStatus | null; validated: boolean; tip: string }[]
+  qa: {
+    phantoms: string[]
+    used_for_study_scans: string | null
+    records_access: string | null
+    monthly_submission: string | null
+    daily_qc_storage: string | null
+    routines: Record<string, string>
+  }
+  transfer: { pacs: string | null; dicom_export: string | null; methods: string[] }
+  scans: { study: string; equipment: EquipmentKind; isotope: string; status: ScanStatus; on: string }[]
+  rows: ValidationRow[]
+  source_url: string | null
+  source: SiteSourceInfo
+}

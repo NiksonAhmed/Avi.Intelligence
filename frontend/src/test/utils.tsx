@@ -33,6 +33,7 @@ export const adminUser: Me = {
     'sop.download',
     'sop.read',
     'study.read',
+    'site_validation.view',
     'task.view',
     'work.manage',
   ],
@@ -72,7 +73,7 @@ export const bdUser: Me = {
   id: 'bd1',
   role: 'business_development',
   role_label: 'Business Development',
-  permissions: ['assistant.use', 'conference.view', 'portfolio.read', 'sop.download', 'sop.read', 'task.create_own', 'task.view', 'study.sync'],
+  permissions: ['assistant.use', 'conference.view', 'portfolio.read', 'sop.download', 'sop.read', 'task.create_own', 'task.view', 'study.sync', 'site_validation.view'],
 }
 
 export function makeSop(overrides: Partial<SopDocument> = {}): SopDocument {

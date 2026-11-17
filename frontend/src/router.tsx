@@ -7,6 +7,7 @@ import { ConnectorsPage } from './pages/admin/ConnectorsPage'
 import { DataManagementPage } from './modules/data-management/DataManagementPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
 import { ConferencesPage } from './pages/conferences/ConferencesPage'
+import { SiteValidationPage } from './pages/site-validation/SiteValidationPage'
 import { OverviewPage } from './pages/overview/OverviewPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
@@ -26,6 +27,7 @@ export const routes: RouteObject[] = [
         element: <OverviewPage />,
       },
       { path: 'conferences', element: <ConferencesPage /> },
+      { path: 'site-validation', element: <SiteValidationPage /> },
       { path: 'portfolio', element: <StudyPortfolioPage /> },
       { path: 'command-centre', element: <CommandCentreIndexPage /> },
       { path: 'command-centre/:studyId', element: <StudyCommandCentrePage /> },

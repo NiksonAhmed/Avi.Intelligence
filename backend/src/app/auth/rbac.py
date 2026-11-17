@@ -54,6 +54,8 @@ class Permission(StrEnum):
     STUDY_SYNC = "study.sync"
     """Press Sync now to refresh the SimpleTrials copy (everyone; read-only towards SimpleTrials)."""
     CONFERENCE_VIEW = "conference.view"
+    # Site validation status (physics request 2026-11-17): everyone may view.
+    SITE_VALIDATION_VIEW = "site_validation.view"
     """See the Conferences page (where Avion's BD team is going): everyone."""
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
@@ -87,6 +89,7 @@ _ALL_STAFF = {
     Permission.DM_SYNC,  # user decision: everyone may press Sync now
     Permission.STUDY_SYNC,  # user decision: everyone may sync SimpleTrials from a report
     Permission.CONFERENCE_VIEW,
+    Permission.SITE_VALIDATION_VIEW,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -129,6 +132,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.TASK_CREATE_OWN,
             Permission.STUDY_SYNC,
             Permission.CONFERENCE_VIEW,
+            Permission.SITE_VALIDATION_VIEW,
         }
     ),
     Role.VIEWER: frozenset(
@@ -142,6 +146,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DM_SYNC,
             Permission.STUDY_SYNC,
             Permission.CONFERENCE_VIEW,
+            Permission.SITE_VALIDATION_VIEW,
         }
     ),
 }

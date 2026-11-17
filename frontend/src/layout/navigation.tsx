@@ -6,6 +6,7 @@ import {
   CheckSquareOutlined,
   DatabaseOutlined,
   DashboardOutlined,
+  EnvironmentOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
   MessageOutlined,
@@ -59,6 +60,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: <ProjectOutlined />,
     group: 'studies',
     permission: 'study.read',
+  },
+  {
+    key: 'site-validation',
+    path: '/site-validation',
+    label: 'Site validation',
+    icon: <EnvironmentOutlined />,
+    group: 'studies',
+    permission: 'site_validation.view',
   },
   { key: 'risks', path: '/risks', label: 'Risks and Issues', icon: <AlertOutlined />, group: 'studies', permission: 'study.read' },
   {

@@ -19,6 +19,8 @@ import type {
   Person,
   RiskFilters,
   ConferencesReport,
+  SiteDetail,
+  SiteValidationReport,
   OverviewData,
   RiskListResponse,
   RisksIssuesReport,
@@ -200,6 +202,34 @@ export function useConferences(filters: { year?: number; role?: string }, enable
     placeholderData: (previous) => previous,
     enabled,
     retry: false,
+  })
+}
+
+export function useSiteValidation(filters: { equipment?: string; isotope?: string }) {
+  return useQuery({
+    queryKey: ['site-validation', filters],
+    queryFn: () => apiRequest<SiteValidationReport>('/site-validation', { params: filters }),
+    placeholderData: (previous) => previous,
+    retry: false,
+  })
+}
+
+export function useSiteDetail(siteId: string | undefined) {
+  return useQuery({
+    queryKey: ['site-validation', 'site', siteId],
+    queryFn: () => apiRequest<SiteDetail>(`/site-validation/sites/${encodeURIComponent(siteId!)}`),
+    enabled: !!siteId,
+    retry: false,
+  })
+}
+
+export function useRefreshSiteValidation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/site-validation/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['site-validation'] })
+    },
   })
 }
 

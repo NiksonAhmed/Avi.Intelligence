@@ -20,6 +20,7 @@ describe('App shell', () => {
       'Ask Avi.Intelligence',
       'Study Portfolio',
       'Study Command Centre',
+      'Site validation',
       'Risks and Issues',
       'Reports and Insights',
       'Documents and Knowledge',
@@ -40,6 +41,7 @@ describe('App shell', () => {
         'My Tasks',
         'Ask Avi.Intelligence',
         'Study Portfolio',
+        'Site validation',
         'Documents and Knowledge',
       ]),
     )
