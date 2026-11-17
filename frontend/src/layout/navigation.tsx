@@ -4,12 +4,12 @@ import {
   BarChartOutlined,
   CheckSquareOutlined,
   DatabaseOutlined,
+  FileSearchOutlined,
   DashboardOutlined,
   EnvironmentOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
   MessageOutlined,
-  ProjectOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
@@ -62,14 +62,6 @@ export const NAV_ITEMS: NavItem[] = [
     permission: 'portfolio.read',
   },
   {
-    key: 'command-centre',
-    path: '/command-centre',
-    label: 'Study Command Centre',
-    icon: <ProjectOutlined />,
-    group: 'studies',
-    permission: 'study.read',
-  },
-  {
     key: 'data-management',
     path: '/data-management',
     label: 'Data Management',
@@ -77,6 +69,14 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'studies',
     permission: 'dm.view',
     module: 'data-management',
+  },
+  {
+    key: 'site-feasibility',
+    path: '/site-feasibility',
+    label: 'Site feasibility',
+    icon: <FileSearchOutlined />,
+    group: 'sites',
+    permission: 'site_feasibility.view',
   },
   {
     key: 'site-validation',
@@ -109,6 +109,8 @@ export const NAV_ITEMS: NavItem[] = [
 
 export function activeNavKey(pathname: string): string {
   if (pathname === '/') return 'overview'
+  // A study's Command Centre is opened from the Portfolio (it has no menu item of its own).
+  if (pathname.startsWith('/command-centre')) return 'portfolio'
   const match = NAV_ITEMS.filter((i) => i.path !== '/' && pathname.startsWith(i.path))
   return match[0]?.key ?? ''
 }

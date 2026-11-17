@@ -473,8 +473,8 @@ async def _my_sites(c: _Ctx) -> Section:
         key="my_sites",
         title="Your sites" if assigned else "Sites",
         source="from SimpleTrials",
-        link="/command-centre",
-        link_label="Study Command Centre",
+        link="/portfolio",
+        link_label="Study Portfolio",
         rows=rows,
         notice=None
         if assigned
@@ -507,14 +507,14 @@ async def _visits(c: _Ctx) -> Section:
         label=f"Site visits in the next {VISIT_WINDOW_DAYS} days",
         value=str(len(soon)),
         tone="warn" if soon else "neutral",
-        link="/command-centre",
+        link="/portfolio",
     )
     return Section(
         key="visits",
         title="Site visits",
         source="from SimpleTrials",
-        link="/command-centre",
-        link_label="Study Command Centre",
+        link="/portfolio",
+        link_label="Study Portfolio",
         rows=[
             Row(
                 label=v.kind or "Site visit",

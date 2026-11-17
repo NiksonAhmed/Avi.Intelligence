@@ -2,6 +2,28 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-18: Site feasibility page; Study Portfolio is the one list of studies
+
+**Decisions (user, 18 Nov 2026):**
+- **Site feasibility** (`/site-feasibility`, Sites group, first): can a site run our studies? Built from the
+  tracker's Feasibility sheet (site details and recommendation, predicted timelines, experience by indication,
+  IP readiness, general equipment, administrative turnaround) and its Post-Activation sheet (projects,
+  enrolment against prediction, the Overall Site Assessment score, maximum 40). **All Avion employees may
+  view** (permission `site_feasibility.view`, every role). Demo data until the tracker is in SharePoint; the
+  feasibility lists are connected with the other Microsoft connections after sign-in.
+- **Split with Site validation:** the tracker's detailed imaging sections (PET/CT, SPECT/CT, CT, MRI, dose
+  calibrators, gamma counter, phantoms and QA/QC, image transfer) are only 4–12% filled on the Feasibility
+  sheet; that detail lives on the Validation sheet and stays on Site validation. Shared fields (licensed
+  isotopes, ARTnet) appear on both. The same site on both pages is matched by name, and the feasibility panel
+  links to it ("Open on Site validation").
+- Recommendation (diagnostics and/or therapeutics) colours the map; a survey over 12 months old pulses.
+  Unanswered questions show "Not answered", and each site shows how much of its survey is answered.
+- Per-study IP questions in the tracker ("[Insert Study IP]", named products) are not modelled yet; they
+  belong with per-study qualifications.
+- **Study Command Centre has no menu item.** Its study picker repeated the Study Portfolio; the Portfolio is
+  the one list and opens a study's Command Centre. `/command-centre` redirects to `/portfolio`; the
+  breadcrumb reads Study Portfolio › protocol.
+
 ## 2026-11-18: One Risks and Issues view; charts first in every report; Sites menu group
 
 **Decisions (user, 18 Nov 2026):**
@@ -16,7 +38,7 @@ A running log of design decisions, assumptions and known limitations. Newest fir
   shown; expiring documents and filing timeliness folded. Quality: review schedule and change log folded.
 - **Menu.** A new **Sites** group holds Site validation, which is about sites across all studies, not one
   study. Later site feasibility work joins it. Studies is ordered widest view first: Reports and Insights,
-  Study Portfolio, Study Command Centre, Data Management. Group order stays Studies, Sites, Knowledge,
+  Study Portfolio, Study Command Centre (later folded into the Portfolio), Data Management. Group order stays Studies, Sites, Knowledge,
   Business, Admin: Business has one occasional item and most staff never use it; revisit (perhaps a
   role-based order) if Business grows.
 

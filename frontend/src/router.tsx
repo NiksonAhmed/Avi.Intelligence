@@ -7,13 +7,14 @@ import { ConnectorsPage } from './pages/admin/ConnectorsPage'
 import { DataManagementPage } from './modules/data-management/DataManagementPage'
 import { AuditTrailPage } from './pages/audit/AuditTrailPage'
 import { ConferencesPage } from './pages/conferences/ConferencesPage'
+import { SiteFeasibilityPage } from './pages/site-feasibility/SiteFeasibilityPage'
 import { SiteValidationPage } from './pages/site-validation/SiteValidationPage'
 import { OverviewPage } from './pages/overview/OverviewPage'
 import { AskPage } from './pages/documents/AskPage'
 import { SopDetailPage } from './pages/documents/SopDetailPage'
 import { SopListPage } from './pages/documents/SopListPage'
 import { ReportsPage } from './pages/reports/ReportsPage'
-import { CommandCentreIndexPage, StudyCommandCentrePage } from './pages/studies/StudyCommandCentrePage'
+import { StudyCommandCentrePage } from './pages/studies/StudyCommandCentrePage'
 import { StudyPortfolioPage } from './pages/studies/StudyPortfolioPage'
 import { MyTasksPage } from './pages/work/MyTasksPage'
 
@@ -26,9 +27,10 @@ export const routes: RouteObject[] = [
         element: <OverviewPage />,
       },
       { path: 'conferences', element: <ConferencesPage /> },
+      { path: 'site-feasibility', element: <SiteFeasibilityPage /> },
       { path: 'site-validation', element: <SiteValidationPage /> },
       { path: 'portfolio', element: <StudyPortfolioPage /> },
-      { path: 'command-centre', element: <CommandCentreIndexPage /> },
+      { path: 'command-centre', element: <Navigate to="/portfolio" replace /> },
       { path: 'command-centre/:studyId', element: <StudyCommandCentrePage /> },
       { path: 'tasks', element: <MyTasksPage /> },
       { path: 'risks', element: <Navigate to="/reports?tab=risks" replace /> },

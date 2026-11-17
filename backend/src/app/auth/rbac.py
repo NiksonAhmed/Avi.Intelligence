@@ -56,6 +56,7 @@ class Permission(StrEnum):
     CONFERENCE_VIEW = "conference.view"
     # Site validation status (physics request 2026-11-17): everyone may view.
     SITE_VALIDATION_VIEW = "site_validation.view"
+    SITE_FEASIBILITY_VIEW = "site_feasibility.view"
     """See the Conferences page (where Avion's BD team is going): everyone."""
     DM_VIEW = "dm.view"
     """See the Data Management tab (Viedoc queries, missing data)."""
@@ -90,6 +91,7 @@ _ALL_STAFF = {
     Permission.STUDY_SYNC,  # user decision: everyone may sync SimpleTrials from a report
     Permission.CONFERENCE_VIEW,
     Permission.SITE_VALIDATION_VIEW,
+    Permission.SITE_FEASIBILITY_VIEW,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -133,6 +135,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.STUDY_SYNC,
             Permission.CONFERENCE_VIEW,
             Permission.SITE_VALIDATION_VIEW,
+            Permission.SITE_FEASIBILITY_VIEW,
         }
     ),
     Role.VIEWER: frozenset(
@@ -147,6 +150,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.STUDY_SYNC,
             Permission.CONFERENCE_VIEW,
             Permission.SITE_VALIDATION_VIEW,
+            Permission.SITE_FEASIBILITY_VIEW,
         }
     ),
 }

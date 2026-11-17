@@ -9,7 +9,8 @@ import type { ScanStatus, SiteDetail, SitePin, SiteValidationReport, ValidationR
 import { PageHeader } from '../../components/PageHeader'
 import { formatDateTime, formatDay } from '../../lib/format'
 import { MoreDetail, ReportTiles, RuleInfo } from '../reports/ReportParts'
-import { AU_BORDERS, AU_HEIGHT, AU_LAND, AU_STATES, AU_WIDTH, auPoint } from './australiaMap'
+import { AustraliaMap } from './SiteMap'
+import type { MapPin } from './SiteMap'
 import './SiteValidationPage.css'
 
 const STATUS: Record<ValidationStatus, { label: string; colour: string; bg: string; fg: string; symbol: string }> = {
@@ -27,20 +28,6 @@ const SCAN: Record<ScanStatus, { bg: string; fg: string }> = {
   Passed: { bg: '#DCF5E7', fg: '#14633A' },
   Failed: { bg: '#FDE8E6', fg: '#A1210F' },
 }
-const pct = (v: number) => `${(v * 100).toFixed(2)}%`
-// Where each city tag sits next to its pin; close neighbours go above and below so tags never overlap.
-const RIGHT = 'translate(14px, -50%)'
-const LABEL_AT: Record<string, string> = {
-  Brisbane: 'translate(14px, -105%)',
-  'Gold Coast': 'translate(14px, 5%)',
-  Newcastle: 'translate(calc(-100% - 14px), -50%)',
-  Adelaide: 'translate(14px, -105%)',
-  Sydney: 'translate(14px, 5%)',
-  Melbourne: 'translate(calc(-100% - 14px), -105%)',
-  Geelong: 'translate(calc(-100% - 14px), 5%)',
-  Canberra: 'translate(calc(-100% - 14px), -50%)',
-}
-
 function StatusTag({ status }: { status: ValidationStatus }) {
   const s = STATUS[status]
   return <Tag style={{ background: s.bg, color: s.fg, border: 0, fontWeight: 600 }}>{s.label}</Tag>
@@ -54,70 +41,20 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
   )
 }
 
-function AustraliaMap({ sites, onSelect, selected }: { sites: SitePin[]; onSelect: (id: string) => void; selected?: string }) {
-  return (
-    <div
-      role="img"
-      aria-label={`Map of Australia with ${sites.length} sites`}
-      data-testid="site-map"
-      style={{ position: 'relative', width: '100%', maxWidth: 860, margin: '0 auto', aspectRatio: `${AU_WIDTH} / ${AU_HEIGHT}` }}
-    >
-      <svg viewBox={`0 0 ${AU_WIDTH} ${AU_HEIGHT}`} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-        <defs>
-          <filter id="sv-glow" x="-10%" y="-10%" width="120%" height="120%">
-            <feGaussianBlur stdDeviation="10" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <path d={AU_LAND} fill="#7463E8" stroke="#8F80F5" strokeWidth={2} strokeLinejoin="round" filter="url(#sv-glow)" />
-        <path d={AU_BORDERS} fill="none" stroke="#5A49C9" strokeWidth={2} strokeLinecap="round" />
-        {AU_STATES.map((s) => (
-          <text key={s.label} x={s.x} y={s.y} textAnchor="middle" fontSize={22} fontWeight={700} fill="#E4DFFF" opacity={0.75} letterSpacing={3}>
-            {s.label}
-          </text>
-        ))}
-      </svg>
-      {sites.map((s) => {
-        const p = auPoint(s.lat, s.lon)
-        const colour = STATUS[s.status].colour
-        const at: CSSProperties = { position: 'absolute', left: pct(p.x), top: pct(p.y) }
-        const on = selected === s.id
-        return (
-          <span key={s.id}>
-            {s.attention && <span className="sv-ring" aria-hidden="true" style={{ ...at, borderColor: colour }} />}
-            <button
-              type="button"
-              className="sv-pin"
-              data-testid="site-pin"
-              aria-label={`${s.name}, ${s.city} ${s.state}: ${STATUS[s.status].label}. Equipment: ${s.equipment.join(', ') || 'none'}. Phantoms: ${s.phantoms}`}
-              aria-pressed={on}
-              onClick={() => onSelect(s.id)}
-              style={{
-                ...at,
-                width: on ? 18 : 13,
-                height: on ? 18 : 13,
-                boxShadow: `0 0 0 3px ${colour}, 0 0 14px 5px ${colour}${on ? ', 0 0 0 8px rgba(255,255,255,0.35)' : ''}`,
-              }}
-            />
-            <span
-              aria-hidden="true"
-              className="sv-label"
-              style={{ ...at, transform: LABEL_AT[s.city] ?? RIGHT, borderColor: `${colour}66` }}
-            >
-              <strong>{s.city}</strong>
-              <small>{s.equipment.join(' · ') || 'No equipment'}</small>
-              <small className={s.phantoms ? 'sv-phantoms' : 'sv-phantoms none'}>
-                {s.phantoms ? `${s.phantoms} phantom${s.phantoms > 1 ? 's' : ''}` : 'No phantom'}
-              </small>
-            </span>
-          </span>
-        )
-      })}
-    </div>
-  )
+function pinOf(s: SitePin): MapPin {
+  return {
+    id: s.id,
+    city: s.city,
+    lat: s.lat,
+    lon: s.lon,
+    colour: STATUS[s.status].colour,
+    attention: s.attention,
+    ariaLabel: `${s.name}, ${s.city} ${s.state}: ${STATUS[s.status].label}. Equipment: ${s.equipment.join(', ') || 'none'}. Phantoms: ${s.phantoms}`,
+    lines: [
+      { text: s.equipment.join(' · ') || 'No equipment' },
+      { text: s.phantoms ? `${s.phantoms} phantom${s.phantoms > 1 ? 's' : ''}` : 'No phantom', className: s.phantoms ? 'sv-phantoms' : 'sv-phantoms none' },
+    ],
+  }
 }
 
 function Fact({ k, v }: { k: string; v: string }) {
@@ -479,7 +416,7 @@ export function SiteValidationPage() {
             ))}
           </Flex>
         </Flex>
-        <AustraliaMap sites={data.sites} onSelect={open} selected={picked} />
+        <AustraliaMap pins={data.sites.map(pinOf)} onSelect={open} selected={picked} />
         <Typography.Text style={{ fontSize: 12, color: '#8B9AB3' }}>
           Pulsing: needs attention (overdue, files missing or due soon). Under each city: equipment on site (PET = PET/CT, SPECT =
           SPECT/CT, DC = dose calibrator, GC = gamma counter) and how many phantoms it has.

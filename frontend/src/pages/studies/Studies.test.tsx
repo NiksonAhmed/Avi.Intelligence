@@ -77,6 +77,15 @@ describe('Study Command Centre', () => {
     expect(screen.getByText('Overdue')).toBeInTheDocument()
   })
 
+  it('is opened from the Portfolio: no picker page, and the breadcrumb leads back there', async () => {
+    mockApi(routes())
+    const { unmount } = renderRoute(`/command-centre/${study.id}`)
+    expect(await screen.findByRole('link', { name: 'Study Portfolio' })).toHaveAttribute('href', '/portfolio')
+    unmount()
+    renderRoute('/command-centre')
+    expect(await screen.findByRole('link', { name: 'DEMO-ONC-301' })).toHaveAttribute('href', `/command-centre/${study.id}`)
+  })
+
   it('shows site enrolment against target, and says when no target is recorded', async () => {
     mockApi({ ...routes(), [`/studies/${noTarget.id}`]: makeStudyDetail(noTarget) })
     const { unmount } = renderRoute(`/command-centre/${study.id}?tab=sites`)

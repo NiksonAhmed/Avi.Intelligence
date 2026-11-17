@@ -22,6 +22,8 @@ import type {
   SiteDetail,
   SiteValidationConnector,
   SiteValidationReport,
+  SiteFeasibilityDetail,
+  SiteFeasibilityReport,
   OverviewData,
   RiskListResponse,
   RisksIssuesReport,
@@ -221,6 +223,34 @@ export function useSiteDetail(siteId: string | undefined) {
     queryFn: () => apiRequest<SiteDetail>(`/site-validation/sites/${encodeURIComponent(siteId!)}`),
     enabled: !!siteId,
     retry: false,
+  })
+}
+
+export function useSiteFeasibility(filters: { isotope?: string; indication?: string; recommendation?: string }) {
+  return useQuery({
+    queryKey: ['site-feasibility', filters],
+    queryFn: () => apiRequest<SiteFeasibilityReport>('/site-feasibility', { params: filters }),
+    placeholderData: (previous) => previous,
+    retry: false,
+  })
+}
+
+export function useFeasibilityDetail(siteId: string | undefined) {
+  return useQuery({
+    queryKey: ['site-feasibility', 'site', siteId],
+    queryFn: () => apiRequest<SiteFeasibilityDetail>(`/site-feasibility/sites/${encodeURIComponent(siteId!)}`),
+    enabled: !!siteId,
+    retry: false,
+  })
+}
+
+export function useRefreshSiteFeasibility() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/site-feasibility/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['site-feasibility'] })
+    },
   })
 }
 

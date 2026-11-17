@@ -1112,3 +1112,131 @@ export interface SiteValidationConnector {
   counts: Record<string, number>
   skipped: Record<string, number>
 }
+
+// ---- Site feasibility (Site Feasibility Tracker: Feasibility and Post-Activation sheets) ----------------
+
+export type Recommendation = 'both' | 'therapeutics' | 'diagnostics' | 'not_recommended' | 'not_assessed'
+
+export interface FeasibilityPin {
+  id: string
+  name: string
+  city: string
+  state: string
+  lat: number
+  lon: number
+  recommendation: Recommendation
+  short: string
+  accepting: string | null
+  survey_due: boolean
+  hrec_weeks: number | null
+}
+
+export interface FeasibilityRow {
+  site_id: string
+  site: string
+  city: string
+  state: string
+  sector: string | null
+  accepting: string | null
+  recommendation: Recommendation
+  licensed: string[]
+  hrec_weeks: number | null
+  contract_weeks: number | null
+  startup_weeks: number | null
+  last_survey: string | null
+  survey_due: boolean
+  answered: number
+  score: number | null
+}
+
+export interface SiteFeasibilityReport {
+  headline: string
+  tiles: ReportTile[]
+  sites: FeasibilityPin[]
+  rows: FeasibilityRow[]
+  surveys_due: { site_id: string; site: string; city: string; last_survey: string | null; months: number | null }[]
+  fastest: {
+    site_id: string
+    site: string
+    city: string
+    hrec_weeks: number | null
+    contract_weeks: number | null
+    startup_weeks: number | null
+  }[]
+  isotope_options: string[]
+  indication_options: string[]
+  recommendation_options: { value: Recommendation; label: string }[]
+  rules: Record<string, string>
+  source: { mode: 'demo' | 'sharepoint'; reason: string | null; fetched_at: string | null }
+}
+
+export interface SiteFeasibilityDetail {
+  id: string
+  name: string
+  department: string | null
+  city: string
+  state: string
+  sector: string | null
+  last_survey: string | null
+  last_survey_study: string | null
+  survey_type: string | null
+  accepting: string | null
+  withdrawal: string | null
+  recommend_diagnostics: string | null
+  recommend_therapeutics: string | null
+  timelines: { startup_weeks: number | null; siv_weeks: number | null; fpi_weeks: number | null }
+  experience: {
+    imaging_trials: string | null
+    therapeutic_trials: string | null
+    isotopes: string[]
+    patient_identification: string | null
+    by_indication: { indication: string; experience: string | null; imaging: number | null; therapeutic: number | null }[]
+    active_imaging_trials: number | null
+  }
+  ip: {
+    licensed: string[]
+    trained: string[]
+    handled: string[]
+    treatment_days: string | null
+    fridges: number | null
+    freezers_20: number | null
+    freezers_80: number | null
+  }
+  equipment: Record<string, string | null>
+  admin: {
+    audited: string | null
+    auditor: string | null
+    major_findings: string | null
+    sops: string | null
+    radiation_licence: string | null
+    central_hrec: string | null
+    hrec_weeks: number | null
+    additional_approvals: string | null
+    contract_during_hrec: string | null
+    contract_weeks: number | null
+    artnet: string | null
+    remote_monitoring: string | null
+    remote_records: string | null
+  }
+  performance: {
+    projects: {
+      protocol: string
+      indication: string | null
+      expected_min: number | null
+      expected_max: number | null
+      actual: number | null
+    }[]
+    scores: Record<string, number>
+    competing_trials: string | null
+    comments: string | null
+  } | null
+  source_url: string | null
+  recommendation: Recommendation
+  recommendation_label: string
+  survey_due: boolean
+  answered: number
+  score: number | null
+  score_max: number
+  score_rows: { criterion: string; score: number | null; max: number }[]
+  validation_site_id: string | null
+}

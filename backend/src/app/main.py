@@ -22,6 +22,7 @@ from app.core.logging import configure_logging
 from app.data_management import api as data_management_api  # the module's single wiring point
 from app.data_management.sync import scheduler_loop as dm_scheduler_loop
 from app.reports.scheduler import scheduler_loop
+from app.site_feasibility import api as site_feasibility_api
 from app.site_validation import api as site_validation_api
 
 log = logging.getLogger("app")
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(overview.router, prefix="/api/v1")
     app.include_router(conferences_api.router, prefix="/api/v1")
+    app.include_router(site_feasibility_api.router, prefix="/api/v1")
     app.include_router(site_validation_api.router, prefix="/api/v1")
     app.include_router(site_validation_api.admin_router, prefix="/api/v1")
     # Data Management: answers 404 unless DATA_MANAGEMENT_ENABLED=true.
