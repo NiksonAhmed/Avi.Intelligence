@@ -19,7 +19,7 @@ export const AU_STATES = [
   { label: 'NT', x: 500, y: 291 },
   { label: 'SA', x: 535, y: 542 },
   { label: 'QLD', x: 768, y: 370 },
-  { label: 'NSW', x: 802, y: 608 },
+  { label: 'NSW', x: 750, y: 600 },
   { label: 'VIC', x: 809, y: 756 },
   { label: 'TAS', x: 805, y: 877 },
 ]

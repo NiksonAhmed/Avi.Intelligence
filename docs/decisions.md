@@ -20,6 +20,12 @@ tracker is in SharePoint. Mock-up: https://claude.ai/artifact/6v46oTbdBtEHbskDty
 - **Site panel:** facts, an equipment × isotope grid with a "Licensed for" row, scanner details (installed,
   last calibration, maintenance, replacement plans), phantoms and QA/QC, phantom scans, image transfer.
 - **Map:** drawn from approximate coastline points (no map service), styled like the Conferences map.
+- **SharePoint connector (user decision 17 Nov 2026: "SharePoint"):** three lists (Sites, Validations,
+  Phantom scans), read-only through Microsoft Graph like Conferences; demo sites until
+  `SITE_VALIDATION_SITES_LIST` is set. Columns and setup: docs/site-validation-setup.md. Administration →
+  Connectors has a card with the lists, what was read, rows it could not use and a Test connection button.
+  Pins come from Latitude/Longitude columns, else a built-in table of Australian cities, else the middle of
+  the state. Each city tag on the map also shows how many phantoms the site has.
 - **Not yet:** the physics work tracker's phantom scan columns (statuses are a placeholder: Booked → Scanned
   → Submitted to core lab → Passed / Failed); the rest of the feasibility tracker (experience, IP,
   administrative, post-activation, scoring) is a later stage. The tracker is marked sensitive: real data only

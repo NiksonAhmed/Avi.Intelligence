@@ -15,8 +15,8 @@ function report(): SiteValidationReport {
       { key: 'overdue', label: 'Overdue', value: '1', note: 'Review date has passed', tone: 'bad' },
     ],
     sites: [
-      { id: 'demo-103', name: 'Demo Site 103', city: 'Melbourne', state: 'VIC', lat: -37.81, lon: 144.96, status: 'overdue', equipment: ['PET', 'SPECT', 'DC', 'GC'], attention: true },
-      { id: 'demo-111', name: 'Demo Site 111', city: 'Darwin', state: 'NT', lat: -12.46, lon: 130.84, status: 'none', equipment: ['SPECT', 'DC'], attention: false },
+      { id: 'demo-103', name: 'Demo Site 103', city: 'Melbourne', state: 'VIC', lat: -37.81, lon: 144.96, status: 'overdue', equipment: ['PET', 'SPECT', 'DC', 'GC'], attention: true, phantoms: 2 },
+      { id: 'demo-111', name: 'Demo Site 111', city: 'Darwin', state: 'NT', lat: -12.46, lon: 130.84, status: 'none', equipment: ['SPECT', 'DC'], attention: false, phantoms: 0 },
     ],
     reviews: [{ site_id: 'demo-103', site: 'Demo Site 103', city: 'Melbourne', equipment: 'PET/CT', isotope: '90Y', physicist: 'Physicist (demo C)', next_review: '2026-11-05', days: -12 }],
     scans: [{ site_id: 'demo-103', site: 'Demo Site 103', city: 'Melbourne', study: 'DEMO-ONC-301', equipment: 'PET/CT', isotope: '90Y', status: 'Scanned', on: '2026-11-10' }],
@@ -59,6 +59,8 @@ describe('Site validation', () => {
     expect(screen.getAllByTestId('site-pin')).toHaveLength(2)
     expect(screen.getByRole('button', { name: /Demo Site 103, Melbourne VIC: Overdue/ })).toBeInTheDocument()
     expect(screen.getByText('Overdue by 12 days')).toBeInTheDocument()
+    expect(screen.getByText('2 phantoms')).toBeInTheDocument()
+    expect(screen.getByText('No phantom')).toBeInTheDocument()
     expect(screen.getByText('Scanned')).toBeInTheDocument()
   })
 

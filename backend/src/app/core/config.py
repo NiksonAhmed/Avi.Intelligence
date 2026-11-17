@@ -109,6 +109,17 @@ class Settings(BaseSettings):
     # JSON: our field -> the list's column internal name(s), e.g. {"role": "AvionRole"}.
     conferences_field_map: str | None = None
 
+    # --- Site validation (physics): read-only from three SharePoint lists; demo data until set ---
+    # "mock" always shows demo sites (tests and browser tests).
+    site_validation_mode: Literal["auto", "mock"] = "auto"
+    site_validation_sites_list: str | None = None
+    site_validation_validations_list: str | None = None
+    site_validation_scans_list: str | None = None
+    # The site that holds the lists; defaults to SHAREPOINT_SITE_URL.
+    site_validation_sharepoint_site_url: str | None = None
+    # JSON: our field -> the list's column internal name(s), e.g. {"sites.city": "Suburb"}.
+    site_validation_field_map: str | None = None
+
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None
     assistant_model: str = "claude-opus-5-5"

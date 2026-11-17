@@ -33,7 +33,8 @@ const RIGHT = 'translate(14px, -50%)'
 const LABEL_AT: Record<string, string> = {
   Brisbane: 'translate(14px, -105%)',
   'Gold Coast': 'translate(14px, 5%)',
-  Newcastle: 'translate(14px, -105%)',
+  Newcastle: 'translate(calc(-100% - 14px), -50%)',
+  Adelaide: 'translate(14px, -105%)',
   Sydney: 'translate(14px, 5%)',
   Melbourne: 'translate(calc(-100% - 14px), -105%)',
   Geelong: 'translate(calc(-100% - 14px), 5%)',
@@ -91,7 +92,7 @@ function AustraliaMap({ sites, onSelect, selected }: { sites: SitePin[]; onSelec
               type="button"
               className="sv-pin"
               data-testid="site-pin"
-              aria-label={`${s.name}, ${s.city} ${s.state}: ${STATUS[s.status].label}. Equipment: ${s.equipment.join(', ') || 'none'}`}
+              aria-label={`${s.name}, ${s.city} ${s.state}: ${STATUS[s.status].label}. Equipment: ${s.equipment.join(', ') || 'none'}. Phantoms: ${s.phantoms}`}
               aria-pressed={on}
               onClick={() => onSelect(s.id)}
               style={{
@@ -108,6 +109,9 @@ function AustraliaMap({ sites, onSelect, selected }: { sites: SitePin[]; onSelec
             >
               <strong>{s.city}</strong>
               <small>{s.equipment.join(' · ') || 'No equipment'}</small>
+              <small className={s.phantoms ? 'sv-phantoms' : 'sv-phantoms none'}>
+                {s.phantoms ? `${s.phantoms} phantom${s.phantoms > 1 ? 's' : ''}` : 'No phantom'}
+              </small>
             </span>
           </span>
         )
@@ -478,7 +482,7 @@ export function SiteValidationPage() {
         <AustraliaMap sites={data.sites} onSelect={open} selected={picked} />
         <Typography.Text style={{ fontSize: 12, color: '#8B9AB3' }}>
           Pulsing: needs attention (overdue, files missing or due soon). Under each city: equipment on site (PET = PET/CT, SPECT =
-          SPECT/CT, DC = dose calibrator, GC = gamma counter).
+          SPECT/CT, DC = dose calibrator, GC = gamma counter) and how many phantoms it has.
         </Typography.Text>
       </section>
 

@@ -57,6 +57,7 @@ def test_page_figures(sites: list[SiteRecord]) -> None:
     assert pins["demo-111"].status == Status.NONE and not pins["demo-111"].attention
     assert pins["demo-109"].status == Status.BOOKED  # booked scan, nothing validated yet
     assert pins["demo-101"].equipment == ["PET", "SPECT", "DC", "GC"]
+    assert pins["demo-101"].phantoms == 2 and pins["demo-111"].phantoms == 0
     assert all(s.status.value != "Passed" for s in r.scans)
     assert [x.days for x in r.reviews] == sorted(x.days for x in r.reviews)
 

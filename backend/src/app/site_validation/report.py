@@ -163,6 +163,8 @@ class SitePin(BaseModel):
     """Short names of the equipment on site (PET, SPECT, DC, GC)."""
     attention: bool
     """Overdue, files missing or due soon: the pin pulses."""
+    phantoms: int
+    """How many phantoms the site has (Phantoms and QA/QC section)."""
 
 
 class ReviewDue(BaseModel):
@@ -229,6 +231,7 @@ def build_site_validation(
                 status=worst,
                 equipment=[SHORT[e.kind] for e in sorted(s.equipment, key=lambda e: EQUIPMENT.index(e.kind))],
                 attention=worst in (Status.OVERDUE, Status.FILES_MISSING, Status.DUE_SOON),
+                phantoms=len(s.qa.phantoms),
             )
         )
     names = {s.id: s for s in sites}

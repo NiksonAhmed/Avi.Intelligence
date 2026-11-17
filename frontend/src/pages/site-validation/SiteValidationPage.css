@@ -166,3 +166,12 @@
   color: #5b6b82;
   text-align: right;
 }
+
+.sv-label small.sv-phantoms {
+  color: #ffd27a;
+}
+
+.sv-label small.sv-phantoms.none {
+  color: #8b9ab3;
+  font-weight: 500;
+}

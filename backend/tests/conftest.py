@@ -10,6 +10,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["SHAREPOINT_MODE"] = "mock"
 os.environ["SIMPLETRIALS_MODE"] = "mock"  # tests never call the real SimpleTrials API
 os.environ["VIEDOC_MODE"] = "mock"  # ... nor a real Viedoc study (the demo study is used)
+os.environ["SITE_VALIDATION_MODE"] = "mock"  # ... nor the site validation SharePoint lists
 os.environ["CONFERENCES_MODE"] = "mock"  # ... nor the BD SharePoint list (demo conferences)
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["ANTHROPIC_API_KEY"] = ""

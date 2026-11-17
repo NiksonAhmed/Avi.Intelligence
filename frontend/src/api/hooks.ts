@@ -20,6 +20,7 @@ import type {
   RiskFilters,
   ConferencesReport,
   SiteDetail,
+  SiteValidationConnector,
   SiteValidationReport,
   OverviewData,
   RiskListResponse,
@@ -228,6 +229,26 @@ export function useRefreshSiteValidation() {
   return useMutation({
     mutationFn: () => apiRequest<void>('/site-validation/refresh', { method: 'POST' }),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['site-validation'] })
+    },
+  })
+}
+
+export function useSiteValidationConnector(enabled: boolean) {
+  return useQuery({
+    queryKey: ['connectors', 'site-validation'],
+    queryFn: () => apiRequest<SiteValidationConnector>('/connectors/site-validation'),
+    enabled,
+    retry: false,
+  })
+}
+
+export function useTestSiteValidationConnector() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<SiteValidationConnector>('/connectors/site-validation/test', { method: 'POST' }),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['connectors', 'site-validation'], data)
       await queryClient.invalidateQueries({ queryKey: ['site-validation'] })
     },
   })

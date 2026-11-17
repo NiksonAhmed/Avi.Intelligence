@@ -18,7 +18,9 @@ import {
   useMe,
   useSharePointStatus,
   useSimpleTrialsStatus,
+  useSiteValidationConnector,
   useSyncSimpleTrials,
+  useTestSiteValidationConnector,
 } from '../../api/hooks'
 import type { ConnectorColumn } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
@@ -102,6 +104,92 @@ function SimpleTrialsCard({ enabled }: { enabled: boolean }) {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             Read-only: Avi.Intelligence never changes SimpleTrials data. Credentials live only in the
             server&apos;s .env file. See docs/simpletrials-setup.md.
+          </Typography.Text>
+        </Flex>
+      )}
+    </Card>
+  )
+}
+
+const SKIPPED_LABELS: Record<string, string> = {
+  sites: 'site rows (no name, or no city/state to place on the map)',
+  validations: 'validation rows (unknown equipment or isotope, or no date)',
+  scans: 'phantom scan rows (unknown equipment, isotope or status, or no date)',
+  not_matched_to_a_site: 'rows whose site name matches no site in the Sites list',
+}
+
+function SiteValidationCard({ enabled }: { enabled: boolean }) {
+  const { data, isLoading } = useSiteValidationConnector(enabled)
+  const test = useTestSiteValidationConnector()
+  const demo = data?.mode === 'demo'
+  const skipped = Object.entries(data?.skipped ?? {}).filter(([, n]) => n > 0)
+  return (
+    <Card
+      title="SharePoint: site validation (physics)"
+      style={{ marginTop: 16 }}
+      data-testid="site-validation-connector"
+      extra={
+        data && (
+          <Tag color={demo ? 'warning' : data.ok ? 'success' : 'error'}>
+            {demo ? 'Demo mode' : data.ok ? 'Connected' : 'Problem'}
+          </Tag>
+        )
+      }
+    >
+      {isLoading || !data ? (
+        <Skeleton active />
+      ) : (
+        <Flex vertical gap={12}>
+          {demo && <Typography.Text type="secondary">{data.reason}</Typography.Text>}
+          {data.error && <Alert type="error" showIcon title="Could not read the lists" description={data.error} />}
+          <Descriptions
+            column={1}
+            size="small"
+            items={[
+              { key: 'mode', label: 'Mode', children: demo ? 'Demo sites' : 'SharePoint lists, read-only' },
+              ...(demo
+                ? []
+                : [
+                    { key: 'site', label: 'SharePoint site', children: data.site_url ?? '—' },
+                    {
+                      key: 'lists',
+                      label: 'Lists',
+                      children: `Sites: ${data.sites_list ?? '—'} · Validations: ${data.validations_list ?? 'not set'} · Phantom scans: ${data.scans_list ?? 'not set'}`,
+                    },
+                    { key: 'last', label: 'Last read', children: data.fetched_at ? formatDateTime(data.fetched_at) : 'Not read yet' },
+                    {
+                      key: 'counts',
+                      label: 'Read',
+                      children: `${data.counts.sites ?? 0} sites, ${data.counts.validations ?? 0} validations, ${data.counts.scans ?? 0} phantom scans`,
+                    },
+                  ]),
+            ]}
+          />
+          {skipped.length > 0 && (
+            <Alert
+              type="warning"
+              showIcon
+              title="Some rows could not be used"
+              description={
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {skipped.map(([k, n]) => (
+                    <li key={k}>
+                      {n} {SKIPPED_LABELS[k] ?? k}
+                    </li>
+                  ))}
+                </ul>
+              }
+            />
+          )}
+          <div>
+            <Button icon={<ReloadOutlined />} loading={test.isPending} onClick={() => test.mutate()} disabled={demo}>
+              Test connection
+            </Button>
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Read-only: Avi.Intelligence never changes the lists. Set the list names in the server&apos;s .env file
+            (SITE_VALIDATION_SITES_LIST, SITE_VALIDATION_VALIDATIONS_LIST, SITE_VALIDATION_SCANS_LIST). See
+            docs/site-validation-setup.md for the columns.
           </Typography.Text>
         </Flex>
       )}
@@ -247,6 +335,8 @@ export function ConnectorsPage() {
       </Card>
 
       <SimpleTrialsCard enabled={allowed} />
+
+      <SiteValidationCard enabled={allowed} />
 
       <AssistantAdminCard />
 

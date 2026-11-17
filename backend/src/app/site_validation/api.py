@@ -3,28 +3,35 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
+from app.connectors.sharepoint.graph_client import GraphError
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.reports.excel import Sheet, build_workbook
 from app.studies.clock import today
 
-from .models import ISOTOPES, EquipmentKind, SiteSourceInfo, SiteValidationSource
+from .models import ISOTOPES, EquipmentKind, SiteRecord, SiteSourceInfo, SiteValidationSource
 from .report import LABEL, SiteDetail, SiteValidation, build_site_detail, build_site_validation
+from .sharepoint import SharePointSiteSource
 from .source import get_site_source
 
 SCAN_HEADER = ["Site", "City", "Study", "Equipment", "Isotope", "Status", "Date"]
 
 router = APIRouter(prefix="/site-validation", tags=["Site validation"])
+# Administration: the connector's status (connector managers only).
+admin_router = APIRouter(prefix="/connectors/site-validation", tags=["Administration"])
 
 Source = Annotated[SiteValidationSource, Depends(get_site_source)]
 Viewer = Annotated[CurrentUser, Depends(require(Permission.SITE_VALIDATION_VIEW))]
+Manager = Annotated[CurrentUser, Depends(require(Permission.CONNECTOR_MANAGE))]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -122,3 +129,70 @@ async def export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
     )
+
+
+# ---- Administration: is the SharePoint connection working? ---------------------------------------------
+
+
+class SiteValidationConnector(BaseModel):
+    mode: Literal["demo", "sharepoint"]
+    reason: str | None
+    """Why demo data is shown."""
+    site_url: str | None
+    sites_list: str | None
+    validations_list: str | None
+    scans_list: str | None
+    ok: bool | None
+    """None in demo mode; else whether the last read worked."""
+    error: str | None
+    fetched_at: datetime | None
+    counts: dict[str, int]
+    skipped: dict[str, int]
+    """Rows that could not be used (missing name, place, equipment, isotope or date; or no matching site)."""
+
+
+async def _status(source: SiteValidationSource, refresh: bool) -> SiteValidationConnector:
+    info = source.info()
+    settings = get_settings()
+    if not isinstance(source, SharePointSiteSource):
+        return SiteValidationConnector(
+            mode="demo", reason=info.reason, site_url=None, sites_list=None, validations_list=None,
+            scans_list=None, ok=None, error=None, fetched_at=None, counts={}, skipped={},
+        )  # fmt: skip
+    sites_list, validations_list, scans_list = source.lists()
+    error = None
+    sites: list[SiteRecord] = []
+    try:
+        sites = await source.list_sites(force_refresh=refresh)
+    except GraphError as e:
+        error = f"SharePoint answered {e.status}: {e}"
+    except Exception as e:  # noqa: BLE001 (shown to the administrator, never raised)
+        error = f"Could not read the lists: {type(e).__name__}"
+    return SiteValidationConnector(
+        mode="sharepoint",
+        reason=None,
+        site_url=settings.site_validation_sharepoint_site_url or settings.sharepoint_site_url,
+        sites_list=sites_list,
+        validations_list=validations_list,
+        scans_list=scans_list,
+        ok=error is None,
+        error=error,
+        fetched_at=source.info().fetched_at,
+        counts={
+            "sites": len(sites),
+            "validations": sum(len(s.validations) for s in sites),
+            "scans": sum(len(s.scans) for s in sites),
+        },
+        skipped=source.skipped,
+    )
+
+
+@admin_router.get("", response_model=SiteValidationConnector)
+async def connector_status(source: Source, user: Manager) -> SiteValidationConnector:
+    return await _status(source, refresh=False)
+
+
+@admin_router.post("/test", response_model=SiteValidationConnector)
+async def connector_test(source: Source, user: Manager) -> SiteValidationConnector:
+    """Read the lists again now and report what came back (read-only)."""
+    return await _status(source, refresh=True)

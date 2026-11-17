@@ -118,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(overview.router, prefix="/api/v1")
     app.include_router(conferences_api.router, prefix="/api/v1")
     app.include_router(site_validation_api.router, prefix="/api/v1")
+    app.include_router(site_validation_api.admin_router, prefix="/api/v1")
     # Data Management: answers 404 unless DATA_MANAGEMENT_ENABLED=true.
     app.include_router(data_management_api.router, prefix="/api/v1")
     return app

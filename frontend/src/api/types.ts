@@ -1040,6 +1040,8 @@ export interface SitePin {
   status: ValidationStatus
   equipment: string[]
   attention: boolean
+  /** How many phantoms the site has. */
+  phantoms: number
 }
 
 export interface SiteValidationReport {
@@ -1094,4 +1096,19 @@ export interface SiteDetail {
   rows: ValidationRow[]
   source_url: string | null
   source: SiteSourceInfo
+}
+
+/** Administration: the site validation SharePoint connection. */
+export interface SiteValidationConnector {
+  mode: 'demo' | 'sharepoint'
+  reason: string | null
+  site_url: string | null
+  sites_list: string | null
+  validations_list: string | null
+  scans_list: string | null
+  ok: boolean | null
+  error: string | null
+  fetched_at: string | null
+  counts: Record<string, number>
+  skipped: Record<string, number>
 }
