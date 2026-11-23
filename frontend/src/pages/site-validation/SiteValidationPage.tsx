@@ -19,6 +19,7 @@ const STATUS: Record<ValidationStatus, { label: string; colour: string; bg: stri
   due_soon: { label: 'Due soon', colour: '#FFC24B', bg: '#FDF0D5', fg: '#7A4A06', symbol: '!' },
   booked: { label: 'Booked', colour: '#8FA3FF', bg: '#ECEFFD', fg: '#3442A3', symbol: '○' },
   in_date: { label: 'In date', colour: '#2EE6A0', bg: '#DCF5E7', fg: '#14633A', symbol: '✓' },
+  reported: { label: "Calibrated (site's answer)", colour: '#38BDF8', bg: '#E0F2FE', fg: '#075985', symbol: '✓' },
   none: { label: 'Nothing validated', colour: '#A9B4D0', bg: '#EEF0F4', fg: '#3D4757', symbol: '–' },
 }
 const SCAN: Record<ScanStatus, { bg: string; fg: string }> = {
@@ -156,8 +157,8 @@ function SitePanel({ siteId, onClose }: { siteId?: string; onClose: () => void }
           </Typography.Title>
           <SiteGrid site={site} />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            ✓ in date · ! due within 60 days or files missing · ✕ overdue · ○ phantom scan booked · – not validated · grey: not on
-            site. Hover a cell for dates.
+            ✓ in date (blue ✓: calibrated, as the site reported) · ! due within 60 days or files missing · ✕ overdue · ○ phantom
+            scan booked · – not validated · grey: not on site. Hover a cell for details.
           </Typography.Text>
 
           <Typography.Title level={5} style={{ margin: '4px 0 0' }}>
@@ -333,8 +334,12 @@ export function SiteValidationPage() {
   }
   if (isLoading || !data) return <Skeleton active paragraph={{ rows: 12 }} />
 
-  const worst = data.tiles.find((t) => t.key === 'overdue')?.value !== '0' ? STATUS.overdue.colour : STATUS.in_date.colour
-  const legend: ValidationStatus[] = ['in_date', 'due_soon', 'overdue', 'files_missing', 'booked', 'none']
+  const survey = data.source.mode === 'survey'
+  const overdue = Number(data.tiles.find((t) => t.key === 'overdue')?.value ?? 0)
+  const worst = survey ? STATUS.reported.colour : overdue > 0 ? STATUS.overdue.colour : STATUS.in_date.colour
+  const legend: ValidationStatus[] = survey
+    ? ['reported', 'none']
+    : ['in_date', 'due_soon', 'overdue', 'files_missing', 'booked', 'none']
 
   return (
     <Flex vertical gap={16}>
@@ -344,9 +349,9 @@ export function SiteValidationPage() {
         extra={
           <Flex gap={8} wrap align="center" className="no-print">
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {data.source.mode === 'sharepoint'
-                ? `SharePoint · ${data.source.fetched_at ? formatDateTime(data.source.fetched_at) : 'not read yet'}`
-                : 'Demo data'}
+              {data.source.mode === 'demo'
+                ? 'Demo data'
+                : `${survey ? 'Feasibility survey' : 'SharePoint'} · ${data.source.fetched_at ? formatDateTime(data.source.fetched_at) : 'not read yet'}`}
             </Typography.Text>
             <RuleInfo rule={data.rules.status ?? ''} />
             <Button
@@ -370,6 +375,14 @@ export function SiteValidationPage() {
           </Flex>
         }
       />
+      {survey && (
+        <Alert
+          type="info"
+          showIcon
+          title="From the sites' own feasibility survey answers"
+          description={data.source.reason ?? ''}
+        />
+      )}
       {data.source.mode === 'demo' && (
         <Alert
           type="warning"

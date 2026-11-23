@@ -2,6 +2,29 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-23: Site validation shows the sites' own survey answers (until physics' record is connected)
+
+**Decisions (user, 23 Nov 2026):** until Avion physics' own validation record (dates, certificates, phantom
+scans) is found and connected, Site validation reads the same Site Feasibility Tracker as Site feasibility
+(one shared download, `TrackerDownload`) and shows each site's latest survey answers, clearly labelled.
+- Source order: the three SharePoint lists when `SITE_VALIDATION_SITES_LIST` is set; otherwise the tracker's
+  survey answers when the tracker is connected; otherwise demo sites. `SITE_VALIDATION_MODE=mock` = demo.
+- Read from the Feasibility sheet's imaging sections: equipment on site (PET/CT, SPECT/CT, dose calibrators,
+  gamma counter: manufacturer, model, installation, last calibration, maintenance), "calibrated (by ARTnet)
+  for <isotope>?" answers with any certification date and certificate/files answer, phantom availability,
+  QA/QC routines, PACS, DICOM export and transfer methods. Licensed isotopes, ARTnet accreditation and the
+  radiopharmacy come from the same answers Site feasibility uses. Contacts are never read.
+- New status **"Calibrated (site's answer)"** (blue ✓): never due, overdue or files missing, even with a date,
+  because physics has not checked it. A blue banner says the answers are the sites' own.
+- **Tiles from what the tracker holds** (user, 23 Nov: the tracker gains rows, not new columns): sites
+  reporting a calibration; ARTnet accredited; PET/CT or SPECT/CT on site (or the filtered equipment);
+  phantoms listed; answers over 12 months old (amber, same rule as Site feasibility's survey due). Review
+  dates, files missing and phantom-scan tiles return only with physics' own record. Phantom details stay in
+  each site panel and on the map.
+- First read of the real file (counts only): 31 sites (same ids as Site feasibility); equipment on site:
+  15 dose calibrators, 10 PET/CT, 9 SPECT/CT, 9 gamma counters; 8 calibrations reported at 5 sites (most
+  answers are "No" or "Not known"); 1 with a date; 7 sites list phantoms.
+
 ## 2026-11-23: Avion's Entra roles
 
 **Decisions (user, 23 Nov 2026):** Avion created app roles in Entra with its own names, kept as they are;

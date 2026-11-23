@@ -7,15 +7,21 @@ from functools import lru_cache
 
 from app.connectors.sharepoint.graph_client import GraphClient
 from app.core.config import Settings, get_settings
+from app.site_feasibility.source import get_tracker_download
+from app.site_feasibility.workbook import TrackerDownload
 
 from .demo import DemoSiteSource
 from .models import SiteValidationSource
 from .sharepoint import SharePointSiteSource, parse_field_map
+from .survey import SurveySiteSource
 
 
-def build_site_source(settings: Settings) -> SiteValidationSource:
+def build_site_source(settings: Settings, tracker: TrackerDownload | None = None) -> SiteValidationSource:
     if settings.site_validation_mode == "mock":
         return DemoSiteSource("SITE_VALIDATION_MODE is set to mock.")
+    if not settings.site_validation_sites_list and tracker is not None:
+        # Until physics' own record is connected: the sites' answers in the feasibility tracker.
+        return SurveySiteSource(tracker)
     if not settings.site_validation_sites_list:
         return DemoSiteSource(
             "The site validation lists are not connected to SharePoint yet (SITE_VALIDATION_SITES_LIST)."
@@ -41,7 +47,7 @@ def build_site_source(settings: Settings) -> SiteValidationSource:
 
 @lru_cache
 def _cached() -> SiteValidationSource:
-    return build_site_source(get_settings())
+    return build_site_source(get_settings(), get_tracker_download())
 
 
 def get_site_source() -> SiteValidationSource:

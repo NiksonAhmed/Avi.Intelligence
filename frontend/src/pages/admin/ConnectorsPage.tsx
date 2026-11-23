@@ -122,6 +122,7 @@ function SiteValidationCard({ enabled }: { enabled: boolean }) {
   const { data, isLoading } = useSiteValidationConnector(enabled)
   const test = useTestSiteValidationConnector()
   const demo = data?.mode === 'demo'
+  const survey = data?.mode === 'survey'
   const skipped = Object.entries(data?.skipped ?? {}).filter(([, n]) => n > 0)
   return (
     <Card
@@ -130,8 +131,8 @@ function SiteValidationCard({ enabled }: { enabled: boolean }) {
       data-testid="site-validation-connector"
       extra={
         data && (
-          <Tag color={demo ? 'warning' : data.ok ? 'success' : 'error'}>
-            {demo ? 'Demo mode' : data.ok ? 'Connected' : 'Problem'}
+          <Tag color={demo ? 'warning' : !data.ok ? 'error' : survey ? 'processing' : 'success'}>
+            {demo ? 'Demo mode' : !data.ok ? 'Problem' : survey ? 'Feasibility survey' : 'Connected'}
           </Tag>
         )
       }
@@ -140,16 +141,33 @@ function SiteValidationCard({ enabled }: { enabled: boolean }) {
         <Skeleton active />
       ) : (
         <Flex vertical gap={12}>
-          {demo && <Typography.Text type="secondary">{data.reason}</Typography.Text>}
+          {(demo || survey) && <Typography.Text type="secondary">{data.reason}</Typography.Text>}
           {data.error && <Alert type="error" showIcon title="Could not read the lists" description={data.error} />}
           <Descriptions
             column={1}
             size="small"
             items={[
-              { key: 'mode', label: 'Mode', children: demo ? 'Demo sites' : 'SharePoint lists, read-only' },
+              {
+                key: 'mode',
+                label: 'Mode',
+                children: demo
+                  ? 'Demo sites'
+                  : survey
+                    ? "The sites' answers in the Site Feasibility Tracker, read-only"
+                    : 'SharePoint lists, read-only',
+              },
               ...(demo
                 ? []
-                : [
+                : survey
+                  ? [
+                      { key: 'last', label: 'Last read', children: data.fetched_at ? formatDateTime(data.fetched_at) : 'Not read yet' },
+                      {
+                        key: 'counts',
+                        label: 'Read',
+                        children: `${data.counts.sites ?? 0} sites, ${data.counts.validations ?? 0} calibrations reported by the sites`,
+                      },
+                    ]
+                  : [
                     { key: 'site', label: 'SharePoint site', children: data.site_url ?? '—' },
                     {
                       key: 'lists',

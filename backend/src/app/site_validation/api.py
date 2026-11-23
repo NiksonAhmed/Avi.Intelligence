@@ -49,11 +49,19 @@ def _isotope(isotope: str | None) -> str | None:
     return isotope
 
 
+SOURCE_LABEL = {
+    "sharepoint": "SharePoint (read-only)",
+    "survey": "The sites' feasibility survey answers (read-only); not verified by Avion physics",
+    "demo": "Demo data",
+}
+
+
 async def _report(
     source: SiteValidationSource, equipment: EquipmentKind | None, isotope: str | None
 ) -> SiteValidationResponse:
     sites = await source.list_sites()
-    r = build_site_validation(sites, today(), equipment=equipment, isotope=_isotope(isotope))
+    survey = source.info().mode == "survey"
+    r = build_site_validation(sites, today(), equipment=equipment, isotope=_isotope(isotope), survey=survey)
     return SiteValidationResponse(**r.model_dump(), source=source.info())
 
 
@@ -100,7 +108,7 @@ async def export(
     about = [
         ("Report", "Site validation status"),
         ("Filters", filters),
-        ("Source", "SharePoint (read-only)" if r.source.mode == "sharepoint" else "Demo data"),
+        ("Source", SOURCE_LABEL[r.source.mode]),
         ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
         *[(k.capitalize(), v) for k, v in r.rules.items()],
     ]
@@ -135,7 +143,7 @@ async def export(
 
 
 class SiteValidationConnector(BaseModel):
-    mode: Literal["demo", "sharepoint"]
+    mode: Literal["demo", "sharepoint", "survey"]
     reason: str | None
     """Why demo data is shown."""
     site_url: str | None
@@ -154,6 +162,20 @@ class SiteValidationConnector(BaseModel):
 async def _status(source: SiteValidationSource, refresh: bool) -> SiteValidationConnector:
     info = source.info()
     settings = get_settings()
+    if info.mode == "survey":
+        sites_read: list[SiteRecord] = []
+        problem = None
+        try:
+            sites_read = await source.list_sites(force_refresh=refresh)
+        except Exception as e:  # noqa: BLE001 (shown to the administrator, never raised)
+            problem = f"Could not read the feasibility tracker: {type(e).__name__}"
+        return SiteValidationConnector(
+            mode="survey", reason=info.reason, site_url=None, sites_list=None, validations_list=None,
+            scans_list=None, ok=problem is None, error=problem, fetched_at=source.info().fetched_at,
+            counts={"sites": len(sites_read), "validations": sum(len(s.validations) for s in sites_read),
+                    "scans": 0},
+            skipped={},
+        )  # fmt: skip
     if not isinstance(source, SharePointSiteSource):
         return SiteValidationConnector(
             mode="demo", reason=info.reason, site_url=None, sites_list=None, validations_list=None,

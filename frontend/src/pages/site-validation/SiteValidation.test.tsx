@@ -64,6 +64,28 @@ describe('Site validation', () => {
     expect(screen.getByText('Scanned')).toBeInTheDocument()
   })
 
+  it("from the sites' survey answers: says so, and shows the site's-answer status", async () => {
+    const survey = {
+      ...report(),
+      headline: "5 of 31 sites report a calibration in their feasibility survey. These are the sites' own answers, not verified by Avion physics.",
+      tiles: [
+        { key: 'validated', label: 'Sites reporting a calibration', value: '5 of 31', note: "In the site's own survey answers", tone: 'info' as const },
+        { key: 'stale', label: 'Answers over 12 months old', value: '9', note: 'Ask the site for a new survey', tone: 'warn' as const },
+      ],
+      sites: [{ id: 'tr-a', name: 'Site A', city: 'Melbourne', state: 'VIC', lat: -37.81, lon: 144.96, status: 'reported' as const, equipment: ['SPECT'], attention: false, phantoms: 0 }],
+      reviews: [],
+      scans: [],
+      source: { mode: 'survey' as const, reason: 'From the sites’ own feasibility survey answers.', fetched_at: '2026-11-23T05:00:00Z' },
+    }
+    mockApi({ '/me': adminUser, '/site-validation': survey })
+    renderRoute('/site-validation')
+    expect(await screen.findByText("From the sites' own feasibility survey answers")).toBeInTheDocument()
+    expect(screen.queryByText(/Demo sites/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Feasibility survey ·/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Site A, Melbourne VIC: Calibrated \(site's answer\)/ })).toBeInTheDocument()
+    expect(screen.getByText('Ask the site for a new survey')).toBeInTheDocument()
+  })
+
   it('a filter goes into the address', async () => {
     mockApi({ '/me': adminUser, '/site-validation': report() })
     const { router } = renderRoute('/site-validation')

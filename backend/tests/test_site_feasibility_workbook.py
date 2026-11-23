@@ -19,6 +19,7 @@ from app.site_feasibility.models import FeasibilitySite
 from app.site_feasibility.report import Recommendation, build_site_feasibility, recommendation_of
 from app.site_feasibility.source import build_feasibility_source
 from app.site_feasibility.workbook import (
+    TrackerDownload,
     WorkbookFeasibilitySource,
     a_date,
     city_of,
@@ -346,13 +347,14 @@ class FakeGraph:
 def test_source_downloads_once_then_caches() -> None:
     graph = FakeGraph(workbook([ALPHA]))
     now = [0.0]
-    source = WorkbookFeasibilitySource(
+    download = TrackerDownload(
         graph,  # type: ignore[arg-type]
         drive_id="b!drive",
         item_id="ITEM",
         cache_seconds=300,
         clock=lambda: now[0],
     )
+    source = WorkbookFeasibilitySource(download)
 
     async def go() -> list[FeasibilitySite]:
         await source.list_sites()

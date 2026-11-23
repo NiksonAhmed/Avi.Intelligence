@@ -59,10 +59,14 @@ class Validation(BaseModel):
     isotope: str
     validated_by: str
     """e.g. "ARTnet" or "Core lab"."""
-    validated_on: date
-    files_available: bool
+    validated_on: date | None = None
+    """None only for a site's own survey answer without a date."""
+    files_available: bool | None = None
+    """None: not recorded."""
     next_review: date | None = None
     """Set only when the physicist or core lab gives a date; otherwise 12 months after validation."""
+    reported_by_site: bool = False
+    """From the site's feasibility survey, not Avion physics' record: never due or overdue."""
 
 
 class PhantomScan(BaseModel):
@@ -117,7 +121,8 @@ class SiteRecord(BaseModel):
 
 
 class SiteSourceInfo(BaseModel):
-    mode: Literal["demo", "sharepoint"]
+    mode: Literal["demo", "sharepoint", "survey"]
+    """survey: the sites' own answers in the feasibility tracker (see survey.py)."""
     reason: str | None = None
     fetched_at: datetime | None = None
 

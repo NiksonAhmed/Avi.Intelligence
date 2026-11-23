@@ -1005,11 +1005,12 @@ export interface ReportSummary {
 // --- Site validation status (physics request 2026-11-17) ------------------------------------------
 
 export type EquipmentKind = 'PET/CT' | 'SPECT/CT' | 'Dose calibrator' | 'Gamma counter'
-export type ValidationStatus = 'overdue' | 'files_missing' | 'due_soon' | 'booked' | 'in_date' | 'none'
+export type ValidationStatus = 'overdue' | 'files_missing' | 'due_soon' | 'booked' | 'in_date' | 'reported' | 'none'
 export type ScanStatus = 'Booked' | 'Scanned' | 'Submitted to core lab' | 'Passed' | 'Failed'
 
 export interface SiteSourceInfo {
-  mode: 'demo' | 'sharepoint'
+  /** survey: the sites' own answers in the feasibility tracker, not physics' record. */
+  mode: 'demo' | 'sharepoint' | 'survey'
   reason: string | null
   fetched_at: string | null
 }
@@ -1100,7 +1101,7 @@ export interface SiteDetail {
 
 /** Administration: the site validation SharePoint connection. */
 export interface SiteValidationConnector {
-  mode: 'demo' | 'sharepoint'
+  mode: 'demo' | 'sharepoint' | 'survey'
   reason: string | null
   site_url: string | null
   sites_list: string | null

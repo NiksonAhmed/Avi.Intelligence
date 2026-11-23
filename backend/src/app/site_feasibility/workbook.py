@@ -9,6 +9,7 @@ never read.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import time
@@ -440,7 +441,8 @@ def _rows(ws: Any) -> list[tuple[Any, ...]]:
     return [tuple(r) for r in ws.iter_rows(values_only=True)]
 
 
-def read_tracker(content: bytes, *, source_url: str | None = None) -> TrackerResult:
+def load_sheets(content: bytes) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+    """The Feasibility and Post-Activation sheets' cell values (no other sheet is read)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # openpyxl warns about Excel features it does not read
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
@@ -449,30 +451,51 @@ def read_tracker(content: bytes, *, source_url: str | None = None) -> TrackerRes
             post = _rows(wb[POST_ACTIVATION_SHEET]) if POST_ACTIVATION_SHEET in wb.sheetnames else []
         finally:
             wb.close()
+    return raw, post
 
+
+@dataclass
+class Surveys:
+    """Each site's latest survey row, with the site as Site feasibility shows it. Site validation reads the
+    same rows, so a site has the same id on both pages."""
+
+    latest: list[tuple[FeasibilitySite, Row]]
+    nameless: int
+    older: int
+
+
+def latest_surveys(raw: list[tuple[Any, ...]], source_url: str | None = None) -> Surveys:
     headers, at = read_headers(raw)
     rows = [Row(v, headers) for v in raw[at + 1 :]]
     rows = [r for r in rows if r.filled()]
-    mapped = [map_feasibility(r) for r in rows]
-    nameless = sum(1 for r, m in zip(rows, mapped, strict=True) if m is None and r.answers() >= 5)
+    mapped = [(map_feasibility(r), r) for r in rows]
+    nameless = sum(1 for m, r in mapped if m is None and r.answers() >= 5)
 
     # One site (name + department) can have several surveys: keep the latest.
-    latest: dict[str, FeasibilitySite] = {}
-    for site in (s for s in mapped if s is not None):
+    latest: dict[str, tuple[FeasibilitySite, Row]] = {}
+    for site, row in ((m, r) for m, r in mapped if m is not None):
         key = site_key(site.name, site.department)
         held = latest.get(key)
-        if held is None or (site.last_survey or date.min) >= (held.last_survey or date.min):
-            latest[key] = site
+        if held is None or (site.last_survey or date.min) >= (held[0].last_survey or date.min):
+            latest[key] = (site, row)
 
     used: set[str] = set()
-    sites: list[FeasibilitySite] = []
-    for site in latest.values():
+    out: list[tuple[FeasibilitySite, Row]] = []
+    for site, row in latest.values():
         base = "tr-" + (_slug(f"{site.name} {site.department or ''}") or "site")
         sid, n = base, 2
         while sid in used:
             sid, n = f"{base}-{n}", n + 1
         used.add(sid)
-        sites.append(site.model_copy(update={"id": sid, "source_url": source_url}))
+        out.append((site.model_copy(update={"id": sid, "source_url": source_url}), row))
+    found = sum(1 for m, _ in mapped if m is not None)
+    return Surveys(latest=out, nameless=nameless, older=found - len(out))
+
+
+def read_tracker(content: bytes, *, source_url: str | None = None) -> TrackerResult:
+    raw, post = load_sheets(content)
+    surveys = latest_surveys(raw, source_url)
+    sites = [site for site, _ in surveys.latest]
 
     unmatched = 0
     if post:
@@ -505,8 +528,8 @@ def read_tracker(content: bytes, *, source_url: str | None = None) -> TrackerRes
     return TrackerResult(
         sites=sites,
         skipped={
-            "rows_without_a_site_name": nameless,
-            "older_surveys_of_the_same_site": sum(1 for s in mapped if s is not None) - len(sites),
+            "rows_without_a_site_name": surveys.nameless,
+            "older_surveys_of_the_same_site": surveys.older,
             "post_activation_rows_not_matched": unmatched,
         },
     )
@@ -515,8 +538,16 @@ def read_tracker(content: bytes, *, source_url: str | None = None) -> TrackerRes
 # ---- the source ----------------------------------------------------------------------------------
 
 
-class WorkbookFeasibilitySource:
-    """Downloads the tracker from SharePoint (read-only) and keeps the result for a few minutes."""
+@dataclass(frozen=True)
+class TrackerFile:
+    content: bytes
+    web_url: str | None
+    fetched_at: datetime
+
+
+class TrackerDownload:
+    """Downloads the tracker from SharePoint (read-only) and keeps it for a few minutes. One download is
+    shared by Site feasibility and Site validation."""
 
     def __init__(
         self,
@@ -529,23 +560,42 @@ class WorkbookFeasibilitySource:
     ) -> None:
         self._client, self._drive_id, self._item_id = client, drive_id, item_id
         self._cache_seconds, self._clock = cache_seconds, clock
-        self._cache: list[FeasibilitySite] | None = None
+        self._file: TrackerFile | None = None
         self._expires = 0.0
-        self._fetched_at: datetime | None = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def fetched_at(self) -> datetime | None:
+        return self._file.fetched_at if self._file else None
+
+    async def get(self, *, force_refresh: bool = False) -> TrackerFile:
+        async with self._lock:
+            if self._file is not None and not force_refresh and self._clock() < self._expires:
+                return self._file
+            item_path = f"/drives/{self._drive_id}/items/{self._item_id}"
+            item = await self._client.get(f"{item_path}?$select=name,webUrl,lastModifiedDateTime")
+            url = await self._client.download_url(f"{item_path}/content")
+            content = b"".join([chunk async for chunk in self._client.stream_url(url)])
+            self._file = TrackerFile(content, item.get("webUrl"), datetime.now(UTC))
+            self._expires = self._clock() + self._cache_seconds
+            return self._file
+
+
+class WorkbookFeasibilitySource:
+    """Site feasibility from the tracker; re-read only when a new copy has been downloaded."""
+
+    def __init__(self, download: TrackerDownload) -> None:
+        self._download = download
+        self._read_for: datetime | None = None
+        self._sites: list[FeasibilitySite] = []
         self.skipped: dict[str, int] = {}
 
     def info(self) -> FeasibilitySourceInfo:
-        return FeasibilitySourceInfo(mode="sharepoint", fetched_at=self._fetched_at)
+        return FeasibilitySourceInfo(mode="sharepoint", fetched_at=self._download.fetched_at)
 
     async def list_sites(self, *, force_refresh: bool = False) -> list[FeasibilitySite]:
-        if self._cache is not None and not force_refresh and self._clock() < self._expires:
-            return self._cache
-        item_path = f"/drives/{self._drive_id}/items/{self._item_id}"
-        item = await self._client.get(f"{item_path}?$select=name,webUrl,lastModifiedDateTime")
-        url = await self._client.download_url(f"{item_path}/content")
-        content = b"".join([chunk async for chunk in self._client.stream_url(url)])
-        result = read_tracker(content, source_url=item.get("webUrl"))
-        self.skipped = result.skipped
-        self._cache, self._expires = result.sites, self._clock() + self._cache_seconds
-        self._fetched_at = datetime.now(UTC)
-        return result.sites
+        file = await self._download.get(force_refresh=force_refresh)
+        if file.fetched_at != self._read_for:
+            result = read_tracker(file.content, source_url=file.web_url)
+            self._sites, self.skipped, self._read_for = result.sites, result.skipped, file.fetched_at
+        return self._sites
