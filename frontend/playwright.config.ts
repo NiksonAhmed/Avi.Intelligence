@@ -35,6 +35,13 @@ export default defineConfig({
         APP_ENV: 'test',
         SHAREPOINT_MODE: 'mock',
         SIMPLETRIALS_MODE: 'mock', // never call the real SimpleTrials API from tests
+        VIEDOC_MODE: 'mock', // ... nor a real Viedoc study: the demo study is used
+        SITE_VALIDATION_MODE: 'mock', // ... nor the site validation SharePoint lists: demo sites
+        SITE_FEASIBILITY_MODE: 'mock', // ... nor the feasibility tracker: demo sites
+        CONFERENCES_MODE: 'mock', // ... nor the BD SharePoint list: demo conferences
+        ENTRA_TENANT_ID: '', // development sign-in: browser tests never sign in to Microsoft
+        ENTRA_CLIENT_ID: '',
+        DATA_MANAGEMENT_ENABLED: 'true',
         DATABASE_URL: 'sqlite:///./e2e.db',
         DEV_USER_ROLE: 'admin',
         ANTHROPIC_API_KEY: '', // e2e never calls the paid AI API; the assistant runs search-only

@@ -15,7 +15,18 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -59,6 +70,15 @@ class Study(Base):
     )
     etmf_documents: Mapped[list[EtmfDocument]] = relationship(
         back_populates="study", cascade="all, delete-orphan"
+    )
+    action_items: Mapped[list[StudyActionItem]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudyActionItem.opened_on"
+    )
+    deviations: Mapped[list[StudyDeviation]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudyDeviation.occurred_on"
+    )
+    site_visits: Mapped[list[StudySiteVisit]] = relationship(
+        back_populates="study", cascade="all, delete-orphan", order_by="StudySiteVisit.starts_on"
     )
 
     __table_args__ = (Index("ux_studies_external", "tenant_id", "source", "external_id", unique=True),)
@@ -139,6 +159,103 @@ class EtmfDocument(Base):
     version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     study: Mapped[Study] = relationship(back_populates="etmf_documents")
+
+
+class StudyActionItem(Base):
+    """A read-only copy of one SimpleTrials action item, shown as an issue "From SimpleTrials"."""
+
+    __tablename__ = "study_action_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    subcategory: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    site_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignee: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opened_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="action_items")
+
+
+class StudyDeviation(Base):
+    """A read-only copy of one SimpleTrials protocol deviation (no subject IDs, no people)."""
+
+    __tablename__ = "study_deviations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    site_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    site_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    severity: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subject_level: Mapped[bool] = mapped_column(Boolean, default=False)
+    occurred_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    identified_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reported_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reportable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="deviations")
+
+
+class StudySiteVisit(Base):
+    """A read-only copy of one SimpleTrials site visit (site visits only; no people or notes)."""
+
+    __tablename__ = "study_site_visits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    external_id: Mapped[str] = mapped_column(String(255))
+    site_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ends_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    study: Mapped[Study] = relationship(back_populates="site_visits")
+
+
+class SiteAssignment(Base):
+    """Which sites a person (a CRA) covers, set by an administrator in Avi.Intelligence.
+
+    SimpleTrials' API does not say which CRA covers which site (its site contacts are site staff), so
+    administrators assign them here. Keyed on the study and SimpleTrials' own site id, because site rows
+    are rebuilt on every sync."""
+
+    __tablename__ = "site_assignments"
+    __table_args__ = (UniqueConstraint("tenant_id", "person_id", "study_id", "site_external_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(64), index=True)
+    person_id: Mapped[str] = mapped_column(String(255), index=True)
+    study_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("studies.id", ondelete="CASCADE"), index=True
+    )
+    site_external_id: Mapped[str] = mapped_column(String(255))
+    assigned_by_name: Mapped[str] = mapped_column(String(255))
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class ConnectorSync(Base):

@@ -16,12 +16,16 @@ from app.connectors.simpletrials.api_client import SimpleTrialsClient, SimpleTri
 from app.connectors.simpletrials.live import ApiStudyConnector
 from app.connectors.simpletrials.mapping import (
     as_int,
+    map_action_items,
+    map_deviations,
     map_documents,
     map_plan,
     map_site,
+    map_site_visits,
     map_study,
     normalise_name,
     parse_key_names,
+    severity_label,
 )
 from app.core.config import Settings as RealSettings
 from app.core.logging import JsonFormatter, redact
@@ -196,6 +200,25 @@ DOCUMENTS: list[dict[str, Any]] = [
     {"id": 5, "active": False, "placeholder": True, "document_path": "Sandbox Study/02. Other"},
     {"id": 6, "active": True, "placeholder": True, "document_path": "", "title": "Loose document"},
 ]
+
+
+ACTIONS = [
+    {
+        "id": 11, "number": 1, "active": True, "unblinded": False, "category": "site",
+        "category_display": "Site", "subcategory": "site_visit", "subcategory_display": "Site Visit",
+        "priority": "high", "priority_display": "High", "status": "new", "site_number": "1001",
+        "site_display_name": "Sandbox Clinic", "description": "Collect   the missing\nlog", "response": None,
+        "assigned_to_display_name": "Smith, Alex", "assigned_to_id": 991, "opened_by_id": 992,
+        "opened_on": "2026-10-01", "due_on": "2026-10-15", "closed_on": None,
+        "created_at": "2026-10-01T09:00:00.000+00:00",
+    },
+    {
+        "id": 12, "number": 2, "active": True, "unblinded": False, "category": "study", "status": "closed",
+        "priority": "normal", "closed_on": "2026-10-20", "opened_on": "2026-10-02", "description": "Done",
+    },
+    {"id": 13, "number": 3, "active": True, "unblinded": True, "status": "new", "description": "Unblinded"},
+    {"id": 14, "number": 4, "active": False, "status": "new", "description": "Deleted"},
+]  # fmt: skip
 
 
 class FakeApi:
@@ -387,17 +410,33 @@ class TestConnector:
             "sites",
             "tasks",
             "documents",
+            "action_items",
+            "protocol_deviations",
+            "site_visits",
         ]
         assert connector.info().mode == "api" and connector.info().scope == "study"
-        # No eTMF access (404 here): the study still syncs and the previous eTMF copy is kept.
-        assert records[0].documents is None
+        # No eTMF or action item access (404 here): the study still syncs; previous copies are kept.
+        assert records[0].documents is None and records[0].action_items is None
+        assert records[0].deviations is None and records[0].site_visits is None
 
     def test_reads_etmf_metadata_and_never_patient_data(self) -> None:
-        api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS, "documents": DOCUMENTS})
+        api = FakeApi(
+            {"study": STUDY, "sites": SITES, "tasks": TASKS, "documents": DOCUMENTS, "action_items": ACTIONS}
+        )
         records = asyncio.run(ApiStudyConnector(api.client()).fetch_studies())
         assert records[0].documents is not None and len(records[0].documents) == 3
+        assert records[0].action_items is not None and len(records[0].action_items) == 2
         paths = {r.url.path.rsplit("/", 1)[-1] for r in api.requests}
-        assert "subjects" not in paths and paths <= {"study", "sites", "tasks", "documents"}
+        allowed = {
+            "study",
+            "sites",
+            "tasks",
+            "documents",
+            "action_items",
+            "protocol_deviations",
+            "site_visits",
+        }
+        assert "subjects" not in paths and paths <= allowed
 
     def test_workspace_scope_lists_studies(self) -> None:
         api = FakeApi(
@@ -487,3 +526,150 @@ def test_map_documents() -> None:
         and "smith" not in str(site.model_dump())
     )
     assert docs["6"].section == "Unfiled" and docs["6"].name == "Loose document"
+
+
+def test_map_action_items() -> None:
+    items = {a.external_id: a for a in map_action_items(ACTIONS)}
+    assert set(items) == {"11", "12"}  # unblinded and inactive items are never read
+    first = items["11"]
+    assert (first.number, first.category, first.subcategory, first.priority, first.status) == (
+        "1",
+        "Site",
+        "Site Visit",
+        "High",
+        "New",
+    )
+    assert (first.site_number, first.site_name, first.assignee) == ("1001", "Sandbox Clinic", "Smith, Alex")
+    assert first.description == "Collect the missing log" and first.closed is False
+    assert (first.opened_on, first.due_on) == (date(2026, 10, 1), date(2026, 10, 15))
+    assert "991" not in str(first.model_dump())  # user ids are not kept
+    done = items["12"]
+    assert done.closed is True and done.closed_on == date(2026, 10, 20) and done.category == "Study"
+
+
+def test_severity_wording() -> None:
+    assert severity_label("major") == "Major" and severity_label("Important") == "Major"
+    assert severity_label("non-important") == "Minor" and severity_label("Not important") == "Minor"
+    assert severity_label("minor") == "Minor" and severity_label("CRITICAL") == "Critical"
+    assert severity_label("Other") == "Other" and severity_label(None) is None and severity_label("") is None
+
+
+def test_map_deviations_reads_the_real_simpletrials_fields() -> None:
+    """Field names as returned by the SimpleTrials sandbox (2026-11-13); values made up."""
+    items = [
+        {
+            "id": 11, "active": True, "category": None, "severity": "minor", "severity_display": "Minor",
+            "site_id": 501, "site_number": "1001", "site_name": "Sandbox Clinic", "description": "Late visit",
+            "subject_id": 9001, "subject_number": "002-003", "scope_display": "Subject #: 002-003",
+            "all_subjects": False, "date_deviated": "2026-11-01", "date_discovered": None,
+            "date_entered": "2026-11-03", "date_actioned": "2026-11-10", "action_taken": "Retrained",
+            "irbec_submission_status": None, "irbec_submission_date": None,
+        },
+        {
+            "id": 12, "active": True, "severity": "major", "site_id": 501, "description": "Wrong kit",
+            "subject_id": None, "all_subjects": True, "date_deviated": "2026-11-05",
+            "date_discovered": "2026-11-06",
+            "date_entered": "2026-11-07", "date_actioned": None, "irbec_submission_status": "submitted",
+            "irbec_submission_date": "2026-11-08",
+        },
+    ]  # fmt: skip
+    rows = {d.external_id: d for d in map_deviations(items)}
+    first, second = rows["11"], rows["12"]
+    assert (first.severity, first.status, first.closed, first.closed_on) == (
+        "Minor",
+        "Actioned",
+        True,
+        date(2026, 11, 10),
+    )
+    assert (first.occurred_on, first.identified_on, first.reportable) == (
+        date(2026, 11, 1),
+        date(2026, 11, 3),
+        None,
+    )
+    assert (
+        first.subject_level is True
+        and "002-003" not in str(first.model_dump())
+        and "9001" not in str(first.model_dump())
+    )
+    assert (second.severity, second.status, second.closed, second.subject_level) == (
+        "Major",
+        "Open",
+        False,
+        False,
+    )
+    assert (second.identified_on, second.reported_on, second.reportable) == (
+        date(2026, 11, 6),
+        date(2026, 11, 8),
+        True,
+    )
+
+
+def test_map_deviations_reads_name_variants_and_never_subjects() -> None:
+    items = [
+        {
+            "id": 1, "number": 7, "active": True, "site_id": 501, "site_number": "1001",
+            "site_display_name": "Sandbox Clinic", "category_display": "Informed Consent",
+            "severity": "important", "status": "open", "description": "Consent  version\nwrong",
+            "subject_id": 9001, "deviation_date": "2026-09-01", "identified_on": "2026-09-05",
+            "reported_on": "2026-09-06", "irb_reportable": True,
+        },
+        {
+            "id": 2, "classification_display": "Minor", "deviation_type": "visit_window",
+            "status_display": "Closed", "occurred_on": "2026-08-01", "resolved_on": "2026-08-20",
+        },
+        {"id": 3, "unblinded": True, "severity": "major"},
+        {"id": 4, "active": False, "severity": "minor"},
+    ]  # fmt: skip
+    rows = {d.external_id: d for d in map_deviations(items)}
+    assert set(rows) == {"1", "2"}  # unblinded and inactive deviations are never read
+    first = rows["1"]
+    assert (first.number, first.site_external_id, first.site_number, first.category, first.severity) == (
+        "7",
+        "501",
+        "1001",
+        "Informed Consent",
+        "Major",
+    )
+    assert first.subject_level is True and "9001" not in str(first.model_dump())  # no subject IDs kept
+    assert (first.occurred_on, first.identified_on, first.reported_on) == (
+        date(2026, 9, 1),
+        date(2026, 9, 5),
+        date(2026, 9, 6),
+    )
+    assert first.reportable is True and first.closed is False and first.description == "Consent version wrong"
+    second = rows["2"]
+    assert (second.severity, second.category, second.closed, second.closed_on) == (
+        "Minor",
+        "Visit window",
+        True,
+        date(2026, 8, 20),
+    )
+    assert second.subject_level is False and second.occurred_on == date(2026, 8, 1)
+
+
+def test_map_site_visits_keeps_site_visits_only_and_no_people() -> None:
+    items = [
+        {
+            "id": 1, "active": True, "category": "site", "site_id": 501,
+            "subcategory_display": "Routine Monitoring Visit",
+            "status_display": "Confirmed", "start_datetime": "2026-11-17T09:00:00+00:00",
+            "end_datetime": "2026-11-17T17:00:00+00:00", "contact_full_name": "Jane Monitor",
+            "notes": "Bring the delegation log", "location": "Room 4", "title": "IMV 3",
+        },
+        {"id": 2, "active": True, "category": "site", "site_id": 501, "subject_id": 9001,
+         "start_datetime": "2026-11-18T09:00:00"},
+        {"id": 3, "active": True, "category": "site", "site_id": 501, "canceled_at": "2026-11-01T00:00:00"},
+        {"id": 4, "active": False, "category": "site", "site_id": 501},
+        {"id": 5, "active": True, "category": "subject", "site_id": 501},
+    ]  # fmt: skip
+    rows = map_site_visits(items)
+    assert [r.external_id for r in rows] == ["1"]  # subject, cancelled, inactive and non-site visits left out
+    visit = rows[0]
+    assert (visit.site_external_id, visit.kind, visit.status) == (
+        "501",
+        "Routine Monitoring Visit",
+        "Confirmed",
+    )
+    assert visit.starts_on == date(2026, 11, 17) and visit.ends_on == date(2026, 11, 17)
+    kept = str(visit.model_dump())
+    assert "Jane" not in kept and "delegation" not in kept and "Room" not in kept and "IMV" not in kept

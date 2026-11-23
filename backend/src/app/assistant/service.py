@@ -369,7 +369,13 @@ def answer_study_question(
     *, db: Session, user: CurrentUser, question: str, parsed: StudyQuestion, data: StudyData, demo: bool
 ) -> AskResponse:
     """A study question, answered from the SimpleTrials copy by fixed rules (no AI, no cost)."""
-    result = answer(data, parsed)
+    return record_lookup_answer(db=db, user=user, question=question, result=answer(data, parsed), demo=demo)
+
+
+def record_lookup_answer(
+    *, db: Session, user: CurrentUser, question: str, result: StudyAnswer, demo: bool
+) -> AskResponse:
+    """Keeps the question and its fixed-rule answer (studies or a module's topic) and returns it."""
     interaction = AssistantInteraction(
         tenant_id=user.tenant_id,
         user_id=user.id,

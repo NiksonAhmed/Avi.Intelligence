@@ -10,7 +10,16 @@ from datetime import date, timedelta
 
 from app.studies.clock import today as app_today
 
-from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyConnectorInfo, StudyRecord
+from .models import (
+    ActionItemRecord,
+    DeviationRecord,
+    EtmfDocumentRecord,
+    MilestoneRecord,
+    SiteRecord,
+    SiteVisitRecord,
+    StudyConnectorInfo,
+    StudyRecord,
+)
 
 
 def _d(today: date, days: int | None) -> date | None:
@@ -220,7 +229,9 @@ class MockStudyConnector:
         return StudyConnectorInfo(mode="mock", mock_reason=self._reason)
 
     async def fetch_studies(self) -> list[StudyRecord]:
-        return with_demo_documents(demo_studies())
+        return with_demo_site_visits(
+            with_demo_deviations(with_demo_action_items(with_demo_documents(demo_studies())))
+        )
 
 
 # Demo eTMF structure: (section, folder, document name, expires).
@@ -315,4 +326,129 @@ def with_demo_documents(studies: list[StudyRecord], today: date | None = None) -
                     )
                 )
         study.documents = docs
+    return studies
+
+
+# Demo action items per study: (site index, category, subcategory, priority, description, opened days ago,
+# due in days (negative = overdue), closed days ago or None).
+_ACTIONS: list[tuple[int, str, str, str, str, int, int, int | None]] = [
+    (0, "Site", "Site Visit", "High", "Demo: chase missing ISF delegation log signatures", 20, -6, None),
+    (0, "Site", "Site Visit", "Normal", "Demo: confirm temperature log for IP storage", 9, 5, None),
+    (1, "Site", "Site Visit", "Normal", "Demo: retrain staff on eCRF completion", 40, -20, 12),
+]
+
+
+def with_demo_action_items(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo SimpleTrials action items (read-only issues) to the first study."""
+    t = today or app_today()
+    if not studies:
+        return studies
+    first = studies[0]
+    items: list[ActionItemRecord] = []
+    for n, (site, category, sub, priority, text, opened, due, closed) in enumerate(_ACTIONS, start=1):
+        s = first.sites[site] if site < len(first.sites) else None
+        items.append(
+            ActionItemRecord(
+                external_id=f"{first.external_id}-A{n}",
+                number=str(n),
+                category=category,
+                subcategory=sub,
+                priority=priority,
+                status="Closed" if closed is not None else "New",
+                closed=closed is not None,
+                site_number=s.site_number if s else None,
+                site_name=s.name if s else None,
+                description=text,
+                assignee="Demo CRA",
+                opened_on=_d(t, -opened),
+                due_on=_d(t, due),
+                closed_on=_d(t, -closed) if closed is not None else None,
+            )
+        )
+    first.action_items = items
+    for other in studies[1:]:
+        other.action_items = []
+    return studies
+
+
+# Demo protocol deviations: (study index, site index, category, severity, description, occurred days ago,
+# identified days after, closed days ago or None, subject level).
+_DEVIATIONS: list[tuple[int, int, str, str, str, int, int, int | None, bool]] = [
+    (0, 0, "Visit schedule", "Minor", "Demo: Day 7 visit outside the window", 150, 3, 120, True),
+    (0, 0, "Informed consent", "Major", "Demo: re-consent to amendment 1 not obtained", 95, 10, None, True),
+    (0, 0, "Procedures", "Minor", "Demo: ECG not done at screening", 60, 2, 40, True),
+    (0, 1, "Eligibility", "Major", "Demo: enrolled with an exclusion lab value", 45, 20, None, True),
+    (0, 1, "Visit schedule", "Minor", "Demo: Day 1 visit one day late", 30, 1, None, True),
+    (0, 1, "Investigational product", "Critical", "Demo: IP stored too warm", 12, 1, None, False),
+    (1, 0, "Procedures", "Minor", "Demo: vital signs taken after dosing", 70, 5, 50, True),
+    (1, 0, "Visit schedule", "Minor", "Demo: unscheduled visit not recorded", 20, 4, None, True),
+]  # fmt: skip
+
+
+def with_demo_deviations(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo protocol deviations to the first two studies."""
+    t = today or app_today()
+    for study in studies:
+        study.deviations = []
+    for n, (si, site_i, category, severity, text, ago, found, closed, subject) in enumerate(_DEVIATIONS, 1):
+        if si >= len(studies):
+            continue
+        study = studies[si]
+        site = study.sites[site_i] if site_i < len(study.sites) else None
+        assert study.deviations is not None
+        study.deviations.append(
+            DeviationRecord(
+                external_id=f"{study.external_id}-PD{n}",
+                number=f"PD-{n:03d}",
+                site_external_id=site.external_id if site else None,
+                site_number=site.site_number if site else None,
+                site_name=site.name if site else None,
+                category=category,
+                severity=severity,
+                status="Closed" if closed is not None else "Open",
+                closed=closed is not None,
+                description=text,
+                subject_level=subject,
+                occurred_on=_d(t, -ago),
+                identified_on=_d(t, -ago + found),
+                reported_on=_d(t, -ago + found + 2),
+                closed_on=_d(t, -closed) if closed is not None else None,
+                reportable=severity in ("Major", "Critical"),
+            )
+        )
+    return studies
+
+
+# Demo site visits: (site index, kind, status, starts in days (negative = past)).
+_VISITS: list[tuple[int, str, str, int]] = [
+    (0, "Routine Monitoring Visit", "Confirmed", 4),
+    (1, "Routine Monitoring Visit", "Scheduled", 12),
+    (0, "Routine Monitoring Visit", "Completed", -30),
+    (2, "Initiation", "Scheduled", 45),
+]
+
+
+def with_demo_site_visits(studies: list[StudyRecord], today: date | None = None) -> list[StudyRecord]:
+    """Adds demo site visits (site visits only, no people) to the first study."""
+    t = today or app_today()
+    for study in studies:
+        study.site_visits = []
+    if not studies:
+        return studies
+    first = studies[0]
+    visits: list[SiteVisitRecord] = []
+    for n, (site_i, kind, status, starts) in enumerate(_VISITS, start=1):
+        if site_i >= len(first.sites):
+            continue
+        visits.append(
+            SiteVisitRecord(
+                external_id=f"{first.external_id}-V{n}",
+                site_external_id=first.sites[site_i].external_id,
+                kind=kind,
+                status=status,
+                starts_on=_d(t, starts),
+                ends_on=_d(t, starts),
+            )
+        )
+    first.site_visits = visits
     return studies

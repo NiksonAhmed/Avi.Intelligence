@@ -3,7 +3,7 @@ import type { TableColumnsType } from 'antd'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
-import { useStudies } from '../../api/hooks'
+import { useHasPermission, useStudies } from '../../api/hooks'
 import type { StudyFilters, StudySummary } from '../../api/types'
 import { PageHeader } from '../../components/PageHeader'
 import { StudySourceBanner } from '../../components/StudySourceBanner'
@@ -52,16 +52,21 @@ export function StudyPortfolioPage() {
   const hasFilters = Boolean(filters.q || filters.status || filters.phase)
   const rules = data?.rules ?? {}
 
+  // Business Development sees the portfolio only: no Command Centre (user decision 2026-11-16).
+  const canOpen = useHasPermission('study.read')
   const columns: TableColumnsType<StudySummary> = [
     {
       title: 'Protocol',
       dataIndex: 'protocol_number',
       width: 140,
-      render: (p: string, s) => (
-        <Link to={`/command-centre/${s.id}`} style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-          {p}
-        </Link>
-      ),
+      render: (p: string, s) =>
+        canOpen ? (
+          <Link to={`/command-centre/${s.id}`} style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+            {p}
+          </Link>
+        ) : (
+          <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{p}</span>
+        ),
     },
     {
       title: 'Study',
@@ -69,7 +74,7 @@ export function StudyPortfolioPage() {
       minWidth: 280,
       render: (title: string, s) => (
         <div>
-          <Link to={`/command-centre/${s.id}`}>{title}</Link>
+          {canOpen ? <Link to={`/command-centre/${s.id}`}>{title}</Link> : title}
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {[s.sponsor, s.therapeutic_area].filter(Boolean).join(' · ')}

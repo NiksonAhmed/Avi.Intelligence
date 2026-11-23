@@ -15,6 +15,13 @@ Field choices (verified against the Sandbox study, Nov 2026):
     Superseded versions (another record's precursor_id) and attachments of other records
     (parent_type set, e.g. payments) are left out. File names, URLs, descriptions and user ids are
     not kept.
+  * Action items (/action_items): number, category_display / subcategory_display, priority_display,
+    status, site_number / site_display_name, opened_on / due_on / closed_on, description, response and
+    assigned_to_display_name. Closed when closed_on is set or the status says so. Unblinded and
+    inactive items are left out; user ids are not kept.
+  * Protocol deviations (/protocol_deviations): NOT YET VERIFIED against a real record (the sandbox study
+    had none on 12 Nov 2026), so each field is read from SimpleTrials' usual name variants (see
+    map_deviations). Subject IDs and people are never kept; unblinded and inactive records are left out.
 Nothing is inferred beyond this; missing values stay empty.
 """
 
@@ -24,7 +31,15 @@ import re
 from datetime import date
 from typing import Any
 
-from .models import EtmfDocumentRecord, MilestoneRecord, SiteRecord, StudyRecord
+from .models import (
+    ActionItemRecord,
+    DeviationRecord,
+    EtmfDocumentRecord,
+    MilestoneRecord,
+    SiteRecord,
+    SiteVisitRecord,
+    StudyRecord,
+)
 
 
 def as_int(value: Any) -> int | None:
@@ -255,6 +270,203 @@ def map_documents(docs: list[dict[str, Any]]) -> list[EtmfDocumentRecord]:
                 expires_on=as_date(d.get("expires_on")),
                 expired=str(d.get("expiration_status") or "").lower() == "expired",
                 version=_text(d.get("doc_version"), 32),
+            )
+        )
+    return records
+
+
+CLOSED_STATUSES = {"closed", "complete", "completed", "resolved", "done", "cancelled", "canceled"}
+
+
+def _label(value: Any, limit: int = 64) -> str | None:
+    text = _text(value, limit)
+    return text.replace("_", " ").capitalize() if text and text.islower() else text
+
+
+def map_action_items(items: list[dict[str, Any]]) -> list[ActionItemRecord]:
+    records: list[ActionItemRecord] = []
+    for a in items:
+        if a.get("id") is None or a.get("active") is False or a.get("unblinded") is True:
+            continue  # unblinded items must never reach blinded staff
+        status = _text(a.get("status_display") or a.get("status"), 64)
+        closed_on = as_date(a.get("closed_on"))
+        records.append(
+            ActionItemRecord(
+                external_id=str(a["id"]),
+                number=_text(str(a["number"]) if a.get("number") is not None else None, 32),
+                category=_label(a.get("category_display") or a.get("category")),
+                subcategory=_label(a.get("subcategory_display") or a.get("subcategory")),
+                priority=_label(a.get("priority_display") or a.get("priority"), 32),
+                status=_label(status),
+                closed=closed_on is not None or (status or "").lower() in CLOSED_STATUSES,
+                site_number=_text(a.get("site_number"), 64),
+                site_name=_text(a.get("site_display_name"), 255),
+                description=_text(a.get("description"), 2000),
+                response=_text(a.get("response"), 2000),
+                assignee=_text(a.get("assigned_to_display_name"), 255),
+                opened_on=as_date(a.get("opened_on")) or as_date(a.get("created_at")),
+                due_on=as_date(a.get("due_on")),
+                closed_on=closed_on,
+            )
+        )
+    return records
+
+
+def _first(d: dict[str, Any], *keys: str) -> Any:
+    """The first non-empty value among SimpleTrials' name variants for one field."""
+    for key in keys:
+        value = d.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def severity_label(value: Any) -> str | None:
+    """Critical / Major / Minor from SimpleTrials' wording (e.g. "important", "non-important")."""
+    text = _text(str(value) if value is not None and not isinstance(value, str) else value, 64)
+    if not text:
+        return None
+    t = text.lower().replace("_", " ").replace("-", " ")
+    if "critical" in t:
+        return "Critical"
+    if t.startswith(("non ", "not ", "minor")) or "minor" in t:
+        return "Minor"
+    if "major" in t or "important" in t or "significant" in t:
+        return "Major"
+    return text[:1].upper() + text[1:]
+
+
+def _flag(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("yes", "true", "y", "1"):
+        return True
+    if isinstance(value, str) and value.strip().lower() in ("no", "false", "n", "0"):
+        return False
+    return None
+
+
+def _irbec_reportable(d: dict[str, Any]) -> bool | None:
+    """IRB/EC submission status: "not required" means not reportable; any other value means it is."""
+    status = _first(d, "irbec_submission_status_display", "irbec_submission_status")
+    if status is None:
+        return True if d.get("irbec_submission_date") else None
+    text = str(status).lower().replace("_", " ")
+    return not ("not" in text or text in ("no", "none", "n/a", "na"))
+
+
+def map_site_visits(items: list[dict[str, Any]]) -> list[SiteVisitRecord]:
+    """Site visits only (never subject visits); no people, titles, notes or locations are kept.
+
+    Inactive and cancelled visits are left out."""
+    records: list[SiteVisitRecord] = []
+    for v in items:
+        if v.get("id") is None or v.get("active") is False or v.get("canceled_at"):
+            continue
+        if v.get("subject_id") is not None or v.get("subject_visit_def_id") is not None:
+            continue  # a subject (patient) visit: patient-level data is never read
+        category = str(v.get("category") or "site").lower()
+        if category != "site":
+            continue
+        site = v.get("site_id")
+        records.append(
+            SiteVisitRecord(
+                external_id=str(v["id"]),
+                site_external_id=str(site) if site is not None else None,
+                kind=_label(_first(v, "subcategory_display", "subcategory"), 100),
+                status=_label(_first(v, "status_display", "status")),
+                starts_on=as_date(v.get("start_datetime")),
+                ends_on=as_date(v.get("end_datetime")),
+            )
+        )
+    return records
+
+
+def map_deviations(items: list[dict[str, Any]]) -> list[DeviationRecord]:
+    records: list[DeviationRecord] = []
+    for d in items:
+        if d.get("id") is None or d.get("active") is False or d.get("unblinded") is True:
+            continue
+        # SimpleTrials has no deviation status: one with a Date Actioned counts as closed ("Actioned").
+        closed_on = as_date(
+            _first(d, "date_actioned", "closed_on", "resolved_on", "closed_at", "resolved_at", "date_closed")
+        )
+        status = _label(_first(d, "status_display", "status")) or ("Actioned" if closed_on else "Open")
+        site = _first(d, "site_id", "study_site_id")
+        number = _first(d, "number", "deviation_number", "pd_number")
+        records.append(
+            DeviationRecord(
+                external_id=str(d["id"]),
+                number=_text(str(number), 32) if number is not None else None,
+                site_external_id=str(site) if site is not None else None,
+                site_number=_text(_first(d, "site_number"), 64),
+                site_name=_text(_first(d, "site_display_name", "site_name"), 255),
+                category=_label(
+                    _first(
+                        d,
+                        "category_display",
+                        "category",
+                        "deviation_type_display",
+                        "deviation_type",
+                        "type_display",
+                        "type",
+                    ),
+                ),  # fmt: skip
+                severity=severity_label(
+                    _first(
+                        d,
+                        "severity_display",
+                        "severity",
+                        "classification_display",
+                        "classification",
+                        "importance_display",
+                        "importance",
+                        "grade",
+                    ),
+                ),  # fmt: skip
+                status=status,
+                closed=closed_on is not None or (status or "").lower() in CLOSED_STATUSES,
+                description=_text(_first(d, "description", "summary", "title", "details"), 2000),
+                subject_level=_first(d, "subject_id", "subject_number", "subject") is not None,
+                occurred_on=as_date(
+                    _first(
+                        d,
+                        "date_deviated",
+                        "deviation_date",
+                        "occurred_on",
+                        "occurrence_date",
+                        "date_of_deviation",
+                        "event_date",
+                        "start_date",
+                    ),
+                ),  # fmt: skip
+                identified_on=as_date(
+                    _first(
+                        d,
+                        "date_discovered",
+                        "identified_on",
+                        "discovered_on",
+                        "identified_date",
+                        "awareness_date",
+                        "opened_on",
+                        "date_entered",
+                        "created_at",
+                    ),
+                ),  # fmt: skip
+                reported_on=as_date(
+                    _first(
+                        d,
+                        "irbec_submission_date",
+                        "reported_on",
+                        "date_reported",
+                        "reported_at",
+                        "submitted_on",
+                    )
+                ),
+                closed_on=closed_on,
+                reportable=_flag(_first(d, "irb_reportable", "reportable", "report_to_irb", "ec_reportable"))
+                if _first(d, "irb_reportable", "reportable", "report_to_irb", "ec_reportable") is not None
+                else _irbec_reportable(d),
             )
         )
     return records

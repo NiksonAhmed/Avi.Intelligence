@@ -68,6 +68,7 @@ function report(overrides: Partial<StudyDeliveryReport> = {}): StudyDeliveryRepo
       activation: 'Activated: SimpleTrials has an actual activation date.',
     },
     source: { mode: 'mock', as_of: '2026-11-09T00:00:00Z', sandbox_only: false, snapshot_days: 1 },
+    enrolment_history: [{ day: '2026-11-16', enrolled: 9, target: 80 }],
     ...overrides,
   }
 }
@@ -96,10 +97,10 @@ describe('report chart helpers', () => {
 describe('Reports and Insights page', () => {
   it('shows the Study delivery tiles, timeline, enrolment and activation', async () => {
     mockApi({ '/me': adminUser, '/reports/study-delivery': report() })
-    renderRoute('/reports')
+    renderRoute('/reports?tab=study')
 
     expect(await screen.findByTestId('tile-on_plan')).toHaveTextContent('2 of 4')
-    expect(screen.getByText('Demo data: SimpleTrials is not connected')).toBeInTheDocument()
+    expect(screen.getByText('Demo data')).toBeInTheDocument()
     expect(screen.getAllByTestId('timeline-row')).toHaveLength(2)
     expect(screen.getByText('Slipped +66d')).toBeInTheDocument()
     expect(screen.getByText(/0 of 1 completed key milestones were on time/)).toBeInTheDocument()
@@ -110,18 +111,22 @@ describe('Reports and Insights page', () => {
 
     expect(screen.getByTestId('activation-figure')).toHaveTextContent('5 of 7')
     expect(screen.getByText('5 days late')).toBeInTheDocument()
-    expect(screen.getByText(/Trend charts .* appear after two weeks/)).toBeInTheDocument()
+    // Charts show (enrolment, milestone timeline, site activation); the sites table is folded under More detail.
+    expect(screen.getAllByTestId('timeline-row')[0]?.closest('details')).toBeNull()
+    expect(screen.getAllByTestId('site-table-row')).toHaveLength(3)
+    expect(screen.getByTestId('more-detail')).toHaveTextContent(/More detail: all sites \(3\)/)
+    expect(screen.getByTestId('enrolment-history')).toHaveTextContent('The line builds up from')
   })
 
   it('filters by study and keeps the filter in the URL and the Excel link', async () => {
     const fetchMock = mockApi({ '/me': viewerUser, '/reports/study-delivery': report() })
-    const { router } = renderRoute('/reports')
+    const { router } = renderRoute('/reports?tab=study')
     await screen.findByTestId('tile-on_plan')
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Filter by study' }))
     await userEvent.click(await screen.findByTitle('DEMO-CV-201 · Cardiology study'))
 
-    expect(router.state.location.search).toBe('?study=22222222-2222-2222-2222-222222222222')
+    expect(router.state.location.search).toBe('?tab=study&study=22222222-2222-2222-2222-222222222222')
     expect(
       fetchMock.mock.calls.some(([u]) =>
         String(u).includes('/api/v1/reports/study-delivery?study_id=22222222-2222-2222-2222-222222222222'),
@@ -136,7 +141,7 @@ describe('Reports and Insights page', () => {
   it('prints the report for PDF', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined)
     mockApi({ '/me': adminUser, '/reports/study-delivery': report() })
-    renderRoute('/reports')
+    renderRoute('/reports?tab=study')
     await screen.findByTestId('tile-on_plan')
     await userEvent.click(screen.getByRole('button', { name: /PDF/ }))
     expect(print).toHaveBeenCalled()
@@ -147,9 +152,8 @@ describe('Reports and Insights page', () => {
       '/me': adminUser,
       '/reports/study-delivery': report({ source: { mode: 'api', as_of: '2026-11-09T00:00:00Z', sandbox_only: true, snapshot_days: 20 } }),
     })
-    renderRoute('/reports')
-    expect(await screen.findByText('SimpleTrials sandbox study')).toBeInTheDocument()
-    expect(screen.getByText(/Source: SimpleTrials/)).toBeInTheDocument()
-    expect(screen.queryByText(/Trend charts/)).not.toBeInTheDocument()
+    renderRoute('/reports?tab=study')
+    expect(await screen.findByText('Sandbox study')).toBeInTheDocument()
+    expect(screen.getByText(/As of .* · SimpleTrials/)).toBeInTheDocument()
   })
 })

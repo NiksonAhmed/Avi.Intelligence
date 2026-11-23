@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.audit.models import AuditEvent
 from app.audit.service import record_event
+from app.auth.entra import entra_config
 from app.auth.rbac import ROLE_LABELS, CurrentUser, Permission, get_current_user, require
 from app.connectors.sharepoint import get_sop_connector
 from app.connectors.sharepoint.models import ConnectionCheck, ConnectorInfo, SopConnector
+from app.core.config import get_settings
 from app.db.session import get_db
 
 router = APIRouter()
@@ -39,7 +41,7 @@ def me(user: Annotated[CurrentUser, Depends(get_current_user)]) -> MeResponse:
         role=user.role.value,
         role_label=ROLE_LABELS[user.role],
         permissions=sorted(p.value for p in user.permissions),
-        auth_mode="development",
+        auth_mode="entra" if entra_config(get_settings()) else "development",
     )
 
 

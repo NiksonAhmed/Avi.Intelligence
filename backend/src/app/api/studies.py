@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
@@ -16,12 +16,11 @@ from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector, StudyConnectorInfo
 from app.db.session import get_db
 from app.studies.clock import today
-from app.studies.models import ConnectorSync, Risk, Study, Task
+from app.studies.models import ConnectorSync, Study, StudyActionItem, Task
 from app.studies.rules import (
     RULES,
     TASK_CLOSED,
     MilestoneState,
-    RiskStatus,
     ScheduleState,
     enrolment_percent,
     milestone_state,
@@ -118,6 +117,7 @@ class StudySummary(BaseModel):
     next_milestone: MilestoneOut | None
     open_tasks: int
     open_risks: int
+    """Open SimpleTrials action items (shown as issues)."""
 
 
 class StudyListResponse(BaseModel):
@@ -205,11 +205,13 @@ def _open_counts(db: Session, tenant_id: str) -> tuple[dict[str, int], dict[str,
         ).all()
         if study_id
     }
+    # Risks and issues come from SimpleTrials only: open action items per study.
     risks = dict(
         db.execute(
-            select(Risk.study_id, func.count())
-            .where(Risk.tenant_id == tenant_id, Risk.status != RiskStatus.CLOSED.value)
-            .group_by(Risk.study_id)
+            select(StudyActionItem.study_id, func.count())
+            .join(Study)
+            .where(Study.tenant_id == tenant_id, StudyActionItem.closed.is_(False))
+            .group_by(StudyActionItem.study_id)
         ).all()
     )
     return tasks, risks
@@ -262,7 +264,7 @@ def _load_studies(db: Session, tenant_id: str, source: str) -> list[Study]:
 async def list_studies(
     db: Db,
     connector: Connector,
-    user: Annotated[CurrentUser, Depends(require(Permission.STUDY_READ))],
+    user: Annotated[CurrentUser, Depends(require(Permission.PORTFOLIO_READ))],
     q: Annotated[str | None, Query(max_length=200)] = None,
     status: Annotated[str | None, Query(max_length=64)] = None,
     phase: Annotated[str | None, Query(max_length=32)] = None,
@@ -355,6 +357,48 @@ async def simpletrials_sync(
     user: Annotated[CurrentUser, Depends(require(Permission.CONNECTOR_MANAGE))],
 ) -> StudySource:
     run = await sync_studies(db, connector, tenant_id=user.tenant_id, triggered_by=user.name)
+    record_event(
+        db,
+        user,
+        action="connector.synced",
+        entity_type="connector",
+        entity_id=CONNECTOR_NAME,
+        summary=f"Synced studies from SimpleTrials ({'succeeded' if run.ok else 'failed'})",
+        details={"mode": run.mode, "ok": run.ok, "counts": run.counts, "error": run.error},
+        request=request,
+    )
+    return study_source(db, connector, user.tenant_id)
+
+
+SYNC_REUSE = timedelta(minutes=2)
+"""A press of Sync now this soon after a successful sync reuses it instead of asking SimpleTrials again."""
+_SYNCING: set[str] = set()
+"""Tenants with a SimpleTrials sync running now."""
+
+
+def _aware(at: datetime) -> datetime:
+    return at if at.tzinfo else at.replace(tzinfo=UTC)
+
+
+@router.post("/studies/sync", response_model=StudySource)
+async def studies_sync(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Annotated[CurrentUser, Depends(require(Permission.STUDY_SYNC))],
+) -> StudySource:
+    """Sync now for everyone (read-only towards SimpleTrials); one at a time, recent syncs reused."""
+    if user.tenant_id in _SYNCING:
+        raise HTTPException(409, "A SimpleTrials sync is already running. Try again in a minute.")
+    mode = connector.info().mode
+    recent = last_sync(db, user.tenant_id, successful_only=True, mode=mode)
+    if recent and recent.finished_at and datetime.now(UTC) - _aware(recent.finished_at) < SYNC_REUSE:
+        return study_source(db, connector, user.tenant_id)
+    _SYNCING.add(user.tenant_id)
+    try:
+        run = await sync_studies(db, connector, tenant_id=user.tenant_id, triggered_by=user.name)
+    finally:
+        _SYNCING.discard(user.tenant_id)
     record_event(
         db,
         user,

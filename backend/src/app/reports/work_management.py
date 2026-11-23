@@ -1,6 +1,7 @@
-"""Work management report: open tasks by category, study and person, overdue tasks, risk heat map.
+"""Work management report: open tasks by category, study and person, and overdue tasks.
 
-Pure calculations over Avi.Intelligence's own tasks and risks. Every figure follows a rule listed in
+Pure calculations over Avi.Intelligence's own tasks (risks and issues have their own report, from
+SimpleTrials). Every figure follows a rule listed in
 `WORK_MANAGEMENT_RULES` (shown under each chart); nothing is estimated.
 """
 
@@ -10,17 +11,13 @@ from datetime import date, timedelta
 
 from pydantic import BaseModel
 
-from app.studies.models import Risk, Study, Task
+from app.studies.models import Study, Task
 from app.studies.rules import (
     RULES,
     TASK_CATEGORY_LABELS,
     TASK_CLOSED,
-    RiskKind,
-    RiskStatus,
     TaskCategory,
     TaskStatus,
-    risk_rating,
-    risk_score,
     task_overdue,
 )
 
@@ -44,12 +41,6 @@ WORK_MANAGEMENT_RULES = {
     "by_person": (
         "Each person's open parts: tasks assigned to them that they have not finished yet. A task with "
         "three people counts once for each of them; someone who has finished their part is not counted."
-    ),
-    "heat_map": RULES["risk_score"]
-    + " Open and Mitigating risks and issues are counted; closed ones are not.",
-    "filters": (
-        "The category filter applies to tasks only. Risks and issues always belong to a study, so the "
-        "study filter applies to them as well."
     ),
 }
 
@@ -87,29 +78,6 @@ class OverdueTask(BaseModel):
     """People who have not finished their part yet."""
 
 
-class HeatCell(BaseModel):
-    likelihood: int
-    impact: int
-    score: int
-    rating: str
-    risks: int = 0
-    issues: int = 0
-
-
-class OpenRisk(BaseModel):
-    risk_id: str
-    reference: str
-    kind: RiskKind
-    title: str
-    protocol_number: str
-    likelihood: int
-    impact: int
-    score: int
-    rating: str
-    owner_name: str
-    status: str
-
-
 class OpenTask(BaseModel):
     """One row of the Excel export's open-task list."""
 
@@ -129,8 +97,6 @@ class WorkManagement(BaseModel):
     by_study: list[StatusCounts]
     by_person: list[PersonLoad]
     overdue: list[OverdueTask]
-    heat_map: list[HeatCell]
-    top_risks: list[OpenRisk]
     open_tasks: list[OpenTask]
     completed: dict[str, int]
     study_options: list[Option]
@@ -160,7 +126,6 @@ def _count(row: StatusCounts, task: Task, overdue: bool) -> None:
 
 def build_work_management(
     tasks: list[Task],
-    risks: list[Risk],
     studies: list[Study],
     today: date,
     *,
@@ -256,44 +221,6 @@ def build_work_management(
     )
     completed = {"total": len(finished), "with_due_date": len(with_due), "on_time": on_time}
 
-    # ---- risks and issues ----
-    open_risks = [
-        r for r in risks if r.status != RiskStatus.CLOSED and (not study_id or r.study_id == study_id)
-    ]
-    cells = {
-        (lk, im): HeatCell(
-            likelihood=lk, impact=im, score=risk_score(lk, im), rating=risk_rating(risk_score(lk, im))
-        )
-        for lk in (3, 2, 1)
-        for im in (1, 2, 3)
-    }
-    top: list[OpenRisk] = []
-    for r in open_risks:
-        cell = cells.get((r.likelihood, r.impact))
-        if cell is not None:
-            if r.kind == RiskKind.ISSUE:
-                cell.issues += 1
-            else:
-                cell.risks += 1
-        score = risk_score(r.likelihood, r.impact)
-        top.append(
-            OpenRisk(
-                risk_id=r.id,
-                reference=r.reference,
-                kind=RiskKind(r.kind),
-                title=r.title,
-                protocol_number=r.study.protocol_number if r.study is not None else "",
-                likelihood=r.likelihood,
-                impact=r.impact,
-                score=score,
-                rating=risk_rating(score),
-                owner_name=r.owner_name,
-                status=r.status,
-            )
-        )
-    top.sort(key=lambda r: (-r.score, r.reference))
-    high = sum(r.rating == "High" for r in top)
-
     # ---- headline tiles ----
     blocked = sum(t.status == TaskStatus.BLOCKED for t in open_tasks)
     overdue_count = len(overdue_rows)
@@ -327,13 +254,6 @@ def build_work_management(
             note=f"{on_time} of {len(with_due)} on time" if with_due else "None with a due date",
             tone="info",
         ),
-        Tile(
-            key="high_risks",
-            label="Open high risks and issues",
-            value=str(high),
-            note=f"{len(top)} open in all",
-            tone="bad" if high else "good",
-        ),
     ]
 
     return WorkManagement(
@@ -342,8 +262,6 @@ def build_work_management(
         by_study=study_rows,
         by_person=by_person,
         overdue=overdue_rows,
-        heat_map=list(cells.values()),
-        top_risks=top,
         open_tasks=open_rows,
         completed=completed,
         study_options=study_options,

@@ -1,4 +1,4 @@
-import type { MilestoneState, Risk, RiskStatus, ScheduleState, TaskStatus } from '../api/types'
+import type { MilestoneState, ScheduleState, TaskStatus } from '../api/types'
 
 /** Labels and accessible colours (text ≥ 4.5:1 on its background) for derived states. */
 export interface ToneStyle {
@@ -57,20 +57,6 @@ export const TASK_STATUS_STYLE: Record<TaskStatus, ToneStyle> = {
   Completed: { label: 'Completed', ...TONES.good },
   Cancelled: { label: 'Cancelled', ...TONES.neutral },
 }
-
-export const RISK_STATUS_STYLE: Record<RiskStatus, ToneStyle> = {
-  Open: { label: 'Open', ...TONES.warn },
-  Mitigating: { label: 'Mitigating', ...TONES.info },
-  Closed: { label: 'Closed', ...TONES.neutral },
-}
-
-export const RISK_RATING_STYLE: Record<Risk['rating'], ToneStyle> = {
-  High: { label: 'High', ...TONES.bad },
-  Medium: { label: 'Medium', ...TONES.warn },
-  Low: { label: 'Low', ...TONES.good },
-}
-
-export const LEVELS: Record<number, string> = { 1: 'Low', 2: 'Medium', 3: 'High' }
 
 /** "31 of 120 (25.8%)", or a plain statement of what is missing. Never estimates. */
 export function enrolmentText(enrolled: number | null, target: number | null, pct: number | null): string {

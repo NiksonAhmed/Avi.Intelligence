@@ -1,5 +1,7 @@
 /** Thin fetch wrapper for the Avi.Intelligence API (same origin; Vite proxies /api in development). */
 
+import { renewSession, signInEnabled } from '../auth/signIn'
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -33,10 +35,14 @@ export async function apiRequest<T>(
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value) url.searchParams.set(key, value)
   }
-  const res = await fetch(url.pathname + url.search, {
-    ...rest,
-    headers: { Accept: 'application/json', ...(rest.headers ?? {}) },
-  })
+  const send = () =>
+    fetch(url.pathname + url.search, {
+      ...rest,
+      headers: { Accept: 'application/json', ...(rest.headers ?? {}) },
+    })
+  let res = await send()
+  // Microsoft sign-in: the session ran out (laptop asleep, say). Renew it once and try again.
+  if (res.status === 401 && signInEnabled() && (await renewSession())) res = await send()
   if (!res.ok) throw await parseError(res)
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -49,9 +55,30 @@ export function sopDownloadUrl(id: string, format: 'original' | 'word' = 'origin
 }
 
 /** Excel export of a report, with the same filters as on screen. */
-export function reportExportUrl(report: 'study-delivery' | 'work-management' | 'quality' | 'etmf', filters: Record<string, string | undefined>): string {
+export function reportExportUrl(report: 'study-delivery' | 'work-management' | 'quality' | 'etmf' | 'deviations' | 'risks-issues', filters: Record<string, string | undefined>): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
   const query = params.toString()
   return `/api/v1/reports/${report}/export.xlsx${query ? `?${query}` : ''}`
+}
+
+export function siteValidationExportUrl(filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  const query = params.toString()
+  return `/api/v1/site-validation/export.xlsx${query ? `?${query}` : ''}`
+}
+
+export function siteFeasibilityExportUrl(filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  const query = params.toString()
+  return `/api/v1/site-feasibility/export.xlsx${query ? `?${query}` : ''}`
+}
+
+export function conferencesExportUrl(filters: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  const query = params.toString()
+  return `/api/v1/conferences/export.xlsx${query ? `?${query}` : ''}`
 }

@@ -38,6 +38,12 @@ DEMO_PEOPLE: tuple[Person, ...] = (
     Person(
         id="demo-safety-1", name="Demo Safety Lead", email="safety1@demo.invalid", job_title="Safety / PV"
     ),
+    Person(
+        id="demo-bd-1",
+        name="Demo BD Manager",
+        email="bd1@demo.invalid",
+        job_title="Business Development",
+    ),
 )
 
 

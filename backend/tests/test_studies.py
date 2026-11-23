@@ -95,6 +95,9 @@ class TestSync:
             "updated": len(changed),
             "no_longer_in_source": 1,
             "etmf_documents": 0,
+            "action_items": 0,
+            "deviations": 0,
+            "site_visits": 0,
             "completions_recorded": 0,  # already recorded by the first sync
             "snapshot_taken": False,  # one snapshot per day
         }
@@ -143,6 +146,16 @@ class TestStudyApi:
         viewer = make_client(Role.VIEWER)
         assert viewer.get("/api/v1/studies").status_code == 200
         assert viewer.post("/api/v1/connectors/simpletrials/sync").status_code == 403
+
+    def test_everyone_can_sync_now_and_recent_syncs_are_reused(self, make_client) -> None:  # type: ignore[no-untyped-def]
+        viewer = make_client(Role.VIEWER)
+        first = viewer.post("/api/v1/studies/sync")
+        assert first.status_code == 200
+        assert first.json()["last_sync"]["ok"] is True
+        again = viewer.post("/api/v1/studies/sync").json()
+        assert again["last_sync"]["started_at"].rstrip("Z") == first.json()["last_sync"]["started_at"].rstrip(
+            "Z"
+        )
 
     def test_admin_sync_is_audited(self, client: TestClient) -> None:
         body = client.post("/api/v1/connectors/simpletrials/sync").json()
@@ -323,47 +336,24 @@ class TestTaskPermissions:
         assert study["open_tasks"] == 1
 
 
-class TestRiskPermissions:
-    def _create(self, admin: TestClient, owner: str = "demo-pm-1") -> dict:  # type: ignore[type-arg]
+class TestRisksComeFromSimpleTrialsOnly:
+    """Risks and issues are never raised or edited in Avi.Intelligence (user decision 2026-11-13)."""
+
+    def test_no_one_can_raise_edit_or_change_status(self, admin: TestClient) -> None:
         study = _first_study(admin)
-        res = admin.post(
-            "/api/v1/risks",
-            json={
-                "study_id": study["id"],
-                "kind": "risk",
-                "title": "Slow enrolment at site 102",
-                "likelihood": 3,
-                "impact": 2,
-                "owner_id": owner,
-                "mitigation": "Add a referral site",
-            },
+        body = {"study_id": study["id"], "title": "Slow enrolment", "likelihood": 3, "impact": 2}
+        assert admin.post("/api/v1/risks", json={**body, "owner_id": "demo-pm-1"}).status_code == 405
+        some_id = "00000000-0000-0000-0000-000000000000"
+        assert admin.patch(f"/api/v1/risks/{some_id}", json={"impact": 1}).status_code in (404, 405)
+        assert admin.post(f"/api/v1/risks/{some_id}/status", json={"status": "Closed"}).status_code in (
+            404,
+            405,
         )
-        assert res.status_code == 201, res.text
-        return res.json()  # type: ignore[no-any-return]
 
-    def test_score_and_rating(self, admin: TestClient) -> None:
-        risk = self._create(admin)
-        assert risk["reference"] == "RSK-0001"
-        assert (risk["score"], risk["rating"]) == (6, "High")
-
-    def test_owner_only_status_and_admin_only_edit(self, admin: TestClient, make_client) -> None:  # type: ignore[no-untyped-def]
-        risk = self._create(admin, owner="demo-pm-1")
-        url = f"/api/v1/risks/{risk['id']}/status"
-        assert (
-            make_client(Role.CRA, user_id="demo-cra-1").post(url, json={"status": "Closed"}).status_code
-            == 403
-        )
-        owner = make_client(Role.PROJECT_MANAGER, user_id="demo-pm-1")
-        assert owner.patch(f"/api/v1/risks/{risk['id']}", json={"impact": 1}).status_code == 403
-        res = owner.post(url, json={"status": "Mitigating"})
-        assert res.status_code == 200 and res.json()["status"] == "Mitigating"
-
-    def test_issue_reference_and_invalid_scores(self, admin: TestClient) -> None:
-        study = _first_study(admin)
-        base = {"study_id": study["id"], "title": "Protocol deviation trend", "owner_id": "demo-pm-1"}
-        res = admin.post("/api/v1/risks", json={**base, "kind": "issue", "likelihood": 1, "impact": 1})
-        assert res.json()["reference"] == "ISS-0001"
-        assert admin.post("/api/v1/risks", json={**base, "likelihood": 4, "impact": 1}).status_code == 422
+    def test_open_risk_counts_are_open_simpletrials_issues(self, admin: TestClient) -> None:
+        studies = {s["protocol_number"]: s for s in admin.get("/api/v1/studies").json()["studies"]}
+        assert studies["DEMO-ONC-301"]["open_risks"] == 2  # two open demo action items; one is closed
+        assert all(s["open_risks"] == 0 for p, s in studies.items() if p != "DEMO-ONC-301")
 
 
 def test_people_directory(client: TestClient) -> None:
@@ -373,3 +363,22 @@ def test_people_directory(client: TestClient) -> None:
 
 def test_mock_connector_info() -> None:
     assert MockStudyConnector("x").info().mode == "mock"
+
+
+def test_simpletrials_action_items_show_as_read_only_issues(make_client) -> None:  # type: ignore[no-untyped-def]
+    viewer = make_client(Role.VIEWER)
+    viewer.get("/api/v1/studies")  # the first visit syncs the (demo) studies
+    body = viewer.get("/api/v1/risks").json()
+    issues = body["simpletrials_issues"]
+    assert len(issues) == 2  # the closed demo item is hidden by default
+    first = issues[0]
+    assert first["days_overdue"] == 6 and first["priority"] == "High" and first["site_number"] == "101"
+    assert first["study"]["protocol_number"] == "DEMO-ONC-301" and first["assignee"] == "Demo CRA"
+    assert issues[1]["days_overdue"] is None
+    closed = viewer.get("/api/v1/risks", params={"include_closed": "true"}).json()["simpletrials_issues"]
+    assert len(closed) == 3 and closed[-1]["closed"] is True
+    assert set(body) == {"simpletrials_issues"}  # no Avi.Intelligence register any more
+    other = next(
+        s for s in viewer.get("/api/v1/studies").json()["studies"] if s["protocol_number"] != "DEMO-ONC-301"
+    )
+    assert viewer.get("/api/v1/risks", params={"study_id": other["id"]}).json()["simpletrials_issues"] == []

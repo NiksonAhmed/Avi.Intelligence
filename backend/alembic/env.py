@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.audit import models as _audit_models  # noqa: F401  (registers tables on Base.metadata)
 from app.core.config import get_settings
+from app.data_management import models as _dm_models  # noqa: F401
 from app.db.session import Base
 from app.knowledge import models as _knowledge_models  # noqa: F401
 from app.reports import models as _report_models  # noqa: F401

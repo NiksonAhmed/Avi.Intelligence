@@ -90,3 +90,65 @@ body {
     print-color-adjust: exact;
   }
 }
+
+/* Report tiles that jump to their chart: a real button, styled as the card. */
+.tile-button {
+  all: unset;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.tile-button:focus-visible {
+  outline: 3px solid #1677ff;
+  outline-offset: 2px;
+}
+
+/* Reports: the ⓘ beside a chart title, and the folded "More detail" section. */
+.rule-info {
+  all: unset;
+  cursor: help;
+  color: #5b6b82;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 4px;
+}
+.rule-info:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+.report-more > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+  color: #0958d9;
+  padding: 10px 0;
+  list-style-position: inside;
+}
+@media print {
+  .report-more > summary {
+    display: none;
+  }
+}
+
+/* Simple report tables (e.g. Sites on Study delivery). */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.report-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5b6b82;
+  padding: 8px 12px;
+  border-bottom: 1px solid #dde3ec;
+}
+.report-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f5;
+}

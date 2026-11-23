@@ -48,10 +48,13 @@ class StudyData:
 
     studies: list[Study]
     tasks: list[Task]
+    """Every task of the tenant (study and non-study), for "my tasks" and task questions."""
     risks: list[Risk]
     today: date
     as_of: datetime | None
     sandbox_only: bool
+    user_id: str | None = None
+    """Who is asking (for "my tasks")."""
     by_id: dict[str, Study] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -64,13 +67,20 @@ class StudyData:
 
 
 def load_study_data(
-    db: Session, tenant_id: str, source: str, today: date, as_of: datetime | None
+    db: Session, tenant_id: str, source: str, today: date, as_of: datetime | None, user_id: str | None = None
 ) -> StudyData:
     studies = list(
         db.scalars(
             select(Study)
             .where(Study.tenant_id == tenant_id, Study.source == source, Study.in_source.is_(True))
-            .options(selectinload(Study.sites), selectinload(Study.milestones))
+            .options(
+                selectinload(Study.sites),
+                selectinload(Study.milestones),
+                selectinload(Study.action_items),
+                selectinload(Study.deviations),
+                selectinload(Study.site_visits),
+                selectinload(Study.etmf_documents),
+            )
             .order_by(Study.protocol_number)
         )
     )
@@ -78,8 +88,8 @@ def load_study_data(
     tasks = list(
         db.scalars(
             select(Task)
-            .where(Task.tenant_id == tenant_id, Task.study_id.in_(ids))
-            .options(selectinload(Task.assignees))
+            .where(Task.tenant_id == tenant_id)
+            .options(selectinload(Task.assignees), selectinload(Task.documents), selectinload(Task.study))
         )
     )
     risks = list(db.scalars(select(Risk).where(Risk.tenant_id == tenant_id, Risk.study_id.in_(ids))))
@@ -90,6 +100,7 @@ def load_study_data(
         today=today,
         as_of=as_of,
         sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+        user_id=user_id,
     )
 
 
@@ -342,7 +353,7 @@ def open_tasks(data: StudyData, params: WorkInput) -> list[TaskRow]:
     ids = {s.id for s in data.pick(params.study_ids)}
     rows = []
     for t in data.tasks:
-        if t.study_id not in ids or t.status in TASK_CLOSED:
+        if t.study_id is None or t.study_id not in ids or t.status in TASK_CLOSED:
             continue
         overdue = task_overdue(t.due_date, t.status, data.today)
         if params.overdue_only and not overdue:

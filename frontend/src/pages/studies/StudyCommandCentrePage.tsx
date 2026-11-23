@@ -20,14 +20,13 @@ import {
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
-import { useRisks, useStudies, useStudy, useTasks } from '../../api/hooks'
-import type { PlanItemRef, Risk, StudySite, Task } from '../../api/types'
+import { useRisks, useStudy, useTasks } from '../../api/hooks'
+import type { PlanItemRef, StudySite, Task } from '../../api/types'
 import { ApiError } from '../../api/client'
 import { PageHeader } from '../../components/PageHeader'
 import { PlanTable } from '../../components/PlanTable'
 import { StudySourceBanner } from '../../components/StudySourceBanner'
-import { RiskFormModal } from '../../components/work/RiskFormModal'
-import { RiskTable } from '../../components/work/RiskTable'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 import { TaskFormModal } from '../../components/work/TaskFormModal'
 import { TaskTable } from '../../components/work/TaskTable'
 import { formatDateTime, formatDay } from '../../lib/format'
@@ -36,40 +35,6 @@ import { EnrolmentCell } from './StudyPortfolioPage'
 
 const TABS = ['milestones', 'sites', 'tasks', 'risks'] as const
 type TabKey = (typeof TABS)[number]
-
-/** /command-centre without a study: choose one. */
-export function CommandCentreIndexPage() {
-  const { data, isLoading } = useStudies()
-  return (
-    <>
-      <PageHeader title="Study Command Centre" subtitle="Choose a study to open its workspace." />
-      {data && <StudySourceBanner source={data.source} />}
-      {isLoading ? (
-        <Skeleton active />
-      ) : (data?.studies.length ?? 0) === 0 ? (
-        <Empty description="No studies have been synced from SimpleTrials yet." />
-      ) : (
-        <Row gutter={[16, 16]}>
-          {data?.studies.map((s) => (
-            <Col key={s.id} xs={24} md={12} xl={8}>
-              <Link to={`/command-centre/${s.id}`} aria-label={`Open ${s.protocol_number}`}>
-                <Card hoverable size="small" title={s.protocol_number} extra={s.status && <Tag>{s.status}</Tag>}>
-                  <Typography.Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 8 }}>
-                    {s.title}
-                  </Typography.Paragraph>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {[s.phase, s.sponsor].filter(Boolean).join(' · ')} · {s.open_tasks} open tasks ·{' '}
-                    {s.open_risks} open risks
-                  </Typography.Text>
-                </Card>
-              </Link>
-            </Col>
-          ))}
-        </Row>
-      )}
-    </>
-  )
-}
 
 export function StudyCommandCentrePage() {
   const { studyId } = useParams()
@@ -84,7 +49,6 @@ export function StudyCommandCentrePage() {
   const [taskModal, setTaskModal] = useState<{ open: boolean; task?: Task | null; planItem?: PlanItemRef }>({
     open: false,
   })
-  const [riskModal, setRiskModal] = useState<{ open: boolean; risk?: Risk | null }>({ open: false })
 
   if (study.isError) {
     const notFound = study.error instanceof ApiError && study.error.status === 404
@@ -138,7 +102,7 @@ export function StudyCommandCentrePage() {
     <>
       <PageHeader
         title={`${s.protocol_number} · ${s.title}`}
-        breadcrumbs={[{ title: 'Study Command Centre', to: '/command-centre' }, { title: s.protocol_number }]}
+        breadcrumbs={[{ title: 'Study Portfolio', to: '/portfolio' }, { title: s.protocol_number }]}
       />
       <StudySourceBanner source={source} />
       {s.sandbox && (
@@ -272,22 +236,7 @@ export function StudyCommandCentrePage() {
               label: `Risks and issues (${s.open_risks})`,
               children: (
                 <>
-                  <Flex justify="space-between" align="center" wrap gap={8} style={{ marginBottom: 12 }}>
-                    <Typography.Text type="secondary">{rules.risk_score}</Typography.Text>
-                    {canManage && (
-                      <Button type="primary" icon={<PlusOutlined />} onClick={() => setRiskModal({ open: true })}>
-                        Raise risk or issue
-                      </Button>
-                    )}
-                  </Flex>
-                  <RiskTable
-                    risks={risks.data?.risks ?? []}
-                    loading={risks.isLoading}
-                    canManage={canManage}
-                    onEdit={(risk) => setRiskModal({ open: true, risk })}
-                    emptyText="No open risks or issues for this study."
-                    scoreRule={rules.risk_score}
-                  />
+                  <SimpleTrialsIssues issues={risks.data?.simpletrials_issues ?? []} loading={risks.isLoading} />
                 </>
               ),
             },
@@ -301,12 +250,6 @@ export function StudyCommandCentrePage() {
         planItem={taskModal.planItem}
         defaultStudyId={s.id}
         onClose={() => setTaskModal({ open: false })}
-      />
-      <RiskFormModal
-        open={riskModal.open}
-        risk={riskModal.risk}
-        defaultStudyId={s.id}
-        onClose={() => setRiskModal({ open: false })}
       />
     </>
   )

@@ -5,8 +5,23 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ViedocConnectionSettings(BaseModel):
+    """One Viedoc API client. Viedoc links each client to one study (and each region has its own API),
+    so there is one of these per study. Set in `.env` as VIEDOC_CONNECTIONS__<NAME>__<FIELD>."""
+
+    api_url: str
+    """The API web address shown with the client in Viedoc (https://...viedoc.net/...)."""
+    client_id: str
+    client_secret: SecretStr
+    token_url: str | None = None
+    """OAuth token address; when blank it is looked up from the API's OpenID configuration."""
+    scope: str | None = None
+    environment: Literal["sandbox", "live"] = "sandbox"
+    """Live connections are never read unless VIEDOC_ALLOW_LIVE=true (after data-protection sign-off)."""
 
 
 class Settings(BaseSettings):
@@ -14,6 +29,7 @@ class Settings(BaseSettings):
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        env_nested_delimiter="__",
     )
 
     app_env: Literal["development", "test", "production"] = "development"
@@ -26,6 +42,17 @@ class Settings(BaseSettings):
     # Which person in the demo directory the development user is (see app/auth/directory.py), so
     # "My Tasks" and assignee-only status changes can be tried locally.
     dev_user_id: str = "dev-user"
+
+    # --- Microsoft Entra ID sign-in (single sign-on) ---
+    # Sign-in is on when both are set: the directory (tenant) ID and the Avi.Intelligence app
+    # registration's application (client) ID. Neither is a secret. Roles come from the app roles on
+    # that registration; anyone signed in without a role is a Viewer. See docs/entra-setup.md.
+    entra_tenant_id: str | None = None
+    entra_client_id: str | None = None
+    # Extra role names: JSON mapping the Value of an app role in Entra to an Avi.Intelligence role, e.g.
+    # {"Physicist": "clinical_operations"}. Adds to (and can override) the built-in names in
+    # app/auth/entra.py; our own role names (admin, qa, ...) always work too.
+    entra_role_map: str | None = None
 
     # SQLite for an isolated local demo; PostgreSQL in Docker Compose / production.
     database_url: str = "sqlite:///./avi_intelligence.db"
@@ -71,6 +98,46 @@ class Settings(BaseSettings):
         "Protocol Finalized;First Ethics Approval;Database Hard Lock;Clinical Study Report Finalized"
     )
 
+    # --- Viedoc (EDC) for Data Management: read-only, one API client per study ---
+    # "mock" always uses the demo study and ignores configured connections (tests and browser tests).
+    viedoc_mode: Literal["auto", "mock"] = "auto"
+    viedoc_connections: dict[str, ViedocConnectionSettings] = Field(default_factory=dict)
+    viedoc_allow_live: bool = False
+    data_management_enabled: bool = False
+    # Hourly sync by default (0 = off; never runs in tests).
+    data_management_sync_minutes: int = Field(default=60, ge=0, le=1440)
+    # Ageing targets in working days (red when over, amber on the last day).
+    dm_site_answer_days: int = Field(default=5, ge=1, le=60)
+    dm_approval_days: int = Field(default=3, ge=1, le=60)
+
+    # --- Conferences (BD): read-only from a SharePoint list; demo data until the list is set ---
+    conferences_enabled: bool = True
+    # "mock" always shows demo conferences (tests and browser tests).
+    conferences_mode: Literal["auto", "mock"] = "auto"
+    conferences_sharepoint_list: str | None = None
+    # The site that holds the list; defaults to SHAREPOINT_SITE_URL.
+    conferences_sharepoint_site_url: str | None = None
+    # JSON: our field -> the list's column internal name(s), e.g. {"role": "AvionRole"}.
+    conferences_field_map: str | None = None
+
+    # --- Site validation (physics): read-only from three SharePoint lists; demo data until set ---
+    # "mock" always shows demo sites (tests and browser tests).
+    site_validation_mode: Literal["auto", "mock"] = "auto"
+    site_validation_sites_list: str | None = None
+    site_validation_validations_list: str | None = None
+    site_validation_scans_list: str | None = None
+    # The site that holds the lists; defaults to SHAREPOINT_SITE_URL.
+    site_validation_sharepoint_site_url: str | None = None
+    # JSON: our field -> the list's column internal name(s), e.g. {"sites.city": "Suburb"}.
+    site_validation_field_map: str | None = None
+
+    # --- Site feasibility: read-only from the Site Feasibility Tracker workbook in SharePoint ---
+    # The file's drive and item IDs (Graph); demo sites until both are set. "mock" always shows demo
+    # sites (tests and browser tests). Uses the SharePoint app credentials above.
+    site_feasibility_mode: Literal["auto", "mock"] = "auto"
+    site_feasibility_drive_id: str | None = None
+    site_feasibility_item_id: str | None = None
+
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None
     assistant_model: str = "claude-opus-5-5"
@@ -80,6 +147,10 @@ class Settings(BaseSettings):
     use_system_trust_store: bool = True
 
     @field_validator(
+        "entra_tenant_id",
+        "site_feasibility_drive_id",
+        "site_feasibility_item_id",
+        "entra_client_id",
         "sharepoint_tenant_id",
         "sharepoint_client_id",
         "sharepoint_site_url",

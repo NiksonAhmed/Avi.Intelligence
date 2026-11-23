@@ -1,4 +1,4 @@
-import { CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CloudSyncOutlined, SyncOutlined } from '@ant-design/icons'
 import { Alert, Button, Flex, Typography } from 'antd'
 
 import type { SopSource } from '../api/types'
@@ -49,8 +49,8 @@ export function SourceBanner({ source, fetchedAt, fromCache, onRefresh, refreshi
         </Typography.Text>
       </Flex>
       {onRefresh && (
-        <Button icon={<ReloadOutlined />} onClick={onRefresh} loading={refreshing}>
-          Refresh from SharePoint
+        <Button icon={<SyncOutlined />} onClick={onRefresh} loading={refreshing}>
+          Sync now
         </Button>
       )}
     </Flex>

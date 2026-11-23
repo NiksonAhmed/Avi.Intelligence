@@ -19,12 +19,12 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Link } from 'react-router'
 
 import { useAsk, useAssistantStatus } from '../../api/hooks'
 import type { AskResponse, AssistantCitation, AssistantExcerpt, StudyAnswerTable } from '../../api/types'
-import { DocumentsTabs } from '../../components/DocumentsTabs'
 import { PageHeader } from '../../components/PageHeader'
 import { ProvenanceTag } from '../../components/ProvenanceTag'
 import { answerAsText, sopLabel, studyAnswerAsText } from '../../lib/assistant'
@@ -326,15 +326,25 @@ export function AskPage() {
     })
   }
 
+  // A question typed in the top bar ("Search or ask anything") arrives as ?q= and is asked at once.
+  const [params] = useSearchParams()
+  const fromBar = params.get('q')?.trim() ?? ''
+  const askedFromBar = useRef('')
+  useEffect(() => {
+    if (fromBar && fromBar !== askedFromBar.current) {
+      askedFromBar.current = fromBar
+      submit(fromBar)
+    }
+  })
+
   const current = turns[shown]
 
   return (
     <>
       <PageHeader
-        title="Documents and Knowledge"
-        subtitle="Ask about Avion's effective SOPs or how your studies are going, with sources."
+        title="Ask Avi.Intelligence"
+        subtitle="Ask about studies, tasks, risks and issues, deviations, the eTMF, site visits, conferences, Data Management or Avion's SOPs, with sources."
       />
-      <DocumentsTabs active="ask" />
 
       {status.data && !status.data.ai_enabled && (
         <Alert
@@ -342,7 +352,7 @@ export function AskPage() {
           showIcon
           style={{ marginBottom: 16 }}
           title="AI answers are not switched on yet"
-          description="Study questions are answered from SimpleTrials data without AI. SOP questions return the most relevant SOP passages; add an Anthropic API key (ANTHROPIC_API_KEY in .env) to get written SOP answers."
+          description="Questions about studies, tasks, risks, deviations, the eTMF, visits, conferences and Data Management are answered from Avi.Intelligence's own data without AI. SOP questions return the most relevant SOP passages; add an Anthropic API key (ANTHROPIC_API_KEY in .env) to get written SOP answers."
         />
       )}
 
@@ -357,7 +367,7 @@ export function AskPage() {
             >
               <Input.TextArea
                 aria-label="Your question"
-                placeholder="e.g. Is anything due for study close-out? or What are the key requirements for site activation?"
+                placeholder="e.g. What are my overdue tasks? When is the next conference? How many queries are open? What are the key requirements for site activation?"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
@@ -385,7 +395,7 @@ export function AskPage() {
 
             {status.data && status.data.study_questions.length > 0 && (
               <div style={{ marginTop: 20 }}>
-                <Typography.Text strong>About your studies</Typography.Text>
+                <Typography.Text strong>About your work</Typography.Text>
                 <Flex vertical gap={6} style={{ marginTop: 8 }}>
                   {status.data.study_questions.map((q) => (
                     <Button
@@ -465,7 +475,7 @@ export function AskPage() {
                 <AnswerView turn={current} onAsk={submit} />
               </>
             ) : (
-              <Empty description="Ask about Avion SOPs or your studies. Answers show where they come from." />
+              <Empty description="Ask about studies, tasks, risks, deviations, the eTMF, visits, conferences, Data Management or SOPs. Answers show where they come from." />
             )}
           </Card>
         </Col>

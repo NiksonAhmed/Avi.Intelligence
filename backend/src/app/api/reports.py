@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -21,15 +21,19 @@ from app.connectors.sharepoint.models import SopConnector
 from app.connectors.simpletrials import get_study_connector
 from app.connectors.simpletrials.models import StudyConnector
 from app.db.session import get_db
+from app.reports.deviations import Deviations, build_deviations
 from app.reports.etmf import Etmf, build_etmf
 from app.reports.excel import Sheet, build_workbook
-from app.reports.history import snapshot_days
-from app.reports.models import MilestoneCompletion
+from app.reports.history import STUDY_DELIVERY, snapshot_days
+from app.reports.insights import Insights, build_insights
+from app.reports.models import MilestoneCompletion, ReportSnapshot
 from app.reports.quality import REVIEW_WINDOW_DAYS, Quality, build_quality
+from app.reports.risks_issues import RisksIssues, build_risks_issues
 from app.reports.study_delivery import StudyDelivery, build_study_delivery
-from app.reports.work_management import DUE_SOON_DAYS, WorkManagement, build_work_management, level
+from app.reports.summary import Summary, build_summary
+from app.reports.work_management import DUE_SOON_DAYS, WorkManagement, build_work_management
 from app.studies.clock import today
-from app.studies.models import Risk, Study, Task, TaskDocument
+from app.studies.models import Study, Task, TaskDocument
 from app.studies.rules import TASK_CATEGORY_LABELS, TASK_CLOSED, MilestoneState, ScheduleState, TaskCategory
 from app.studies.sync import ensure_synced
 
@@ -51,8 +55,50 @@ class ReportSource(BaseModel):
     """Days of history kept so far (trend charts need a few weeks)."""
 
 
+class EnrolmentPoint(BaseModel):
+    day: date
+    enrolled: int
+    target: int | None
+
+
 class StudyDeliveryResponse(StudyDelivery):
     source: ReportSource
+    insights: Insights
+    enrolment_history: list[EnrolmentPoint]
+    """Enrolled and target on each day a figure was saved (daily snapshot; nothing estimated)."""
+
+
+def _enrolment_history(
+    db: Session, tenant_id: str, source: str, studies: list[Study], study_id: str | None, site_id: str | None
+) -> list[EnrolmentPoint]:
+    site_number = next(
+        (site.site_number for s in studies for site in s.sites if site_id and site.id == site_id), None
+    )
+    out = []
+    for snap in db.scalars(
+        select(ReportSnapshot)
+        .where(
+            ReportSnapshot.tenant_id == tenant_id,
+            ReportSnapshot.kind == STUDY_DELIVERY,
+            ReportSnapshot.source == source,
+        )
+        .order_by(ReportSnapshot.day)
+    ):
+        rows = [s for s in snap.data.get("studies", []) if not study_id or s.get("id") == study_id]
+        if site_id:
+            sites = [x for s in rows for x in s.get("sites", []) if x.get("number") == site_number]
+            enrolled = sum(x.get("enrolled") or 0 for x in sites)
+            targets = [x["target"] for x in sites if x.get("target") is not None]
+        else:
+            enrolled = sum(
+                s["enrolled"]
+                if s.get("enrolled") is not None
+                else sum(x.get("enrolled") or 0 for x in s.get("sites", []))
+                for s in rows
+            )
+            targets = [s["target"] for s in rows if s.get("target") is not None]
+        out.append(EnrolmentPoint(day=snap.day, enrolled=enrolled, target=sum(targets) if targets else None))
+    return out
 
 
 def _studies(db: Session, tenant_id: str, source: str) -> list[Study]:
@@ -79,6 +125,16 @@ async def _study_delivery(
     info = study_source(db, connector, user.tenant_id)
     return StudyDeliveryResponse(
         **report.model_dump(),
+        enrolment_history=_enrolment_history(db, user.tenant_id, source, studies, study_id, site_id),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="study-delivery",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -249,6 +305,7 @@ async def study_delivery_export(
 
 class WorkManagementResponse(WorkManagement):
     source: ReportSource
+    insights: Insights
 
 
 async def _work_management(
@@ -268,15 +325,19 @@ async def _work_management(
             .options(joinedload(Task.study), selectinload(Task.documents), selectinload(Task.assignees))
         ).unique()
     )
-    risks = list(
-        db.scalars(
-            select(Risk).where(Risk.tenant_id == user.tenant_id).options(joinedload(Risk.study))
-        ).unique()
-    )
-    report = build_work_management(tasks, risks, studies, today(), study_id=study_id, category=category)
+    report = build_work_management(tasks, studies, today(), study_id=study_id, category=category)
     info = study_source(db, connector, user.tenant_id)
     return WorkManagementResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="work-management",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and category is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=datetime.now(UTC),
@@ -335,36 +396,6 @@ async def work_management_export(
             ["Category", "Open", "Not started", "In progress", "Blocked", "Overdue"],
             [[c.label, c.total, c.not_started, c.in_progress, c.blocked, c.overdue] for c in r.by_category],
         ),
-        Sheet(
-            "Open risks and issues",
-            [
-                "Reference",
-                "Type",
-                "Study",
-                "Title",
-                "Likelihood",
-                "Impact",
-                "Score",
-                "Rating",
-                "Owner",
-                "Status",
-            ],
-            [
-                [
-                    x.reference,
-                    "Issue" if x.kind == "issue" else "Risk",
-                    x.protocol_number,
-                    x.title,
-                    level(x.likelihood),
-                    level(x.impact),
-                    x.score,
-                    x.rating,
-                    x.owner_name,
-                    x.status,
-                ]
-                for x in r.top_risks
-            ],
-        ),
     ]
     scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
     if category:
@@ -373,7 +404,7 @@ async def work_management_export(
         ("Report", "Work management"),
         ("Scope", scope),
         ("Data as of", datetime.now(UTC).strftime("%d %b %Y %H:%M UTC")),
-        ("Source", "Avi.Intelligence tasks, risks and issues"),
+        ("Source", "Avi.Intelligence tasks"),
         ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
         *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
     ]
@@ -402,11 +433,13 @@ SopConnectorDep = Annotated[SopConnector, Depends(get_sop_connector)]
 SopReader = Annotated[CurrentUser, Depends(require(Permission.SOP_READ))]
 Department = Annotated[str | None, Query(max_length=200)]
 Months = Annotated[int, Query(ge=1, le=24, description="Change log period: 3, 6, 12 or 24 months")]
+DEFAULT_MONTHS = 12
 
 
 class QualityResponse(Quality):
     source: SopSource
     fetched_at: datetime
+    insights: Insights
 
 
 async def _quality(
@@ -426,14 +459,30 @@ async def _quality(
     ):
         open_tasks[doc.sop_id] = open_tasks.get(doc.sop_id, 0) + 1
     report = build_quality(docs, open_tasks, today(), department=department, months=months)
+    source = connector.info().mode
     return QualityResponse(
-        **report.model_dump(), source=sop_source(connector.info()), fetched_at=result.fetched_at
+        **report.model_dump(),
+        source=sop_source(connector.info()),
+        fetched_at=result.fetched_at,
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="quality",
+            built=report,
+            today=today(),
+            all_studies=department is None and months == DEFAULT_MONTHS,
+        ),
     )
 
 
 @router.get("/quality", response_model=QualityResponse)
 async def quality(
-    db: Db, connector: SopConnectorDep, user: SopReader, department: Department = None, months: Months = 12
+    db: Db,
+    connector: SopConnectorDep,
+    user: SopReader,
+    department: Department = None,
+    months: Months = DEFAULT_MONTHS,
 ) -> QualityResponse:
     return await _quality(db, connector, user, department, months)
 
@@ -453,7 +502,7 @@ async def quality_export(
     connector: SopConnectorDep,
     user: SopReader,
     department: Department = None,
-    months: Months = 12,
+    months: Months = DEFAULT_MONTHS,
 ) -> Response:
     r = await _quality(db, connector, user, department, months)
     sheets = [
@@ -547,6 +596,7 @@ async def quality_export(
 
 class EtmfResponse(Etmf):
     source: ReportSource
+    insights: Insights
 
 
 async def _etmf(
@@ -566,6 +616,15 @@ async def _etmf(
     info = study_source(db, connector, user.tenant_id)
     return EtmfResponse(
         **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="etmf",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
         source=ReportSource(
             mode=info.connector.mode,
             as_of=info.last_successful_sync_at,
@@ -670,3 +729,282 @@ async def etmf_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
     )
+
+
+# --- Protocol deviations ---
+
+
+class DeviationsResponse(Deviations):
+    source: ReportSource
+    insights: Insights
+
+
+async def _deviations(
+    db: Session, connector: StudyConnector, user: CurrentUser, study_id: str | None, site_id: str | None
+) -> DeviationsResponse:
+    await ensure_synced(db, connector, user.tenant_id)
+    source = current_source_label(connector)
+    studies = list(
+        db.scalars(
+            select(Study)
+            .where(Study.tenant_id == user.tenant_id, Study.source == source, Study.in_source.is_(True))
+            .options(selectinload(Study.sites), selectinload(Study.deviations))
+            .order_by(Study.protocol_number)
+        )
+    )
+    report = build_deviations(studies, today(), study_id=study_id, site_id=site_id)
+    info = study_source(db, connector, user.tenant_id)
+    return DeviationsResponse(
+        **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="deviations",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
+        source=ReportSource(
+            mode=info.connector.mode,
+            as_of=info.last_successful_sync_at,
+            sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+            snapshot_days=0,
+        ),
+    )
+
+
+@router.get("/deviations", response_model=DeviationsResponse)
+async def deviations(
+    db: Db, connector: Connector, user: Reader, study_id: IdParam = None, site_id: IdParam = None
+) -> DeviationsResponse:
+    return await _deviations(db, connector, user, study_id, site_id)
+
+
+@router.get("/deviations/export.xlsx")
+async def deviations_export(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    site_id: IdParam = None,
+) -> Response:
+    r = await _deviations(db, connector, user, study_id, site_id)
+
+    def yes_no(v: bool | None) -> str:
+        return "" if v is None else ("Yes" if v else "No")
+
+    sheets = [
+        Sheet(
+            "Deviations",
+            ["No.", "Study", "Site", "Category", "Severity", "Status", "Description", "Subject level",
+             "Occurred", "Identified", "Reported", "Closed", "Days open", "Days to identify", "Reportable"],
+            [[d.number, d.protocol_number, d.where, d.category, d.severity, d.status, d.description,
+              "Yes" if d.subject_level else "No", d.occurred_on, d.identified_on, d.reported_on, d.closed_on,
+              d.days_open, d.days_to_identify, yes_no(d.reportable)] for d in r.deviations],
+        ),
+        Sheet(
+            "By site",
+            ["Study", "Site", "Deviations", "Open", "Major or critical", "Enrolled", "Per 10 enrolled"],
+            [[x.protocol_number, x.label, x.total, x.open, x.major, x.enrolled, x.per_10] for x in r.by_site],
+        ),
+        Sheet(
+            "By category and severity",
+            ["Measure", "Group", "Deviations", "Open"],
+            [["Severity", c.label, c.count, c.open] for c in r.by_severity]
+            + [["Category", c.label, c.count, c.open] for c in r.by_category],
+        ),
+        Sheet(
+            "Monthly trend",
+            ["Month", "Critical", "Major", "Minor", "Other"],
+            [[m.month, m.critical, m.major, m.minor, m.other] for m in r.trend],
+        ),
+    ]  # fmt: skip
+    scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
+    if site_id:
+        scope += f" · site {next((o.label for o in r.site_options if o.id == site_id), '')}"
+    about = [
+        ("Report", "Protocol deviations"),
+        ("Scope", scope),
+        ("Data as of", r.source.as_of.strftime("%d %b %Y %H:%M UTC") if r.source.as_of else "Not yet synced"),
+        (
+            "Source",
+            "SimpleTrials protocol deviations (read-only copy; no subject IDs or people)"
+            if r.source.mode == "api"
+            else "Demo data (SimpleTrials not connected)",
+        ),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="deviations",
+        summary=f"Exported Protocol deviations report to Excel ({scope})",
+        details={"format": "xlsx", "study_id": study_id, "site_id": site_id},
+        request=request,
+    )
+    name = f"Protocol deviations {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# --- Risks and issues (from SimpleTrials) ---
+
+
+class RisksIssuesResponse(RisksIssues):
+    source: ReportSource
+    insights: Insights
+
+
+async def _risks_issues(
+    db: Session, connector: StudyConnector, user: CurrentUser, study_id: str | None, site_id: str | None
+) -> RisksIssuesResponse:
+    await ensure_synced(db, connector, user.tenant_id)
+    source = current_source_label(connector)
+    studies = list(
+        db.scalars(
+            select(Study)
+            .where(Study.tenant_id == user.tenant_id, Study.source == source, Study.in_source.is_(True))
+            .options(selectinload(Study.sites), selectinload(Study.action_items))
+            .order_by(Study.protocol_number)
+        )
+    )
+    report = build_risks_issues(studies, today(), study_id=study_id, site_id=site_id)
+    info = study_source(db, connector, user.tenant_id)
+    return RisksIssuesResponse(
+        **report.model_dump(),
+        insights=build_insights(
+            db,
+            tenant_id=user.tenant_id,
+            source=source,
+            report="risks-issues",
+            built=report,
+            today=today(),
+            all_studies=study_id is None and site_id is None,
+        ),
+        source=ReportSource(
+            mode=info.connector.mode,
+            as_of=info.last_successful_sync_at,
+            sandbox_only=bool(studies) and all(s.sandbox for s in studies),
+            snapshot_days=0,
+        ),
+    )
+
+
+@router.get("/risks-issues", response_model=RisksIssuesResponse)
+async def risks_issues(
+    db: Db, connector: Connector, user: Reader, study_id: IdParam = None, site_id: IdParam = None
+) -> RisksIssuesResponse:
+    return await _risks_issues(db, connector, user, study_id, site_id)
+
+
+@router.get("/risks-issues/export.xlsx")
+async def risks_issues_export(
+    request: Request,
+    db: Db,
+    connector: Connector,
+    user: Reader,
+    study_id: IdParam = None,
+    site_id: IdParam = None,
+) -> Response:
+    r = await _risks_issues(db, connector, user, study_id, site_id)
+    sheets = [
+        Sheet(
+            "Issues",
+            ["No.", "Study", "Site", "Category", "Subcategory", "Priority", "Status", "Description",
+             "Response", "Assigned to", "Opened", "Due", "Closed", "Days open", "Days overdue"],
+            [[i.number, i.protocol_number, i.where, i.category, i.subcategory, i.priority, i.status,
+              i.description, i.response, i.assignee, i.opened_on, i.due_on, i.closed_on, i.days_open,
+              i.days_overdue] for i in r.issues],
+        ),
+        Sheet(
+            "By site",
+            ["Study", "Site", "Issues", "Open", "Overdue"],
+            [[x.protocol_number, x.label, x.total, x.open, x.overdue] for x in r.by_site],
+        ),
+        Sheet(
+            "By priority and category",
+            ["Measure", "Group", "Issues", "Open"],
+            [["Priority", c.label, c.count, c.open] for c in r.by_priority]
+            + [["Category", c.label, c.count, c.open] for c in r.by_category],
+        ),
+        Sheet(
+            "Monthly trend",
+            ["Month", "Opened", "Closed"],
+            [[m.month, m.opened, m.closed] for m in r.trend],
+        ),
+    ]  # fmt: skip
+    scope = next((o.label for o in r.study_options if o.id == study_id), "All studies")
+    if site_id:
+        scope += f" · site {next((o.label for o in r.site_options if o.id == site_id), '')}"
+    about = [
+        ("Report", "Risks and issues"),
+        ("Scope", scope),
+        ("Data as of", r.source.as_of.strftime("%d %b %Y %H:%M UTC") if r.source.as_of else "Not yet synced"),
+        (
+            "Source",
+            "SimpleTrials action items (read-only copy)"
+            if r.source.mode == "api"
+            else "Demo data (SimpleTrials not connected)",
+        ),
+        ("Exported by", f"{user.name} on {datetime.now().strftime('%d %b %Y %H:%M')}"),
+        *[(key.replace("_", " ").capitalize(), text) for key, text in r.rules.items()],
+    ]
+    content = build_workbook(sheets, about)
+    record_event(
+        db,
+        user,
+        action="report.exported",
+        entity_type="report",
+        entity_id="risks-issues",
+        summary=f"Exported Risks and issues report to Excel ({scope})",
+        details={"format": "xlsx", "study_id": study_id, "site_id": site_id},
+        request=request,
+    )
+    name = f"Risks and issues {datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )
+
+
+# ---- Summary: what everyone sees first (detail only when asked) ------------------------------------
+
+
+class SummaryResponse(Summary):
+    source: ReportSource
+
+
+@router.get("/summary", response_model=SummaryResponse)
+async def summary(db: Db, connector: Connector, user: Reader, study_id: IdParam = None) -> SummaryResponse:
+    """Built from the full reports, so both always agree."""
+    delivery = await _study_delivery(db, connector, user, study_id, None)
+    risks = await _risks_issues(db, connector, user, study_id, None)
+    deviations = await _deviations(db, connector, user, study_id, None)
+    etmf = await _etmf(db, connector, user, study_id, None)
+    work = await _work_management(db, connector, user, study_id, None)
+    studies = [
+        s
+        for s in _studies(db, user.tenant_id, current_source_label(connector))
+        if not study_id or s.id == study_id
+    ]
+    built = build_summary(
+        delivery=delivery,
+        risks=risks,
+        deviations=deviations,
+        etmf=etmf,
+        work=work,
+        studies=studies,
+        history=delivery.enrolment_history,
+        today=today(),
+    )
+    return SummaryResponse(**built.model_dump(), source=delivery.source)

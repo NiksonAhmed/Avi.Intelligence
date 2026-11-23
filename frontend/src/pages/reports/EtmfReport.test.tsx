@@ -111,6 +111,6 @@ describe('eTMF report', () => {
     })
     renderRoute('/reports?tab=etmf')
     expect(await screen.findByText('No eTMF documents from SimpleTrials yet')).toBeInTheDocument()
-    expect(screen.getByText('SimpleTrials sandbox study')).toBeInTheDocument()
+    expect(screen.getByText('Sandbox study')).toBeInTheDocument()
   })
 })

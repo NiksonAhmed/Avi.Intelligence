@@ -1,12 +1,30 @@
 import { expect, test } from '@playwright/test'
 
-test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
+test('Summary first: a card opens its detail, then the full report', async ({ page }) => {
   await page.goto('/reports')
+  await expect(page.getByRole('tab', { name: 'Summary', selected: true })).toBeVisible()
+  await expect(page.getByTestId('summary-card-enrolment')).toBeVisible()
+  await expect(page.getByTestId('summary-study').first()).toBeVisible()
+  await page.getByTestId('summary-card-issues').click()
+  const panel = page.getByTestId('summary-detail')
+  await expect(panel).toContainText('open in SimpleTrials')
+  await panel.getByRole('button', { name: 'Open the full report' }).click()
+  await expect(page).toHaveURL(/tab=risks/)
+  await expect(page.getByTestId('issue-priority-row').first()).toBeVisible()
+})
+
+test('Study delivery report: figures, filter by study and Excel export', async ({ page }) => {
+  await page.goto('/reports?tab=study')
   await expect(page.getByRole('heading', { name: 'Reports and Insights' })).toBeVisible()
-  await expect(page.getByText('Demo data: SimpleTrials is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-on_plan')).toContainText('of 4')
+  await expect(page.getByTestId('report-headline')).toContainText('key milestone')
+  // The timeline and site activation show; the sites table is folded under More detail.
   await expect(page.getByTestId('timeline-row').first()).toBeVisible()
   await expect(page.getByTestId('activation-figure')).toContainText('5 of 7')
+  await expect(page.getByTestId('site-table-row').first()).toBeHidden()
+  await page.getByText(/^More detail: all sites/).click()
+  await expect(page.getByTestId('site-table-row').first()).toBeVisible()
 
   // Filter to one study: only its milestones remain.
   await page.getByRole('combobox', { name: 'Filter by study' }).click()
@@ -21,18 +39,15 @@ test('Study delivery report: figures, filter by study and Excel export', async (
   expect(download.suggestedFilename()).toMatch(/^Study delivery \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
 
-test('Work management report: overdue task, person and risk heat map', async ({ page }, testInfo) => {
+test('Work management report: overdue task and person', async ({ page }, testInfo) => {
   const title = `E2E return temperature loggers (${testInfo.project.name})`
-  const studies = (await (await page.request.get('/api/v1/studies')).json()) as { studies: { id: string }[] }
   const due = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const task = await page.request.post('/api/v1/tasks', {
     data: { category: 'vendor', subject_name: 'E2E Courier Ltd', title, assignee_ids: ['demo-dm-1'], due_date: due },
   })
   expect(task.status()).toBe(201)
-  const risk = await page.request.post('/api/v1/risks', {
-    data: { study_id: studies.studies[0]!.id, kind: 'risk', title: 'E2E courier delays', likelihood: 3, impact: 3, owner_id: 'demo-pm-1' },
-  })
-  expect(risk.status()).toBe(201)
+  // Risks and issues come from SimpleTrials only: they can no longer be raised here.
+  expect((await page.request.post('/api/v1/risks', { data: {} })).status()).toBe(405)
 
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'Work management' }).click()
@@ -41,7 +56,7 @@ test('Work management report: overdue task, person and risk heat map', async ({ 
   await expect(overdue).toContainText('Waiting on Demo Data Manager')
   await expect(overdue).toContainText(/[67] days late/)
   await expect(page.getByTestId('person-row').filter({ hasText: 'Demo Data Manager' })).toBeVisible()
-  await expect(page.getByTestId('heat-3-3')).not.toContainText(/^0/)
+  await expect(page.getByText('Risk heat map')).toHaveCount(0)
 
   // Filter to Vendor tasks: the study chart goes away.
   await page.getByRole('combobox', { name: 'Filter by task category' }).click()
@@ -56,13 +71,30 @@ test('Work management report: overdue task, person and risk heat map', async ({ 
   expect(download.suggestedFilename()).toMatch(/^Work management \d{4}-\d{2}-\d{2}\.xlsx$/)
 })
 
+test('Risks and issues report: SimpleTrials issues, overdue first, with Excel export', async ({ page }) => {
+  await page.goto('/reports?tab=risks')
+  await expect(page.getByRole('tab', { name: 'Risks and issues', selected: true })).toBeVisible()
+  // Priority, category and age show; the full list is folded under More detail.
+  await expect(page.getByTestId('issue-priority-row').first()).toBeVisible()
+  await expect(page.getByTestId('issue-ageing-row').first()).toBeVisible()
+  await expect(page.getByTestId('issue-row').first()).toBeHidden()
+  await page.getByText(/More detail: all risks and issues/).click()
+  await expect(page.getByTestId('issue-row').first()).toContainText('days overdue')
+  await expect(page.getByRole('button', { name: /Sync now/ })).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: /Excel/ }).click()
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^Risks and issues \d{4}-\d{2}-\d{2}\.xlsx$/)
+})
+
 test('Quality (SOPs) report: review schedule, department filter and Excel export', async ({ page }) => {
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'Quality (SOPs)' }).click()
   await expect(page).toHaveURL(/tab=quality/)
-  await expect(page.getByText('Demo data: SharePoint is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-approved')).toHaveText('11')
   await expect(page.getByTestId('review-month')).toHaveCount(13)
+  // The review schedule is folded under More detail.
+  await page.getByText(/^More detail: review schedule/).click()
   const sop001 = page.getByTestId('schedule-row').filter({ hasText: 'SOP-001' })
   await expect(sop001).toContainText('Overdue')
 
@@ -87,11 +119,16 @@ test('eTMF report: completeness, heat map, expiring documents and Excel export',
   await page.goto('/reports')
   await page.getByRole('tab', { name: 'eTMF' }).click()
   await expect(page).toHaveURL(/tab=etmf/)
-  await expect(page.getByText('Demo data: SimpleTrials is not connected')).toBeVisible()
+  await expect(page.getByText('Demo data', { exact: true })).toBeVisible()
   await expect(page.getByTestId('tile-completeness')).toContainText('%')
   await expect(page.getByRole('img', { name: /^eTMF completeness: \d+ of \d+/ })).toBeVisible()
   await expect(page.getByTestId('study-completeness-row')).toHaveCount(4)
   await expect(page.getByTestId('heat-row').first()).toBeVisible()
+  await expect(page.getByTestId('qc-row').first()).toBeVisible()
+  // Expiring documents and filing timeliness are folded under More detail.
+  await expect(page.getByTestId('timeliness-row').first()).toBeHidden()
+  await page.getByText(/^More detail: expired and expiring documents/).click()
+  await expect(page.getByTestId('timeliness-row').first()).toBeVisible()
   await expect(page.getByTestId('expiring-row').first()).toBeVisible()
 
   await page.getByRole('combobox', { name: 'Filter by study' }).click()

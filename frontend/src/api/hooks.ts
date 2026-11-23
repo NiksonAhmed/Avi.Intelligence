@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from './client'
 import type {
   ReportFilters,
+  ReportSummary,
+  DeviationsReport,
   EtmfReport,
   QualityReport,
   QualityReportFilters,
@@ -15,11 +17,17 @@ import type {
   ReindexResponse,
   Me,
   Person,
-  Risk,
   RiskFilters,
-  RiskInput,
+  ConferencesReport,
+  SiteDetail,
+  SiteValidationConnector,
+  SiteValidationReport,
+  SiteFeasibilityDetail,
+  SiteFeasibilityReport,
+  OverviewData,
   RiskListResponse,
-  RiskStatus,
+  RisksIssuesReport,
+  SiteAssignments,
   SharePointStatus,
   SopDetailResponse,
   SopFilters,
@@ -172,6 +180,177 @@ export function useSyncSimpleTrials() {
   })
 }
 
+/** Sync now for everyone (study.sync): refreshes the SimpleTrials copy and every report built on it. */
+export function useStudiesSync() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<StudySource>('/studies/sync', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['reports'] })
+      await queryClient.invalidateQueries({ queryKey: ['risks'] })
+      await queryClient.invalidateQueries({ queryKey: ['connectors', 'simpletrials'] })
+      await queryClient.invalidateQueries({ queryKey: ['studies'] })
+      await queryClient.invalidateQueries({ queryKey: ['study'] })
+    },
+  })
+}
+
+export function useConferences(filters: { year?: number; role?: string }, enabled = true) {
+  return useQuery({
+    queryKey: ['conferences', filters],
+    queryFn: () =>
+      apiRequest<ConferencesReport>('/conferences', {
+        params: { year: filters.year ? String(filters.year) : undefined, role: filters.role },
+      }),
+    placeholderData: (previous) => previous,
+    enabled,
+    retry: false,
+  })
+}
+
+export function useSiteValidation(filters: { equipment?: string; isotope?: string }) {
+  return useQuery({
+    queryKey: ['site-validation', filters],
+    queryFn: () => apiRequest<SiteValidationReport>('/site-validation', { params: filters }),
+    placeholderData: (previous) => previous,
+    retry: false,
+  })
+}
+
+export function useSiteDetail(siteId: string | undefined) {
+  return useQuery({
+    queryKey: ['site-validation', 'site', siteId],
+    queryFn: () => apiRequest<SiteDetail>(`/site-validation/sites/${encodeURIComponent(siteId!)}`),
+    enabled: !!siteId,
+    retry: false,
+  })
+}
+
+export function useSiteFeasibility(filters: { isotope?: string; indication?: string; recommendation?: string }) {
+  return useQuery({
+    queryKey: ['site-feasibility', filters],
+    queryFn: () => apiRequest<SiteFeasibilityReport>('/site-feasibility', { params: filters }),
+    placeholderData: (previous) => previous,
+    retry: false,
+  })
+}
+
+export function useFeasibilityDetail(siteId: string | undefined) {
+  return useQuery({
+    queryKey: ['site-feasibility', 'site', siteId],
+    queryFn: () => apiRequest<SiteFeasibilityDetail>(`/site-feasibility/sites/${encodeURIComponent(siteId!)}`),
+    enabled: !!siteId,
+    retry: false,
+  })
+}
+
+export function useRefreshSiteFeasibility() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/site-feasibility/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['site-feasibility'] })
+    },
+  })
+}
+
+export function useRefreshSiteValidation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/site-validation/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['site-validation'] })
+    },
+  })
+}
+
+export function useSiteValidationConnector(enabled: boolean) {
+  return useQuery({
+    queryKey: ['connectors', 'site-validation'],
+    queryFn: () => apiRequest<SiteValidationConnector>('/connectors/site-validation'),
+    enabled,
+    retry: false,
+  })
+}
+
+export function useTestSiteValidationConnector() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<SiteValidationConnector>('/connectors/site-validation/test', { method: 'POST' }),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['connectors', 'site-validation'], data)
+      await queryClient.invalidateQueries({ queryKey: ['site-validation'] })
+    },
+  })
+}
+
+export function useRefreshConferences() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiRequest<void>('/conferences/refresh', { method: 'POST' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['conferences'] })
+      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+    },
+  })
+}
+
+export function useOverview(view?: string) {
+  return useQuery({
+    queryKey: ['overview', view ?? 'mine'],
+    queryFn: () => apiRequest<OverviewData>('/overview', { params: { view } }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+/**
+ * Sync all (everyone): SimpleTrials, the SharePoint SOP library and, when Data Management is on and the
+ * person may sync it, each Viedoc study. Read-only towards every source; one failure does not stop the rest.
+ */
+export function useSyncAll() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ studies, viedoc }: { studies: boolean; viedoc: boolean }) => {
+      const jobs: Promise<unknown>[] = [apiRequest<void>('/sops/refresh', { method: 'POST' })]
+      if (studies) jobs.push(apiRequest<StudySource>('/studies/sync', { method: 'POST' }))
+      if (viedoc) {
+        jobs.push(
+          (async () => {
+            const status = await apiRequest<{ connections: { name: string }[]; can_sync: boolean }>('/data-management/status')
+            if (!status.can_sync) return
+            for (const c of status.connections) {
+              await apiRequest('/data-management/sync', jsonInit('POST', { connection: c.name }))
+            }
+          })(),
+        )
+      }
+      const results = await Promise.allSettled(jobs)
+      return results.filter((r) => r.status === 'rejected').length
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  })
+}
+
+export function useSiteAssignments(enabled: boolean) {
+  return useQuery({
+    queryKey: ['site-assignments'],
+    queryFn: () => apiRequest<SiteAssignments>('/site-assignments'),
+    enabled,
+  })
+}
+
+export function useUpdateSiteAssignments() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ personId, sites }: { personId: string; sites: string[] }) =>
+      apiRequest<SiteAssignments>(`/site-assignments/${encodeURIComponent(personId)}`, jsonInit('PUT', { sites })),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['site-assignments'], data)
+      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+    },
+  })
+}
+
 export function usePeople() {
   return useQuery({
     queryKey: ['people'],
@@ -242,38 +421,10 @@ export function useRisks(filters: RiskFilters) {
       apiRequest<RiskListResponse>('/risks', {
         params: {
           study_id: filters.study_id,
-          kind: filters.kind,
-          owner: filters.owner,
           include_closed: filters.include_closed ? 'true' : undefined,
         },
       }),
     placeholderData: (previous) => previous,
-  })
-}
-
-export function useCreateRisk() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: RiskInput) => apiRequest<Risk>('/risks', jsonInit('POST', input)),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
-  })
-}
-
-export function useUpdateRisk() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<RiskInput> & { status?: RiskStatus } }) =>
-      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}`, jsonInit('PATCH', input)),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
-  })
-}
-
-export function useRiskStatus() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: RiskStatus }) =>
-      apiRequest<Risk>(`/risks/${encodeURIComponent(id)}/status`, jsonInit('POST', { status })),
-    onSuccess: () => invalidateWork(queryClient, 'risks'),
   })
 }
 
@@ -285,6 +436,24 @@ export function useAuditEvents(offset: number, limit: number, enabled: boolean) 
         params: { offset: String(offset), limit: String(limit) },
       }),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useRisksIssuesReport(filters: ReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'risks-issues', filters],
+    queryFn: () =>
+      apiRequest<RisksIssuesReport>('/reports/risks-issues', { params: { study_id: filters.study_id, site_id: filters.site_id } }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useDeviationsReport(filters: ReportFilters) {
+  return useQuery({
+    queryKey: ['reports', 'deviations', filters],
+    queryFn: () =>
+      apiRequest<DeviationsReport>('/reports/deviations', { params: { study_id: filters.study_id, site_id: filters.site_id } }),
     placeholderData: (previous) => previous,
   })
 }
@@ -316,6 +485,14 @@ export function useWorkManagement(filters: WorkReportFilters) {
       apiRequest<WorkManagementReport>('/reports/work-management', {
         params: { study_id: filters.study_id, category: filters.category },
       }),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useReportSummary(studyId?: string) {
+  return useQuery({
+    queryKey: ['reports', 'summary', studyId],
+    queryFn: () => apiRequest<ReportSummary>('/reports/summary', { params: { study_id: studyId } }),
     placeholderData: (previous) => previous,
   })
 }

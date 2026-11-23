@@ -1,8 +1,8 @@
 """Role-based access control.
 
-Authentication is a development stub for now: every request runs as a configurable local user.
-Microsoft Entra ID sign-in replaces `get_current_user` in a later phase; route code stays the same
-because it depends only on `require(permission)`.
+Sign-in: Microsoft Entra ID when ENTRA_TENANT_ID and ENTRA_CLIENT_ID are set (app/auth/entra.py);
+otherwise a development stub where every request runs as a configurable local user (never in
+production). Route code depends only on `require(permission)`.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.auth.directory import get_person
 from app.core.config import get_settings
@@ -19,12 +19,15 @@ from app.core.config import get_settings
 
 class Role(StrEnum):
     ADMIN = "admin"
+    DIRECTOR = "director"
     PROJECT_MANAGER = "project_manager"
     CRA = "cra"
     CTA = "cta"
+    CLINICAL_OPERATIONS = "clinical_operations"
     DATA_MANAGER = "data_manager"
     SAFETY = "safety"
     QA = "qa"
+    BUSINESS_DEVELOPMENT = "business_development"
     VIEWER = "viewer"
 
 
@@ -35,6 +38,11 @@ class Permission(StrEnum):
     AUDIT_READ = "audit.read"
     ASSISTANT_USE = "assistant.use"
     STUDY_READ = "study.read"
+    """Study detail: Command Centre, reports, risks and issues, deviations, eTMF (not BD)."""
+    PORTFOLIO_READ = "portfolio.read"
+    """The Study Portfolio list and the Overview: status, sites and enrolment per study (everyone)."""
+    TASK_VIEW = "task.view"
+    """See My Tasks (everyone)."""
     WORK_MANAGE = "work.manage"
     """Administrators: manage every task, risk and issue."""
     TASK_ASSIGN_STUDY = "task.assign.study"
@@ -45,16 +53,32 @@ class Permission(StrEnum):
     """task.assign.<category>: create, assign to anyone, edit and cancel tasks of that category."""
     TASK_CREATE_OWN = "task.create_own"
     """Create tasks assigned only to yourself, for your own tracking (never Procedures and SOPs)."""
+    STUDY_SYNC = "study.sync"
+    """Press Sync now to refresh the SimpleTrials copy (everyone; read-only towards SimpleTrials)."""
+    CONFERENCE_VIEW = "conference.view"
+    # Site validation status (physics request 2026-11-17): everyone may view.
+    SITE_VALIDATION_VIEW = "site_validation.view"
+    SITE_FEASIBILITY_VIEW = "site_feasibility.view"
+    """See the Conferences page (where Avion's BD team is going): everyone."""
+    DM_VIEW = "dm.view"
+    """See the Data Management tab (Viedoc queries, missing data)."""
+    DM_SYNC = "dm.sync"
+    """Run a Data Management sync from Viedoc now (everyone; read-only towards Viedoc)."""
+    DM_EXPORT = "dm.export"
+    """Download Data Management data (Excel files, exports): System Admin and Data Manager only."""
 
 
 ROLE_LABELS: dict[Role, str] = {
     Role.ADMIN: "Administrator",
+    Role.DIRECTOR: "Director",
     Role.PROJECT_MANAGER: "Project Manager",
     Role.CRA: "Clinical Research Associate",
     Role.CTA: "Clinical Trials Associate",
+    Role.CLINICAL_OPERATIONS: "Clinical Operations",
     Role.DATA_MANAGER: "Data Manager",
     Role.SAFETY: "Pharmacovigilance",
     Role.QA: "Quality Assurance",
+    Role.BUSINESS_DEVELOPMENT: "Business Development",
     Role.VIEWER: "Viewer",
 }
 
@@ -63,18 +87,41 @@ _ALL_STAFF = {
     Permission.SOP_DOWNLOAD,
     Permission.ASSISTANT_USE,
     Permission.STUDY_READ,
+    Permission.PORTFOLIO_READ,
+    Permission.TASK_VIEW,
     Permission.TASK_CREATE_OWN,
+    Permission.DM_VIEW,  # user decision: everyone may view Data Management (read-only)
+    Permission.DM_SYNC,  # user decision: everyone may press Sync now
+    Permission.STUDY_SYNC,  # user decision: everyone may sync SimpleTrials from a report
+    Permission.CONFERENCE_VIEW,
+    Permission.SITE_VALIDATION_VIEW,
+    Permission.SITE_FEASIBILITY_VIEW,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMIN: frozenset(Permission),
+    # Director (user decision 2026-11-23): sees everything (all pages, the audit trail) and assigns tasks,
+    # but not the settings (connectors, CRA site assignments: Admin only) nor Data Management downloads
+    # (Admin and Data Manager only, user decision 2026-11-12).
+    Role.DIRECTOR: frozenset(
+        set(Permission) - {Permission.CONNECTOR_MANAGE, Permission.WORK_MANAGE, Permission.DM_EXPORT}
+    ),
     # Project Managers assign Study and General tasks (not Procedures and SOPs).
     Role.PROJECT_MANAGER: frozenset(
-        _ALL_STAFF | {Permission.AUDIT_READ, Permission.TASK_ASSIGN_STUDY, Permission.TASK_ASSIGN_GENERAL}
+        _ALL_STAFF
+        | {
+            Permission.AUDIT_READ,
+            Permission.TASK_ASSIGN_STUDY,
+            Permission.TASK_ASSIGN_GENERAL,
+            Permission.DM_VIEW,
+        }
     ),
-    Role.CRA: frozenset(_ALL_STAFF),
+    Role.CRA: frozenset(_ALL_STAFF),  # view only: CRAs do not download (user decision)
     Role.CTA: frozenset(_ALL_STAFF),
-    Role.DATA_MANAGER: frozenset(_ALL_STAFF),
+    # Clinical Operations (user decision 2026-11-23): CRAs, CTAs and physics in one Entra role; the same
+    # access as CRA and CTA, with an Overview that combines both.
+    Role.CLINICAL_OPERATIONS: frozenset(_ALL_STAFF),
+    Role.DATA_MANAGER: frozenset(_ALL_STAFF | {Permission.DM_EXPORT}),
     Role.SAFETY: frozenset(_ALL_STAFF),
     # QA assigns Procedures and SOPs, Vendor, Computer system and General tasks.
     Role.QA: frozenset(
@@ -85,9 +132,40 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.TASK_ASSIGN_VENDOR,
             Permission.TASK_ASSIGN_SYSTEM,
             Permission.TASK_ASSIGN_GENERAL,
+            Permission.DM_VIEW,
         }
     ),
-    Role.VIEWER: frozenset({Permission.SOP_READ, Permission.ASSISTANT_USE, Permission.STUDY_READ}),
+    # Business Development (user decision 2026-11-16): conferences, SOPs, their own tasks and the study
+    # portfolio at portfolio level only (no Command Centre, reports, deviations, Data Management or audit).
+    Role.BUSINESS_DEVELOPMENT: frozenset(
+        {
+            Permission.SOP_READ,
+            Permission.SOP_DOWNLOAD,
+            Permission.ASSISTANT_USE,
+            Permission.PORTFOLIO_READ,
+            Permission.TASK_VIEW,
+            Permission.TASK_CREATE_OWN,
+            Permission.STUDY_SYNC,
+            Permission.CONFERENCE_VIEW,
+            Permission.SITE_VALIDATION_VIEW,
+            Permission.SITE_FEASIBILITY_VIEW,
+        }
+    ),
+    Role.VIEWER: frozenset(
+        {
+            Permission.SOP_READ,
+            Permission.ASSISTANT_USE,
+            Permission.STUDY_READ,
+            Permission.PORTFOLIO_READ,
+            Permission.TASK_VIEW,
+            Permission.DM_VIEW,
+            Permission.DM_SYNC,
+            Permission.STUDY_SYNC,
+            Permission.CONFERENCE_VIEW,
+            Permission.SITE_VALIDATION_VIEW,
+            Permission.SITE_FEASIBILITY_VIEW,
+        }
+    ),
 }
 
 
@@ -107,8 +185,22 @@ class CurrentUser:
         return permission in self.permissions
 
 
-def get_current_user() -> CurrentUser:
+def get_current_user(request: Request) -> CurrentUser:
     settings = get_settings()
+    from app.auth import entra  # imports this module
+
+    cfg = entra.entra_config(settings)
+    if cfg is not None:
+        token = bearer_token(request) or request.cookies.get(entra.COOKIE)
+        if not token:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please sign in.")
+        try:
+            claims = entra.verify_token(token, cfg)
+            return entra.user_from_claims(claims, entra.role_map(settings.entra_role_map))
+        except entra.TokenError as exc:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Your sign-in has expired. Please sign in again."
+            ) from exc
     if settings.app_env == "production":
         # Never fall back to an implicit user in production.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in is not configured.")
@@ -119,6 +211,14 @@ def get_current_user() -> CurrentUser:
     person = get_person(settings.dev_user_id) or get_person("dev-user")
     assert person is not None
     return CurrentUser(id=person.id, name=person.name, email=person.email, role=role)
+
+
+def bearer_token(request: Request) -> str | None:
+    header = request.headers.get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return token.strip() or None
 
 
 def require(permission: Permission) -> Callable[..., CurrentUser]:

@@ -71,10 +71,11 @@ test('assign a task from the plan; completing it turns the plan entry green', as
   await expect(planRow().getByTestId(/plan-task-TSK-/)).toContainText('Completed')
 })
 
-test('risks and issues register shows the scoring rule', async ({ page }) => {
+test('the old Risks and Issues link opens the Reports tab', async ({ page }) => {
   await page.goto('/risks')
-  await expect(page.getByRole('heading', { name: 'Risks and Issues' })).toBeVisible()
-  await expect(page.getByText(/likelihood × impact as entered by the risk owner/)).toBeVisible()
+  await expect(page).toHaveURL(/\/reports\?tab=risks/)
+  await expect(page.getByRole('tab', { name: 'Risks and issues', selected: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Raise risk or issue/ })).toHaveCount(0)
 })
 
 test('administration shows the SimpleTrials connector in demo mode', async ({ page }) => {

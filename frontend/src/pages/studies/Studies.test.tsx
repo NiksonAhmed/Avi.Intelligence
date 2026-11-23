@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
@@ -13,6 +13,7 @@ import {
   renderRoute,
   viewerUser,
 } from '../../test/utils'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
 import { enrolmentText, taskBucket } from '../../lib/studies'
 
 const study = makeStudy()
@@ -39,11 +40,16 @@ describe('Study Portfolio', () => {
     expect(screen.getByText('Overdue milestones')).toBeInTheDocument()
   })
 
-  it('shows Sync now only to users who manage connectors', async () => {
+  it('shows Sync now to every role with study.sync, and hides it without', async () => {
     mockApi({ '/me': viewerUser, '/studies': makeStudyList([study]) })
-    renderRoute('/portfolio')
+    const { unmount } = renderRoute('/portfolio')
     await screen.findByRole('link', { name: 'DEMO-ONC-301' })
     expect(screen.queryByRole('button', { name: /Sync now/ })).not.toBeInTheDocument()
+    unmount()
+    const viewer = { ...viewerUser, permissions: [...viewerUser.permissions, 'study.sync'] }
+    mockApi({ '/me': viewer, '/studies': makeStudyList([study]) })
+    renderRoute('/portfolio')
+    expect(await screen.findByRole('button', { name: /Sync now/ })).toBeInTheDocument()
   })
 })
 
@@ -58,7 +64,7 @@ describe('Study Command Centre', () => {
       can_create: me === adminUser ? ['study', 'sop', 'vendor', 'system', 'general'] : [],
       statuses: [],
     },
-    '/risks': { risks: [], can_manage: me === adminUser, statuses: [] },
+    '/risks': { simpletrials_issues: [] },
     '/people': [],
   })
 
@@ -69,6 +75,15 @@ describe('Study Command Centre', () => {
     expect(screen.getByText('Key information')).toBeInTheDocument()
     expect(screen.getByText('First patient in')).toBeInTheDocument()
     expect(screen.getByText('Overdue')).toBeInTheDocument()
+  })
+
+  it('is opened from the Portfolio: no picker page, and the breadcrumb leads back there', async () => {
+    mockApi(routes())
+    const { unmount } = renderRoute(`/command-centre/${study.id}`)
+    expect(await screen.findByRole('link', { name: 'Study Portfolio' })).toHaveAttribute('href', '/portfolio')
+    unmount()
+    renderRoute('/command-centre')
+    expect(await screen.findByRole('link', { name: 'DEMO-ONC-301' })).toHaveAttribute('href', `/command-centre/${study.id}`)
   })
 
   it('shows site enrolment against target, and says when no target is recorded', async () => {
@@ -204,7 +219,7 @@ describe('Study Command Centre', () => {
   })
 
   it('shows not found for an unknown study', async () => {
-    mockApi({ '/me': adminUser, '/tasks': { tasks: [] }, '/risks': { risks: [] } })
+    mockApi({ '/me': adminUser, '/tasks': { tasks: [] }, '/risks': { simpletrials_issues: [] } })
     renderRoute('/command-centre/00000000-0000-0000-0000-000000000000')
     expect(await screen.findByText('Study not found')).toBeInTheDocument()
   })
@@ -253,5 +268,46 @@ describe('study helpers', () => {
     expect(taskBucket('2026-11-10', false, today)).toBe('week')
     expect(taskBucket('2026-12-01', false, today)).toBe('later')
     expect(taskBucket(null, false, today)).toBe('later')
+  })
+})
+
+describe('Risks and Issues', () => {
+  const issue = {
+    id: 'a1',
+    number: '1',
+    study: { id: study.id, protocol_number: 'DEMO-ONC-301', title: 'Demo study' },
+    site_number: '101',
+    site_name: 'Demo Hospital North',
+    category: 'Site',
+    subcategory: 'Site Visit',
+    priority: 'High',
+    status: 'New',
+    closed: false,
+    description: 'Demo: chase missing ISF delegation log signatures',
+    response: null,
+    assignee: 'Demo CRA',
+    opened_on: '2026-10-23',
+    due_on: '2026-11-06',
+    closed_on: null,
+    days_overdue: 6,
+  }
+
+  it('shows SimpleTrials action items as read-only issues, with overdue days', () => {
+    render(<SimpleTrialsIssues issues={[issue]} showStudy />)
+    const table = screen.getByTestId('simpletrials-issues')
+    expect(table).toHaveTextContent('From SimpleTrials')
+    expect(table).toHaveTextContent('Read-only')
+    const row = screen.getByTestId('simpletrials-issue-row')
+    expect(row).toHaveTextContent('DEMO-ONC-301')
+    expect(row).toHaveTextContent('101 · Demo Hospital North')
+    expect(row).toHaveTextContent('Demo: chase missing ISF delegation log signatures')
+    expect(row).toHaveTextContent('Demo CRA')
+    expect(screen.getByTestId('simpletrials-issue-overdue')).toHaveTextContent('6 days overdue')
+  })
+
+  it('has no page of its own: old links open Reports, Risks and issues', async () => {
+    mockApi({ '/me': adminUser })
+    renderRoute('/risks')
+    expect(await screen.findByRole('tab', { name: 'Risks and issues', selected: true })).toBeInTheDocument()
   })
 })
