@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     # "My Tasks" and assignee-only status changes can be tried locally.
     dev_user_id: str = "dev-user"
 
+    # --- Microsoft Entra ID sign-in (single sign-on) ---
+    # Sign-in is on when both are set: the directory (tenant) ID and the Avi.Intelligence app
+    # registration's application (client) ID. Neither is a secret. Roles come from the app roles on
+    # that registration; anyone signed in without a role is a Viewer. See docs/entra-setup.md.
+    entra_tenant_id: str | None = None
+    entra_client_id: str | None = None
+    # Extra role names: JSON mapping the Value of an app role in Entra to an Avi.Intelligence role, e.g.
+    # {"Physicist": "clinical_operations"}. Adds to (and can override) the built-in names in
+    # app/auth/entra.py; our own role names (admin, qa, ...) always work too.
+    entra_role_map: str | None = None
+
     # SQLite for an isolated local demo; PostgreSQL in Docker Compose / production.
     database_url: str = "sqlite:///./avi_intelligence.db"
 
@@ -120,6 +131,13 @@ class Settings(BaseSettings):
     # JSON: our field -> the list's column internal name(s), e.g. {"sites.city": "Suburb"}.
     site_validation_field_map: str | None = None
 
+    # --- Site feasibility: read-only from the Site Feasibility Tracker workbook in SharePoint ---
+    # The file's drive and item IDs (Graph); demo sites until both are set. "mock" always shows demo
+    # sites (tests and browser tests). Uses the SharePoint app credentials above.
+    site_feasibility_mode: Literal["auto", "mock"] = "auto"
+    site_feasibility_drive_id: str | None = None
+    site_feasibility_item_id: str | None = None
+
     # --- AI assistant (Anthropic Claude API) ---
     anthropic_api_key: SecretStr | None = None
     assistant_model: str = "claude-opus-5-5"
@@ -129,6 +147,10 @@ class Settings(BaseSettings):
     use_system_trust_store: bool = True
 
     @field_validator(
+        "entra_tenant_id",
+        "site_feasibility_drive_id",
+        "site_feasibility_item_id",
+        "entra_client_id",
         "sharepoint_tenant_id",
         "sharepoint_client_id",
         "sharepoint_site_url",

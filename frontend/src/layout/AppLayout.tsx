@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 
 import { useConferences, useMe } from '../api/hooks'
+import { signOut } from '../auth/signIn'
 import { BrandMark } from '../components/BrandMark'
 import { initials } from '../lib/format'
 import { brand } from '../theme'
@@ -113,6 +114,9 @@ function UserMenu() {
                 : 'Signed in with Microsoft',
             disabled: true,
           },
+          ...(me?.auth_mode === 'entra'
+            ? [{ key: 'sign-out', label: 'Sign out', onClick: () => void signOut() }]
+            : []),
         ],
       }}
     >

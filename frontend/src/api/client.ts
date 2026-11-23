@@ -1,5 +1,7 @@
 /** Thin fetch wrapper for the Avi.Intelligence API (same origin; Vite proxies /api in development). */
 
+import { renewSession, signInEnabled } from '../auth/signIn'
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -33,10 +35,14 @@ export async function apiRequest<T>(
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value) url.searchParams.set(key, value)
   }
-  const res = await fetch(url.pathname + url.search, {
-    ...rest,
-    headers: { Accept: 'application/json', ...(rest.headers ?? {}) },
-  })
+  const send = () =>
+    fetch(url.pathname + url.search, {
+      ...rest,
+      headers: { Accept: 'application/json', ...(rest.headers ?? {}) },
+    })
+  let res = await send()
+  // Microsoft sign-in: the session ran out (laptop asleep, say). Renew it once and try again.
+  if (res.status === 401 && signInEnabled() && (await renewSession())) res = await send()
   if (!res.ok) throw await parseError(res)
   if (res.status === 204) return undefined as T
   return (await res.json()) as T

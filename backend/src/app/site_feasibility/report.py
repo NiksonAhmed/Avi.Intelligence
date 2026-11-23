@@ -61,9 +61,16 @@ LABEL = {
 }
 
 
+def _unanswered(answer: str | None) -> bool:
+    """Blank, or "Not known" / "Unknown" / "TBC" in the tracker."""
+    return answer is None or answer.strip().lower().startswith(
+        ("not known", "unknown", "tbc", "to be confirmed")
+    )
+
+
 def recommendation_of(site: FeasibilitySite) -> Recommendation:
     d, t = site.recommend_diagnostics, site.recommend_therapeutics
-    if d is None and t is None:
+    if _unanswered(d) and _unanswered(t):
         return Recommendation.NOT_ASSESSED
     if d == "Yes" and t == "Yes":
         return Recommendation.BOTH

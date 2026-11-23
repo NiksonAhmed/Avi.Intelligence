@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, assistant, overview, reports, sops, studies, work
+from app.api import admin, assistant, auth, overview, reports, sops, studies, work
 from app.conferences import api as conferences_api  # optional module: answers 404 when switched off
 from app.connectors.sharepoint.graph_client import GraphError
 from app.core.config import get_settings
@@ -110,6 +110,7 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.include_router(auth.router, prefix="/api/v1")
     app.include_router(sops.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
     app.include_router(assistant.router, prefix="/api/v1")

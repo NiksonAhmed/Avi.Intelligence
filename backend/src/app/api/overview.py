@@ -54,9 +54,11 @@ TASK_SOON_DAYS = 7
 
 PURPOSE: dict[Role, str] = {
     Role.ADMIN: "Everything at a glance, plus the health of the connectors.",
+    Role.DIRECTOR: "Everything at a glance across studies, sites, quality and the team's tasks.",
     Role.PROJECT_MANAGER: "How the studies are doing: milestones, risks and issues, deviations and the eTMF.",
     Role.CRA: "Your sites: visits coming up, what to chase, and what to check at the next visit.",
     Role.CTA: "The eTMF: what is missing, what is late to file and what is about to expire.",
+    Role.CLINICAL_OPERATIONS: "Your sites and visits, the eTMF, and what to chase in Data Management.",
     Role.DATA_MANAGER: "Data quality: queries to review, missing data, lab flags and SDV.",
     Role.SAFETY: "Safety signals across studies, and your safety SOPs and tasks.",
     Role.QA: "SOPs due for review, serious deviations, and the tasks you assign.",
@@ -78,6 +80,16 @@ LAYOUT: dict[Role, list[str]] = {
         "team_tasks",
         "conferences",
     ],
+    Role.DIRECTOR: [
+        "studies",
+        "risks",
+        "deviations",
+        "etmf",
+        "dm",
+        "sops",
+        "team_tasks",
+        "conferences",
+    ],
     Role.PROJECT_MANAGER: [
         "studies",
         "risks",
@@ -90,6 +102,7 @@ LAYOUT: dict[Role, list[str]] = {
     ],
     Role.CRA: ["my_sites", "visits", "dm", "risks", "conferences"],
     Role.CTA: ["etmf", "studies", "sops", "conferences"],
+    Role.CLINICAL_OPERATIONS: ["my_sites", "visits", "etmf", "dm", "risks", "sops", "conferences"],
     Role.DATA_MANAGER: ["dm_queries", "dm_missing", "dm_labs", "dm_sdv", "deviations", "conferences"],
     Role.SAFETY: ["safety_db", "dm_labs", "deviations", "sops", "conferences"],
     Role.QA: ["sops", "deviations", "team_tasks", "risks", "conferences"],
@@ -100,9 +113,11 @@ LAYOUT: dict[Role, list[str]] = {
 # The third "Needs your attention" figure for each role (the first two are the person's own tasks).
 HIGHLIGHT: dict[Role, str] = {
     Role.ADMIN: "milestones_overdue",
+    Role.DIRECTOR: "milestones_overdue",
     Role.PROJECT_MANAGER: "milestones_overdue",
     Role.CRA: "visits_soon",
     Role.CTA: "etmf_expiring",
+    Role.CLINICAL_OPERATIONS: "visits_soon",
     Role.DATA_MANAGER: "dm_awaiting",
     Role.SAFETY: "dm_clin_sig",
     Role.QA: "sop_reviews_overdue",
@@ -688,7 +703,8 @@ async def overview(
     user: Reader,
     view: Annotated[Role | None, Query(description="Another role's page (administrators only)")] = None,
 ) -> Overview:
-    allowed = list(Role) if user.role == Role.ADMIN else [user.role]
+    # Admins and Directors may look at any role's Overview.
+    allowed = list(Role) if user.role in (Role.ADMIN, Role.DIRECTOR) else [user.role]
     role: Role = view if view is not None and view in allowed else user.role
     await ensure_synced(db, connector, user.tenant_id)
     c = _Ctx(db, connector, sops, user)

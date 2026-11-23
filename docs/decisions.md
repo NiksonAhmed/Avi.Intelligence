@@ -2,6 +2,74 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-23: Avion's Entra roles
+
+**Decisions (user, 23 Nov 2026):** Avion created app roles in Entra with its own names, kept as they are;
+the app translates them (`DEFAULT_ROLE_MAP` in `app/auth/entra.py`, more via `ENTRA_ROLE_MAP` in `.env`):
+`SuperAdmin` -> Admin (the developer, full access); `Director` -> **Director** (new role: everything and the
+audit trail, assigns tasks, may view any role's Overview, but no Administration settings); `ClinOps` ->
+**Clinical Operations** (new role for CRAs, CTAs and physics: same permissions as CRA/CTA, Overview with
+sites, visits, eTMF, Data Management, risks and SOPs); `DataManagement` (also `DM`/`DataManager`) -> Data Manager (its own Entra role);
+`QA` -> QA; `PM`/`ProjectManager` -> Project Manager. No role -> Viewer.
+- Director does **not** get Data Management downloads: the 2026-11-12 rule (Admin and Data Manager only)
+  stands unless the user changes it.
+
+## 2026-11-23: Site feasibility reads the tracker workbook in SharePoint
+
+**Decisions (user, 23 Nov 2026):**
+- The Site Feasibility Tracker stays an Excel workbook in SharePoint (folder "Site Feasibility Questionnaire
+  Template"); the team keeps editing it. No conversion to SharePoint lists. The app downloads it read-only
+  with the existing SharePoint app credentials (the app already had read access to that site; checked
+  23 Nov) and reads two sheets: **Feasibility** (one row per site survey) and **Post-Activation _ DRAFT**
+  (one row per project). Switched on by `SITE_FEASIBILITY_DRIVE_ID` and `SITE_FEASIBILITY_ITEM_ID` in
+  `.env`; blank = demo sites. Refreshed every `SHAREPOINT_CACHE_MINUTES` and by the page's Refresh button.
+- **The "Validation" sheet is not site validation**: it holds the dropdown options for the Feasibility sheet
+  (Country, State, Survey Type, Manufacturer, ...). Site validation (validated dates, expiry, phantom scans)
+  is not in this workbook; its source is still to be found (likely the physics work tracker).
+- The hidden **Contacts** sheet is never read.
+
+**How the workbook is read:**
+- Columns are found by header wording (row with "Name of Site"; the section row above it), so inserting or
+  moving columns does not break anything. The template's own spellings are handled ("117Lu" means 177Lu,
+  "myelofribrosis").
+- Answers starting with Yes/No become "Yes"/"No"; other answers stay as written ("Not applicable"). For the
+  recommendation, "Not known" / "Unknown" / "TBC" count as not answered (Not assessed), not as "No".
+- Weeks like "12-14" become 13; dates as Excel dates or dd/mm/yyyy, "Jun 2025".
+- One site (name + department) with several surveys: the latest survey is shown.
+- Map pin: a city named in the address (built-in table), else the middle of the state. No online geocoding.
+- Post-Activation rows join their site by name + department (or by name when it is unique); actual
+  enrolment is the sum of the "What was the actual enrolment" columns; assessment scores are capped at each
+  criterion's maximum, and the lowest (latest) assessed project's scores are shown.
+- First read of the real file (counts only): 31 sites, 1 older survey folded in, 26 projects joined, 5
+  Post-Activation rows not matched to a Feasibility site (names differ), no assessment scores filled in yet.
+- Tests use a made-up workbook with the tracker's header wording; they never read the real file.
+
+## 2026-11-19: Microsoft sign-in (Entra ID), starting with one role
+
+**Decisions (user, 19 Nov 2026):**
+- **Single sign-on with Microsoft Entra ID**, switched on by `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` in `.env`
+  (neither is secret). Blank = the development sign-in as before; production still refuses requests without
+  sign-in. Setup guide for the Entra admin: `docs/entra-setup.md`.
+- **Roles are app roles on the Avi.Intelligence app registration only**, so nothing else in Avion's Microsoft
+  setup changes (Avion has no roles defined in Microsoft today). The role values match ours (`admin`,
+  `project_manager`, ...). **First trial: Admin only**, assigned to one person. **Anyone at Avion who signs in
+  without a role is a Viewer** ("Assignment required" stays off), matching "all Avion employees may view".
+  Several roles: the one with the most access wins.
+- Admin guidance: assign roles to people directly or to groups made for this app only (never add people to a
+  group that grants other access); no tenant-wide changes; only `User.Read` plus the app's own
+  `access_as_user` scope.
+
+**How it works:** the website signs in with MSAL (redirect), then sends its access token for this app once to
+`POST /api/v1/auth/session`. The backend checks it against Microsoft's signing keys (tenant, audience, issuer,
+expiry, and that it is a person's delegated token) and keeps it in an HttpOnly, SameSite=Strict cookie on
+`/api`, so plain download links (Excel exports, SOPs) work unchanged. Nothing is stored server-side; the
+cookie expires with the token and the website renews it every 30 minutes (and once on a 401). A fresh
+sign-in is audited (`user.signed_in`); renewals are not. `DELETE /auth/session` signs out. Tests and browser
+tests never contact Microsoft (test signing key; Entra blanked in both).
+
+**Not yet:** per-person "My studies" and task assignment to Entra people (the demo directory still lists the
+people tasks can be assigned to); hosting beyond a laptop.
+
 ## 2026-11-18: Site feasibility page; Study Portfolio is the one list of studies
 
 **Decisions (user, 18 Nov 2026):**
@@ -13,7 +81,8 @@ A running log of design decisions, assumptions and known limitations. Newest fir
   feasibility lists are connected with the other Microsoft connections after sign-in.
 - **Split with Site validation:** the tracker's detailed imaging sections (PET/CT, SPECT/CT, CT, MRI, dose
   calibrators, gamma counter, phantoms and QA/QC, image transfer) are only 4–12% filled on the Feasibility
-  sheet; that detail lives on the Validation sheet and stays on Site validation. Shared fields (licensed
+  sheet and stay on Site validation. (Corrected 2026-11-23: the workbook's "Validation" sheet holds only
+  the dropdown options, not site validations; see the 2026-11-23 entry.) Shared fields (licensed
   isotopes, ARTnet) appear on both. The same site on both pages is matched by name, and the feasibility panel
   links to it ("Open on Site validation").
 - Recommendation (diagnostics and/or therapeutics) colours the map; a survey over 12 months old pulses.

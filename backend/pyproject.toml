@@ -13,6 +13,7 @@ dependencies = [
     "psycopg[binary]>=3.3.8",
     "pydantic>=2.14.2",
     "pydantic-settings>=2.16.2",
+    "pyjwt[crypto]>=2.10",
     "pypdf>=6.21.4",
     "sqlalchemy>=2.1.8",
     "truststore>=0.10.5",
