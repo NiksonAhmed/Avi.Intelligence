@@ -382,3 +382,20 @@ def test_simpletrials_action_items_show_as_read_only_issues(make_client) -> None
         s for s in viewer.get("/api/v1/studies").json()["studies"] if s["protocol_number"] != "DEMO-ONC-301"
     )
     assert viewer.get("/api/v1/risks", params={"study_id": other["id"]}).json()["simpletrials_issues"] == []
+
+
+def test_excluded_study_is_hidden_not_shown_as_gone(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A test study stored before it was excluded disappears from the portfolio and its page."""
+    from app.api import studies as studies_api
+    from app.core.config import get_settings
+
+    before = client.get("/api/v1/studies").json()["studies"]
+    target = next(s for s in before if s["protocol_number"] == "DEMO-CV-201")
+    hidden = get_settings().model_copy(update={"simpletrials_excluded_studies": "demo-cv-201"})
+    monkeypatch.setattr(studies_api, "get_settings", lambda: hidden)
+    after = client.get("/api/v1/studies").json()
+    assert "DEMO-CV-201" not in [s["protocol_number"] for s in after["studies"]]
+    assert len(after["studies"]) == len(before) - 1
+    assert client.get(f"/api/v1/studies/{target['id']}").status_code == 404

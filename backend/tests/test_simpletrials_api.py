@@ -13,6 +13,7 @@ import pytest
 
 from app.connectors.simpletrials import build_study_connector
 from app.connectors.simpletrials.api_client import SimpleTrialsClient, SimpleTrialsError, validate_base_url
+from app.connectors.simpletrials.exclude import parse_excluded
 from app.connectors.simpletrials.live import ApiStudyConnector
 from app.connectors.simpletrials.mapping import (
     as_int,
@@ -446,6 +447,27 @@ class TestConnector:
         assert len(records) == 1
         assert api.requests[0].url.params["customer_key"] == KEY
         assert api.requests[1].url.params["study_id"] == "42"
+
+    def test_excluded_test_study_is_never_read(self) -> None:
+        # A study key for an excluded study: only the study itself is looked up, nothing else.
+        api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS})
+        excluded = parse_excluded(" sandbox   STUDY , TC 01 EC 01")
+        assert excluded == {"sandbox study", "tc 01 ec 01"} and parse_excluded("") == frozenset()
+        records = asyncio.run(ApiStudyConnector(api.client(), excluded=excluded).fetch_studies())
+        assert records == [] and [r.url.path.rsplit("/", 1)[-1] for r in api.requests] == ["study"]
+
+    def test_workspace_skips_excluded_studies_before_reading_them(self) -> None:
+        api = FakeApi({
+            "studies": [{"id": 42, "number": "AV-101"}, {"id": 44, "number": "TC 01 EC 01"},
+                        {"id": 45, "name": "Sandbox Study"}],
+            "study": {**STUDY, "number": "AV-101"}, "sites": [], "tasks": [],
+        })  # fmt: skip
+        connector = ApiStudyConnector(
+            api.client(scope="workspace"), excluded=parse_excluded("Sandbox Study,TC 01 EC 01")
+        )
+        records = asyncio.run(connector.fetch_studies())
+        assert [r.protocol_number for r in records] == ["AV-101"]
+        assert {r.url.params.get("study_id") for r in api.requests} == {None, "42"}  # 44 and 45 never fetched
 
     def test_only_get_requests(self) -> None:
         api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS})

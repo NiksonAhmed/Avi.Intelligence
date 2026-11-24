@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.audit.service import record_event
 from app.auth.rbac import CurrentUser, Permission, require
 from app.connectors.simpletrials import get_study_connector
+from app.connectors.simpletrials.exclude import is_excluded, parse_excluded
 from app.connectors.simpletrials.models import StudyConnector, StudyConnectorInfo
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.studies.clock import today
 from app.studies.models import ConnectorSync, Study, StudyActionItem, Task
@@ -249,7 +251,17 @@ def summarise(study: Study, now: date, open_tasks: int, open_risks: int) -> Stud
     )
 
 
+def _hidden(study: Study) -> bool:
+    """Excluded test studies stored before the exclusion are hidden, not shown as gone."""
+    excluded = parse_excluded(get_settings().simpletrials_excluded_studies)
+    return is_excluded(excluded, study.protocol_number, study.title)
+
+
 def _load_studies(db: Session, tenant_id: str, source: str) -> list[Study]:
+    return [s for s in _all_studies(db, tenant_id, source) if not _hidden(s)]
+
+
+def _all_studies(db: Session, tenant_id: str, source: str) -> list[Study]:
     return list(
         db.scalars(
             select(Study)
@@ -301,7 +313,7 @@ def get_study_or_404(db: Session, tenant_id: str, study_id: str) -> Study:
         .where(Study.tenant_id == tenant_id, Study.id == study_id)
         .options(selectinload(Study.sites), selectinload(Study.milestones))
     ).first()
-    if study is None:
+    if study is None or _hidden(study):
         raise HTTPException(404, "Study not found.")
     return study
 

@@ -2,6 +2,16 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-24: SimpleTrials test studies are left out (Workspace key)
+
+**Decision (user, 24 Nov 2026):** with the Workspace (all studies) key, the test studies "Sandbox Study" and
+"TC 01 EC 01" are hidden, not shown marked as test. `SIMPLETRIALS_EXCLUDED_STUDIES` (numbers or names,
+comma-separated, any capitals) is checked before anything else about a study is read, so none of their sites,
+tasks, documents, deviations or visits are fetched or stored, which also spares the API rate limit. Studies
+stored before the exclusion are hidden from the Portfolio and their pages (404). The next sync marks them no
+longer in SimpleTrials, which Reports, Overview, Work and Ask already leave out. Sandbox testing still works
+with the Sandbox study key and an empty list.
+
 ## 2026-11-23: Site validation shows the sites' own survey answers (until physics' record is connected)
 
 **Decisions (user, 23 Nov 2026):** until Avion physics' own validation record (dates, certificates, phantom

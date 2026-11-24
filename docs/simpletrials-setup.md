@@ -30,7 +30,15 @@ SIMPLETRIALS_STUDY_ID=        # single-study access
 SIMPLETRIALS_STUDY_KEY=
 SIMPLETRIALS_CUSTOMER_ID=     # workspace access (takes precedence when set)
 SIMPLETRIALS_CUSTOMER_KEY=
+SIMPLETRIALS_EXCLUDED_STUDIES=Sandbox Study,TC 01 EC 01   # test studies to leave out (number or name)
 ```
+
+**Test studies are left out, not shown.** `SIMPLETRIALS_EXCLUDED_STUDIES` lists study numbers or names,
+comma-separated; capital letters and extra spaces don't matter. An excluded study is skipped before anything
+else about it is read (no sites, tasks, documents, deviations or visits are fetched or stored), and a study
+stored before it was excluded disappears from the Portfolio, reports, Overview, Work and Ask. It is not
+shown as "No longer in SimpleTrials". To test against the sandbox, use the Sandbox study key with an empty
+exclude list.
 
 4. Check: `cd backend; uv run python -m app.check_simpletrials`, then restart the backend.
 

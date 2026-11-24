@@ -14,6 +14,7 @@ import truststore
 
 from app.connectors.simpletrials import build_study_connector
 from app.connectors.simpletrials.api_client import SimpleTrialsError
+from app.connectors.simpletrials.exclude import parse_excluded
 from app.core.config import get_settings
 
 
@@ -32,6 +33,8 @@ async def main() -> int:
     except SimpleTrialsError as exc:
         print(f"FAILED: {exc}")
         return 2
+    excluded = sorted(parse_excluded(settings.simpletrials_excluded_studies))
+    print(f"Left out (SIMPLETRIALS_EXCLUDED_STUDIES): {', '.join(excluded) or 'none'}")
     print(f"OK: {len(studies)} study(ies)")
     for s in studies:
         done = sum(1 for m in s.milestones if m.percent_complete == 100 or m.actual_date)
