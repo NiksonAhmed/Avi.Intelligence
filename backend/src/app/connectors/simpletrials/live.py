@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from .api_client import SimpleTrialsClient, SimpleTrialsError
+from .exclude import is_excluded
 from .mapping import map_action_items, map_deviations, map_documents, map_site_visits, map_study
 from .models import StudyConnectorInfo, StudyRecord
 
@@ -13,9 +14,15 @@ log = logging.getLogger("simpletrials")
 
 
 class ApiStudyConnector:
-    def __init__(self, client: SimpleTrialsClient, key_names: frozenset[str] = frozenset()) -> None:
+    def __init__(
+        self,
+        client: SimpleTrialsClient,
+        key_names: frozenset[str] = frozenset(),
+        excluded: frozenset[str] = frozenset(),
+    ) -> None:
         self._client = client
         self._key_names = key_names
+        self._excluded = excluded
 
     def info(self) -> StudyConnectorInfo:
         return StudyConnectorInfo(mode="api", scope=self._client.scope, base_url=self._client.base_url)
@@ -25,7 +32,11 @@ class ApiStudyConnector:
             return [self._client.account_id]
         studies = await self._client.list_all("studies", "studies")
         return [
-            str(s["id"]) for s in studies if s.get("id") is not None and s.get("active", True) is not False
+            str(s["id"])
+            for s in studies
+            if s.get("id") is not None
+            and s.get("active", True) is not False
+            and not is_excluded(self._excluded, s.get("number"), s.get("name"))
         ]
 
     async def fetch_studies(self) -> list[StudyRecord]:
@@ -33,6 +44,8 @@ class ApiStudyConnector:
         for study_id in await self._study_ids():  # sequential: the API is rate limited
             params: dict[str, Any] = {"study_id": study_id}
             study = await self._client.get("study", params)
+            if is_excluded(self._excluded, study.get("number"), study.get("name")):
+                continue  # a test study: nothing else about it is read
             sites = await self._client.list_all("sites", "sites", params)
             tasks = await self._client.list_all("tasks", "tasks", params)
             record = map_study(study, sites, tasks, self._key_names)

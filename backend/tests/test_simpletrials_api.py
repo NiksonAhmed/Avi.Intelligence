@@ -13,6 +13,7 @@ import pytest
 
 from app.connectors.simpletrials import build_study_connector
 from app.connectors.simpletrials.api_client import SimpleTrialsClient, SimpleTrialsError, validate_base_url
+from app.connectors.simpletrials.exclude import parse_excluded
 from app.connectors.simpletrials.live import ApiStudyConnector
 from app.connectors.simpletrials.mapping import (
     as_int,
@@ -280,13 +281,54 @@ class TestMapping:
 
     def test_full_plan_in_simpletrials_order(self) -> None:
         plan = map_plan(TASKS, parse_key_names("First Ethics Approval;Database Hard Lock"))
-        # Everything active is kept, in SimpleTrials order; the inactive entry is dropped.
-        assert [p.external_id for p in plan] == ["10", "11", "12", "14", "15", "16"]
+        # Everything active is kept, sorted by number and name as SimpleTrials shows it (the API lists them in
+        # the order they were created); the inactive entry is dropped.
+        assert [p.external_id for p in plan] == ["10", "14", "15", "16", "11", "12"]
         kinds = {p.name: p.kind for p in plan}
         assert kinds["04. Site Startup Activities"] == "phase"
         assert kinds["04.05 First Patient In"] == "milestone"  # has a duration but carries the "fpi" code
         assert kinds["04.02 Regulatory Binder Prepared"] == "milestone"
         assert kinds["04.03 Contract Negotiation"] == "task"
+
+    def test_phase_percent_and_order_as_simpletrials_shows_them(self) -> None:
+        def row(i: int, name: str, parent: int | None, days: int, pct: int) -> dict[str, Any]:
+            base = {"id": i, "name": name, "parent_task_id": parent, "active": True}
+            return {**base, "duration_value": days, "duration_unit": "d", "percent_complete": pct}
+
+        # The closeout phase as in a real study: the API says 31 (cut off); SimpleTrials shows 32.
+        tasks = [
+            row(1, "07. Study Closeout Activities", None, 115, 31),
+            row(2, "07.02 Tables and Listings Review", 1, 20, 0),
+            row(3, "07.01 Database Hard Lock", 1, 15, 100),
+            row(4, "07.03 Final Data to Sites Complete", 1, 5, 100),
+            row(5, "07.04 Final Site Payments Complete", 1, 30, 50),
+            row(6, "07.05 Clinical Study Report Development", 1, 30, 0),
+            row(7, "07.06 Clinical Study Report Finalized", 1, 20, 0),
+            row(8, "07.07 Regulatory Agency Submissions Complete", 1, 5, 0),
+            row(9, "07.09 Study Closure Reconciliation Activities", 1, 10, 0),
+            row(10, "07.12 Study End", 1, 0, 0),
+            row(11, "07.01 Dosimetry Data", 1, 0, 100),  # added later, so listed last by the API
+            row(12, "07.08 TMF Transfer", 1, 10, 0),
+            row(13, "07.01 Dosimetry Data (SUV data)", 1, 16, 100),
+        ]
+        plan = map_plan(tasks)
+        assert plan[0].percent_complete == 32
+        assert [p.name[:5] for p in plan[1:5]] == ["07.01", "07.01", "07.01", "07.02"]
+        first = ["07.01 Database Hard Lock", "07.01 Dosimetry Data", "07.01 Dosimetry Data (SUV data)"]
+        assert [p.name for p in plan[1:4]] == first
+        assert plan[-1].name == "07.12 Study End"
+        # 99.5% rounds to 100, but a phase with work left is never shown as complete.
+        almost = [
+            row(1, "01. Phase", None, 200, 99),
+            row(2, "01.01 A", 1, 199, 100),
+            row(3, "01.02 B", 1, 1, 0),
+        ]
+        assert map_plan(almost)[0].percent_complete == 99
+        done = [row(1, "01. Phase", None, 2, 99), row(2, "01.01 A", 1, 1, 100), row(3, "01.02 B", 1, 1, 100)]
+        assert map_plan(done)[0].percent_complete == 100
+        # Entries without a usable duration: the API's own figure stays.
+        odd = [row(1, "01. Phase", None, 2, 40), {**row(2, "01.01 A", 1, 1, 100), "duration_unit": "months"}]
+        assert map_plan(odd)[0].percent_complete == 40
 
     def test_key_milestones(self) -> None:
         plan = {p.name: p for p in map_plan(TASKS, parse_key_names("first ethics approval"))}
@@ -447,6 +489,27 @@ class TestConnector:
         assert api.requests[0].url.params["customer_key"] == KEY
         assert api.requests[1].url.params["study_id"] == "42"
 
+    def test_excluded_test_study_is_never_read(self) -> None:
+        # A study key for an excluded study: only the study itself is looked up, nothing else.
+        api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS})
+        excluded = parse_excluded(" sandbox   STUDY , TC 01 EC 01")
+        assert excluded == {"sandbox study", "tc 01 ec 01"} and parse_excluded("") == frozenset()
+        records = asyncio.run(ApiStudyConnector(api.client(), excluded=excluded).fetch_studies())
+        assert records == [] and [r.url.path.rsplit("/", 1)[-1] for r in api.requests] == ["study"]
+
+    def test_workspace_skips_excluded_studies_before_reading_them(self) -> None:
+        api = FakeApi({
+            "studies": [{"id": 42, "number": "AV-101"}, {"id": 44, "number": "TC 01 EC 01"},
+                        {"id": 45, "name": "Sandbox Study"}],
+            "study": {**STUDY, "number": "AV-101"}, "sites": [], "tasks": [],
+        })  # fmt: skip
+        connector = ApiStudyConnector(
+            api.client(scope="workspace"), excluded=parse_excluded("Sandbox Study,TC 01 EC 01")
+        )
+        records = asyncio.run(connector.fetch_studies())
+        assert [r.protocol_number for r in records] == ["AV-101"]
+        assert {r.url.params.get("study_id") for r in api.requests} == {None, "42"}  # 44 and 45 never fetched
+
     def test_only_get_requests(self) -> None:
         api = FakeApi({"study": STUDY, "sites": SITES, "tasks": TASKS})
         asyncio.run(ApiStudyConnector(api.client()).fetch_studies())
@@ -495,6 +558,32 @@ def test_logs_redact_keys() -> None:
     record = logging.makeLogRecord({"msg": f"url customer_key={KEY}&x=1", "levelname": "INFO", "name": "t"})
     out = json.loads(JsonFormatter().format(record))
     assert KEY not in out["msg"]
+
+
+def test_review_fixes_countries_capitals_and_sites_not_taking_part() -> None:
+    from app.connectors.simpletrials.mapping import country_names, map_action_items
+    from app.studies.models import StudySite
+
+    # The API nests the country (found in the 24 Nov review: every study showed no countries).
+    nested = {"study_countries": [{"country": {"name": "Australia", "code": "AU"}, "actual_sites": 1}]}
+    assert country_names(nested) == ["Australia"]
+    assert country_names({"study_countries": [{"name": "New Zealand"}, "Japan"]}) == ["New Zealand", "Japan"]
+    # "URGENT" reads like "High" and "Normal".
+    item = {"id": 1, "priority_display": "URGENT", "status": "new", "category_display": "Site"}
+    assert map_action_items([item])[0].priority == "Urgent"
+    # Pending, Declined and Backup sites are kept but not counted.
+    statuses = ["Selected · Active", "Selected", "Pending", "Declined", "Backup", None]
+    sites = [StudySite(site_number=str(i), name="x", status=s) for i, s in enumerate(statuses)]
+    assert [s.selected for s in sites] == [True, True, False, False, False, True]
+
+
+def test_a_filed_documents_file_name_is_never_kept_as_its_folder() -> None:
+    path = "Study/10 Data Management/10.02 Data Capture/10.02.04 Corrections/Example_Plan_V1.0_27Aug2026.pdf"
+    doc = {"id": 9, "active": True, "placeholder": False, "tmf_level": "study", "document_path": path}
+    (record,) = map_documents([doc])
+    assert (record.section, record.folder) == ("10 Data Management", "10.02.04 Corrections")
+    flat = {**doc, "document_path": "Study/10 Data Management/Example_Plan.pdf"}
+    assert map_documents([flat])[0].folder is None
 
 
 def test_map_documents() -> None:

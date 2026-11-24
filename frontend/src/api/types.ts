@@ -685,6 +685,8 @@ export interface EtmfHeatRow {
   label: string
   protocol_number: string
   cells: EtmfCompleteness[]
+  /** 'study': the study's own documents, counted as filed (SimpleTrials lists expected documents for sites only). */
+  level?: 'site' | 'study'
 }
 
 export interface EtmfExpiring {

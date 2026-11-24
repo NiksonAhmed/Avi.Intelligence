@@ -145,7 +145,7 @@ export function StudyCommandCentrePage() {
         <Col xs={24} xl={14}>
           <Row gutter={[16, 16]}>
             {[
-              { label: 'Sites', value: s.site_count },
+              { label: 'Sites', value: s.site_count, help: rules.sites },
               {
                 label: 'Enrolment',
                 value: enrolmentText(s.enrolled, s.enrolment_target, s.enrolment_percent),

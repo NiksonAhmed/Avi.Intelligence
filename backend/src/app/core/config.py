@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     # ... or Workspace/All Studies read-only credentials (take precedence when set).
     simpletrials_customer_id: str | None = None
     simpletrials_customer_key: SecretStr | None = None
+    # Studies left out entirely (test studies): numbers or names, comma-separated, any capitals,
+    # e.g. "Sandbox Study,TC 01 EC 01". Empty = none.
+    simpletrials_excluded_studies: str = ""
     # Key milestones (portfolio headline). SimpleTrials' coded milestones are always key; these
     # extra names are matched case-insensitively, ignoring numbering like "07.03 " (semicolon-separated).
     simpletrials_key_milestones: str = (

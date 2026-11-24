@@ -72,7 +72,7 @@ function CompletenessRows({ rows, testId, empty }: { rows: EtmfCompleteness[]; t
 
 /** Sites (rows) by TMF section (columns): the share of expected documents filed. */
 export function SectionHeatMap({ report }: { report: EtmfReport }) {
-  if (report.heat_map.length === 0) return <Empty description="No site documents in this selection." />
+  if (report.heat_map.length === 0) return <Empty description="No documents in this selection." />
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ borderCollapse: 'separate', borderSpacing: 3, minWidth: 140 + report.sections.length * 96 }}>
@@ -80,7 +80,7 @@ export function SectionHeatMap({ report }: { report: EtmfReport }) {
         <thead>
           <tr>
             <th scope="col" style={{ textAlign: 'left', fontSize: 12, color: '#5B6B82' }}>
-              Site
+              Site or study level
             </th>
             {report.sections.map((s) => (
               <th key={s} scope="col" style={{ fontSize: 11, color: '#5B6B82', fontWeight: 600, width: 96, verticalAlign: 'bottom' }}>
@@ -97,6 +97,19 @@ export function SectionHeatMap({ report }: { report: EtmfReport }) {
                 <div style={{ fontSize: 11, color: '#5B6B82', fontWeight: 400 }}>{row.protocol_number}</div>
               </th>
               {row.cells.map((c) => {
+                if (row.level === 'study') {
+                  return (
+                    <td
+                      key={c.key}
+                      data-testid="study-level-cell"
+                      title={`${row.protocol_number} study level, ${c.label}: ${c.filed} filed${c.missing ? `, ${c.missing} not filed` : ''}`}
+                      style={{ background: c.filed ? '#EEF3FB' : undefined, border: c.filed ? '1px solid #C9D6EA' : undefined, color: c.filed ? '#1F3A68' : '#8A97A8', borderRadius: 4, textAlign: 'center', height: 40, fontSize: 13 }}
+                    >
+                      {c.filed ? <strong>{c.filed}</strong> : '—'}
+                      {c.filed > 0 && <div style={{ fontSize: 11 }}>filed{c.missing ? ` · ${c.missing} not filed` : ''}</div>}
+                    </td>
+                  )
+                }
                 if (!c.expected) {
                   return (
                     <td key={c.key} style={{ textAlign: 'center', color: '#8A97A8', fontSize: 12 }} title={`${row.label}, ${c.label}: none expected`}>
@@ -252,7 +265,7 @@ export function EtmfTab({ filters, onFilters }: Props) {
         </ChartCard>
       </ChartRow>
 
-      <ChartCard title="Completeness by site and TMF section" rule={data.rules.heat_map}>
+      <ChartCard title="Completeness by TMF section: study level and sites" rule={data.rules.heat_map}>
         <SectionHeatMap report={data} />
       </ChartCard>
 

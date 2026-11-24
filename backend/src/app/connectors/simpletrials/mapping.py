@@ -7,8 +7,9 @@ Field choices (verified against the Sandbox study, Nov 2026):
   * Site: number, organization_display_name, principal_investigator_full_name, status_display with
     substatus_display, and detail.site_activation_actual / subjects_enrolled_actual /
     subjects_enrolled_target. Country is the third part of `descriptor` ("1001 : Org : USA : PI").
-  * Plan: every active entry of "Milestones & Tasks" (/tasks) in SimpleTrials order, as phase / task /
-    milestone (see map_plan). end_date is the current plan, baseline_end_date the original plan,
+  * Plan: every active entry of "Milestones & Tasks" (/tasks) as SimpleTrials shows it (each level sorted by
+    number and name; a phase's % weighted by its entries' durations), as phase / task / milestone (see
+    map_plan). end_date is the current plan, baseline_end_date the original plan,
     percent_complete the progress. The API has no actual completion date.
   * eTMF (/documents, metadata only): placeholder = expected but not yet filed; tmf_level and site_id;
     the section is the first folder of document_path below the study (and below "BY SITE/<site>").
@@ -97,6 +98,8 @@ def country_names(study: dict[str, Any]) -> list[str]:
     names: list[str] = []
     for c in study.get("study_countries") or []:
         name = c if isinstance(c, str) else None
+        if isinstance(c, dict) and isinstance(c.get("country"), dict):
+            c = c["country"]  # the API nests the country: {"country": {"name": "Australia", ...}}
         if isinstance(c, dict):
             name = next(
                 (
@@ -161,8 +164,76 @@ def parse_key_names(setting: str | None) -> frozenset[str]:
     return frozenset(normalise_name(n) for n in (setting or "").split(";") if n.strip())
 
 
+_DAYS_PER_UNIT = {"d": 1, "day": 1, "days": 1, "w": 5, "week": 5, "weeks": 5}
+
+
+def _natural(name: Any) -> list[Any]:
+    """Sort key for "07.01 Database Hard Lock" before "07.01 Dosimetry Data" before "07.02 ..."."""
+    return [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", str(name or "").casefold())]
+
+
+def _plan_order(active: list[dict[str, Any]], ids: set[Any]) -> list[dict[str, Any]]:
+    """As SimpleTrials shows the plan: each level sorted by number and name, children under their phase.
+    (The API lists entries in the order they were created, so later additions come last.)"""
+    children: dict[Any, list[dict[str, Any]]] = {}
+    for t in active:
+        parent = t.get("parent_task_id") if t.get("parent_task_id") in ids else None
+        children.setdefault(parent, []).append(t)
+    out: list[dict[str, Any]] = []
+
+    def walk(parent: Any, seen: frozenset[Any]) -> None:
+        for t in sorted(children.get(parent, []), key=lambda t: _natural(t.get("name"))):
+            out.append(t)
+            if t["id"] not in seen:  # a loop in the data must not hang the sync
+                walk(t["id"], seen | {t["id"]})
+
+    walk(None, frozenset())
+    return out
+
+
+def _phase_percents(active: list[dict[str, Any]], ids: set[Any]) -> dict[Any, int]:
+    """A phase's % complete as SimpleTrials shows it: its entries' % weighted by duration, rounded (the API's
+    own figure for a phase is cut off, e.g. 31 where SimpleTrials shows 31.7 as 32%). Phases whose entries
+    have no usable durations keep the API's figure."""
+    by_id = {t["id"]: t for t in active}
+    kids: dict[Any, list[dict[str, Any]]] = {}
+    for t in active:
+        if t.get("parent_task_id") in ids:
+            kids.setdefault(t["parent_task_id"], []).append(t)
+    done: dict[Any, float | None] = {}
+
+    def pct(task_id: Any, depth: int = 0) -> float | None:
+        if task_id in done:
+            return done[task_id]
+        task = by_id[task_id]
+        own = as_int(task.get("percent_complete"))
+        result: float | None = float(own) if own is not None and own <= 100 else None
+        if task_id in kids and depth < 20:
+            total = weight = 0.0
+            for k in kids[task_id]:
+                days = as_int(k.get("duration_value"))
+                unit = _DAYS_PER_UNIT.get(str(k.get("duration_unit") or "d").lower())
+                value = pct(k["id"], depth + 1)
+                if days is None or unit is None or value is None:
+                    weight = 0.0
+                    break
+                total += value * days * unit
+                weight += days * unit
+            if weight > 0:
+                result = total / weight
+        done[task_id] = result
+        return result
+
+    def shown(task_id: Any, value: float) -> int:
+        rounded = int(value + 0.5)
+        unfinished = any((pct(k["id"]) or 0) < 100 for k in kids[task_id])
+        return 99 if rounded == 100 and unfinished else rounded  # never "complete" with work left
+
+    return {pid: shown(pid, v) for pid in kids if (v := pct(pid)) is not None}
+
+
 def map_plan(tasks: list[dict[str, Any]], key_names: frozenset[str] = frozenset()) -> list[MilestoneRecord]:
-    """The whole "Milestones & Tasks" plan, in SimpleTrials order: phases, tasks and milestones.
+    """The whole "Milestones & Tasks" plan as SimpleTrials shows it: phases, tasks and milestones.
 
     * phase: an entry that other entries belong to (has children)
     * milestone: zero duration, or carries a SimpleTrials milestone code (e.g. "fpi", even if it
@@ -173,8 +244,9 @@ def map_plan(tasks: list[dict[str, Any]], key_names: frozenset[str] = frozenset(
     ids = {t["id"] for t in active}
     names = {t["id"]: _text(t.get("name")) for t in active}
     parents = {t.get("parent_task_id") for t in active if t.get("parent_task_id") in ids}
+    phase_pct = _phase_percents(active, ids)
     plan = []
-    for t in active:  # list order = SimpleTrials order
+    for t in _plan_order(active, ids):
         name = _text(t.get("name")) or "Unnamed"
         code = _text(t.get("system_name"), 64)
         if t["id"] in parents:
@@ -183,7 +255,7 @@ def map_plan(tasks: list[dict[str, Any]], key_names: frozenset[str] = frozenset(
             kind = "milestone"
         else:
             kind = "task"
-        pct = as_int(t.get("percent_complete"))
+        pct = phase_pct[t["id"]] if t["id"] in phase_pct else as_int(t.get("percent_complete"))
         parent = t.get("parent_task_id") if t.get("parent_task_id") in ids else None
         plan.append(
             MilestoneRecord(
@@ -240,6 +312,16 @@ def _path_parts(path: Any) -> list[str]:
     return parts
 
 
+_TMF_FOLDER = re.compile(r"^\d{2}(\.\d{2})+(\s|$)")
+
+
+def _tmf_folder(parts: list[str]) -> str | None:
+    """The deepest TMF folder ("10.02.04 Documentation of ..."). A filed document's path ends with its file
+    name, which is never stored."""
+    folders = [p for p in parts[1:] if _TMF_FOLDER.match(p.strip())]
+    return _text(folders[-1], 200) if folders else None
+
+
 def map_documents(docs: list[dict[str, Any]]) -> list[EtmfDocumentRecord]:
     superseded = {str(d["precursor_id"]) for d in docs if d.get("precursor_id")}
     records: list[EtmfDocumentRecord] = []
@@ -257,7 +339,7 @@ def map_documents(docs: list[dict[str, Any]]) -> list[EtmfDocumentRecord]:
                 level=level or ("site" if site else "study"),
                 site_external_id=str(site) if site else None,
                 section=(_text(parts[0], 200) if parts else None) or "Unfiled",
-                folder=_text(parts[-1], 200) if len(parts) > 1 else None,
+                folder=_tmf_folder(parts),
                 name=_text(d.get("common_name"), 300) or _text(d.get("title"), 300) or "Untitled document",
                 filed=d.get("placeholder") is not True,
                 doc_status=_text(d.get("doc_status_display") or d.get("doc_status"), 64),
@@ -280,7 +362,9 @@ CLOSED_STATUSES = {"closed", "complete", "completed", "resolved", "done", "cance
 
 def _label(value: Any, limit: int = 64) -> str | None:
     text = _text(value, limit)
-    return text.replace("_", " ").capitalize() if text and text.islower() else text
+    if text and (text.islower() or (text.isupper() and len(text) > 3)):  # "site_visit", "URGENT"
+        return text.replace("_", " ").capitalize()
+    return text
 
 
 def map_action_items(items: list[dict[str, Any]]) -> list[ActionItemRecord]:

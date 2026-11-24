@@ -26,7 +26,11 @@ ETMF_RULES = {
         "Completeness: filed documents out of expected documents. Expected = every document SimpleTrials "
         "expects, i.e. filed documents plus placeholders not yet filed. Superseded versions are not counted."
     ),
-    "heat_map": "Each cell: the share of a site's expected documents in that TMF section that are filed.",
+    "heat_map": (
+        "Each site cell: the share of the site's expected documents in that TMF section that are filed. "
+        "Study-level rows show how many documents are filed in each section: SimpleTrials lists expected "
+        "(not yet filed) documents for sites only, so there is no percentage at study level."
+    ),
     "qc": (
         "QC status as recorded in SimpleTrials for filed documents. 'No QC recorded' means SimpleTrials "
         "holds no QC status or QC dates for the document."
@@ -57,6 +61,8 @@ class HeatRow(BaseModel):
     label: str
     protocol_number: str
     cells: list[Completeness]
+    level: Literal["site", "study"] = "site"
+    """"study": the study's own documents (counts filed; no expected list from SimpleTrials)."""
 
 
 class QcBucket(BaseModel):
@@ -184,8 +190,22 @@ def build_etmf(
     sites_missing = sorted(
         (r for r in sites_all if r.missing), key=lambda r: (-r.missing, r.percent or 0, r.label)
     )[:TOP_SITES]
-    sections = sorted({d.section for _s, site, d in rows if site is not None})
-    heat_map = [
+    sections = sorted({d.section for _s, _site, d in rows})
+    study_rows = [
+        HeatRow(
+            site_id=f"study:{s.id}",
+            label="Study level",
+            protocol_number=s.protocol_number,
+            level="study",
+            cells=[
+                _tally(Completeness(key=sec, label=sec), [d for d in ds if d.section == sec])
+                for sec in sections
+            ],
+        )
+        for s in sorted(scoped, key=lambda s: s.protocol_number)
+        if (ds := [d for st, site, d in rows if st.id == s.id and site is None])
+    ]
+    heat_map = study_rows + [
         HeatRow(
             site_id=site.id,
             label=_site_label(site),
