@@ -240,7 +240,7 @@ def summarise(study: Study, now: date, open_tasks: int, open_risks: int) -> Stud
         in_source=study.in_source,
         sandbox=study.sandbox,
         synced_at=study.synced_at,
-        site_count=len(study.sites),
+        site_count=sum(1 for s in study.sites if s.selected),
         enrolled=enrolled,
         enrolment_target=study.enrolment_target,
         enrolment_percent=enrolment_percent(enrolled, study.enrolment_target),

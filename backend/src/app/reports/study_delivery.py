@@ -204,7 +204,7 @@ def build_study_delivery(
     site_rows: list[SiteRow] = []
     for s in scoped:
         for site in s.sites:
-            if site_id and site.id != site_id:
+            if (site_id and site.id != site_id) or not site.selected:
                 continue
             percent = enrolment_percent(site.enrolled, site.enrolment_target)
             flag: Literal["none", "zero", "no_target", "over_target"] = "none"
@@ -246,7 +246,9 @@ def build_study_delivery(
             without_target += 1
 
     # ---- site activation ----
-    sites_in_scope = [(s, site) for s in scoped for site in s.sites if not site_id or site.id == site_id]
+    sites_in_scope = [
+        (s, site) for s in scoped for site in s.sites if site.selected and (not site_id or site.id == site_id)
+    ]
     activated = [(s, site) for s, site in sites_in_scope if site.activation_date]
     with_target = [(s, site) for s, site in activated if site.activation_target]
     activation = Activation(

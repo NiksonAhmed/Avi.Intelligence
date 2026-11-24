@@ -51,6 +51,8 @@ RULES: dict[str, str] = {
     "schedule_no_baseline": "No original (baseline) end date in SimpleTrials to compare with.",
     "key_milestone": "Key milestone: SimpleTrials' standard study milestones (e.g. First Patient In) "
     "and Avion's chosen list. Portfolio headline figures count key milestones only.",
+    "sites": "Sites: sites taking part (Selected in SimpleTrials). Sites listed as Pending, Declined or "
+    "Backup are shown in the site list with their status but are not counted.",
     "enrolment": "Enrolment: participants enrolled at all sites, as reported by SimpleTrials, against "
     "the study target. Not shown when SimpleTrials has no target.",
     "risk_score": "Score: likelihood × impact as entered by the risk owner (1 = low, 3 = high). "

@@ -95,9 +95,21 @@ class TestBuild:
             ("102 · Beta (P-1)", 2),
             ("101 · Alpha (P-1)", 1),
         ]
-        assert r.sections == ["01. General", "02. Personnel"]  # site-level sections only
+        # Study-level documents get their own row first (expected documents are listed for sites only).
+        assert r.sections == ["00. Study", "01. General", "02. Personnel"]
+        study = r.heat_map[0]
+        assert (study.level, study.label, study.site_id.startswith("study:")) == (
+            "study",
+            "Study level",
+            True,
+        )
+        assert [c.filed for c in study.cells] == [1, 0, 0]
         alpha = next(h for h in r.heat_map if h.label == "101 · Alpha")
-        assert [(c.filed, c.expected) for c in alpha.cells] == [(1, 1), (0, 1)]
+        assert alpha.level == "site" and [(c.filed, c.expected) for c in alpha.cells] == [
+            (0, 0),
+            (1, 1),
+            (0, 1),
+        ]
         assert [(m.where, m.name) for m in r.missing_documents] == [
             ("101 · Alpha", "a2"),
             ("102 · Beta", "b1"),
