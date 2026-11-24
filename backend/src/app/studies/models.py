@@ -40,6 +40,9 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
+NOT_TAKING_PART = ("pending", "declined", "backup")
+
+
 class Study(Base):
     __tablename__ = "studies"
 
@@ -103,6 +106,12 @@ class StudySite(Base):
     enrolment_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     study: Mapped[Study] = relationship(back_populates="sites")
+
+    @property
+    def selected(self) -> bool:
+        """Taking part in the study. Sites listed as Pending, Declined or Backup are kept and shown
+        with their status but not counted (site totals, activation, enrolment by site)."""
+        return not (self.status or "").lower().startswith(NOT_TAKING_PART)
 
 
 class StudyMilestone(Base):

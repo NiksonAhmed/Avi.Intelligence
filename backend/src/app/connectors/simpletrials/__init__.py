@@ -7,6 +7,7 @@ from functools import lru_cache
 from app.core.config import Settings, get_settings
 
 from .api_client import SimpleTrialsClient
+from .exclude import parse_excluded
 from .live import ApiStudyConnector
 from .mapping import parse_key_names
 from .mock import MockStudyConnector
@@ -40,6 +41,7 @@ def build_study_connector(settings: Settings) -> StudyConnector:
             key=key.get_secret_value(),
         ),
         key_names=parse_key_names(settings.simpletrials_key_milestones),
+        excluded=parse_excluded(settings.simpletrials_excluded_studies),
     )
 
 
