@@ -2,6 +2,45 @@
 
 A running log of design decisions, assumptions and known limitations. Newest first.
 
+## 2026-11-24: Conferences read from the BD document library (Excel schedules)
+
+**Decisions (user, 24 Nov 2026):** the Conferences page reads the BD team's workbooks in the "Conferences"
+library on the Avion Business Development Activities site (read-only Sites.Selected grant for the
+Avi.Intelligence app, made 24 Nov). Set `CONFERENCES_SHAREPOINT_LIBRARY=Conferences` and
+`CONFERENCES_SHAREPOINT_SITE_URL` to the BD site; the list reader stays for later.
+- **Newest per half:** in each "Conferences YYYY" folder, Excel files are grouped as H1, H2 or the whole year
+  from their names, and the newest of each is read. Files without "Budget" in the name come first, so the older
+  "Schedule & Budget_H1_2027" never brings back the two conferences dropped in "H1 2027_Revised_V2".
+- **2026 included:** its only workbooks are "Schedule & Budget" files; their "Conference Schedule" and
+  "Conference Budget" sheets are combined (website and registration from one, gov support and reason from the
+  other). No priority or attendees for most of 2026, because those sheets do not record them.
+- **Only sheets named "Conference ..."** are read: never the per-conference cost sheets, "Suggested ..."
+  sheets or planning sheets. Any column whose header says budget or cost is dropped before reading.
+- The same conference written two ways (same name in the year, or same start date and city) is shown once.
+  Rows without a name or a readable date (totals, footnotes) are skipped.
+- Cities added: Phoenix, Salt Lake City, and "Taipai" (as spelled in a schedule). "California" and "Taiwan"
+  alone stay "not on the map" rather than guessing a city.
+
+## 2026-11-24: Conferences follow the BD schedules (priority, people, clashes; never budget)
+
+**Decisions (user, 24 Nov 2026):** the Conferences page keeps its layout and glowing world map, and shows what
+the BD team's schedules hold. BD keeps one list per year in SharePoint (folders "Conferences 2026" and
+"Conferences 2027"); the API connection comes next.
+- **Priority 1 / 2 / 3** (green, yellow, orange as in the schedules) replaces "Avion's role" (Exhibiting,
+  Speaking, ...), which the schedules do not have: pins, chips, the Priority 1 tile and the Excel export.
+- **Who is going** (initials, e.g. "MM (JB)"), **tags** from the comment (BIO Partnering, AUS Delegate),
+  **government support / trade mission** (its own column or named in the comment), **registration** as
+  written ("EBR to 30 Jan") with the deadline read from it, **website**, and the **reason** (why go).
+- **Date clashes are found from the dates** (no more orange writing): overlapping conferences in the year,
+  "booked twice" when the same person goes to both. A tile, a card, a "!" on the map label and a note in the
+  table; clashes are worked out over the whole year whatever the filters.
+- **Budget is never read or shown** (the 16 Nov decision stands): the reader has no budget field at all, so
+  "Budget AUD" and the Grand Totals are ignored.
+- Text dates like "7-10 Jan", "29 Apr - 01 May" need the schedule's year (from its folder or file); without it
+  they are not guessed. Registration "Feb-26" means the end of February 2026; "TBD/TBA" is no date.
+- Cities added to the map table: Chantilly, Belfast, Canberra, Cologne, Gold Coast.
+- Demo conferences stay fictional (initials AB, CD, EF are no one's) until the lists are connected.
+
 ## 2026-11-23: Site validation shows the sites' own survey answers (until physics' record is connected)
 
 **Decisions (user, 23 Nov 2026):** until Avion physics' own validation record (dates, certificates, phantom

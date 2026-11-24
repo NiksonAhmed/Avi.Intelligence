@@ -195,12 +195,12 @@ export function useStudiesSync() {
   })
 }
 
-export function useConferences(filters: { year?: number; role?: string }, enabled = true) {
+export function useConferences(filters: { year?: number; priority?: string; who?: string; tag?: string }, enabled = true) {
   return useQuery({
     queryKey: ['conferences', filters],
     queryFn: () =>
       apiRequest<ConferencesReport>('/conferences', {
-        params: { year: filters.year ? String(filters.year) : undefined, role: filters.role },
+        params: { year: filters.year ? String(filters.year) : undefined, priority: filters.priority, who: filters.who, tag: filters.tag },
       }),
     placeholderData: (previous) => previous,
     enabled,

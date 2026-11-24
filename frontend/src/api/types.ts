@@ -850,7 +850,21 @@ export interface SiteAssignments {
   assignments: Record<string, string[]>
 }
 
-export type AvionRole = 'Exhibiting' | 'Speaking' | 'Attending' | 'Considering'
+export interface ClashRef {
+  id: string
+  name: string
+  starts_on: string
+  ends_on: string
+  /** People going to both (initials); empty when different people go. */
+  shared: string[]
+}
+
+export interface ClashGroup {
+  starts_on: string
+  ends_on: string
+  names: string[]
+  shared: string[]
+}
 
 export interface Conference {
   id: string
@@ -861,16 +875,24 @@ export interface Conference {
   lon: number | null
   starts_on: string
   ends_on: string
-  role: AvionRole
+  /** 1 (must go) to 3, as in the BD schedule. */
+  priority: number | null
   team: string | null
-  booth: string | null
+  attendees: string[]
+  tags: string[]
+  gov_support: string | null
+  /** The registration text as written, e.g. "EBR to 30 Jan". */
+  registration: string | null
   register_by: string | null
+  booth: string | null
   website: string | null
+  /** Why Avion is going (the comment or reason). */
   notes: string | null
   source_url: string | null
   past: boolean
   days_until: number
   register_soon: boolean
+  clashes: ClashRef[]
 }
 
 /** Conferences (BD): from the BD team's SharePoint list, or demo data until it is connected. */
@@ -879,10 +901,19 @@ export interface ConferencesReport {
   years: number[]
   tiles: ReportTile[]
   conferences: Conference[]
+  clash_groups: ClashGroup[]
   next_id: string | null
   not_on_map: number
+  attendees: string[]
+  tags: string[]
   rules: Record<string, string>
-  source: { mode: 'demo' | 'sharepoint'; reason: string | null; fetched_at: string | null }
+  source: {
+    mode: 'demo' | 'sharepoint'
+    reason: string | null
+    fetched_at: string | null
+    /** The BD workbooks read (document library source). */
+    files?: string[]
+  }
 }
 
 export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'

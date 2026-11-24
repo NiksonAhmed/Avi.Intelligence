@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     # "mock" always shows demo conferences (tests and browser tests).
     conferences_mode: Literal["auto", "mock"] = "auto"
     conferences_sharepoint_list: str | None = None
+    # The BD document library with "Conferences YYYY" folders of Excel schedules (e.g. "Conferences");
+    # read instead of the list when set.
+    conferences_sharepoint_library: str | None = None
     # The site that holds the list; defaults to SHAREPOINT_SITE_URL.
     conferences_sharepoint_site_url: str | None = None
     # JSON: our field -> the list's column internal name(s), e.g. {"role": "AvionRole"}.
