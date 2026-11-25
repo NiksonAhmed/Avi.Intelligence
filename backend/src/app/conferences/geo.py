@@ -10,8 +10,15 @@ import unicodedata
 
 # city -> (latitude, longitude). Keys are lower case without accents.
 CITIES: dict[str, tuple[float, float]] = {
+    # Added for the BD schedules (2026-11-24)
+    "belfast": (54.60, -5.93),
+    "canberra": (-35.28, 149.13),
+    "cologne": (50.94, 6.96),
+    "koln": (50.94, 6.96),
+    "gold coast": (-28.02, 153.40),
     # North America
     "boston": (42.36, -71.06),
+    "chantilly": (38.89, -77.43),
     "philadelphia": (39.95, -75.17),
     "new york": (40.71, -74.01),
     "washington": (38.91, -77.04),
@@ -97,6 +104,9 @@ CITIES: dict[str, tuple[float, float]] = {
     "guangzhou": (23.13, 113.26),
     "shenzhen": (22.54, 114.06),
     "taipei": (25.03, 121.57),
+    "taipai": (25.03, 121.57),  # as spelled in a BD schedule
+    "phoenix": (33.45, -112.07),
+    "salt lake city": (40.76, -111.89),
     "seoul": (37.57, 126.98),
     "tokyo": (35.68, 139.69),
     "osaka": (34.69, 135.50),

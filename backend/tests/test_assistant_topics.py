@@ -82,10 +82,14 @@ def test_conferences(make_client) -> None:  # type: ignore[no-untyped-def]
         due["understood"].startswith("Registration deadlines")
         and due["tables"][0]["title"] == "Registration deadlines"
     )
-    exhibiting = study(ask(viewer, "Where are we exhibiting at conferences?"))
-    assert all(row[3] == "Exhibiting" for row in exhibiting["tables"][0]["rows"])
+    # Priority replaced "Avion's role" (user decision 2026-11-24).
+    p1 = study(ask(viewer, "Which priority 1 conferences are there in 2027?"))
+    assert p1["tables"][0]["rows"] and all(row[3] == "Priority 1" for row in p1["tables"][0]["rows"])
+    clashes = study(ask(viewer, "Are there any conference date clashes?"))
+    assert clashes["understood"].startswith("Date clashes") and "booked twice" in clashes["headline"]
     cost = study(ask(make_client(Role.ADMIN), "What is the budget for conferences?"))
-    assert "Cost" not in cost["tables"][0]["columns"]  # no conference costs in Avi.Intelligence
+    columns = cost["tables"][0]["columns"]
+    assert not any(c in columns for c in ("Cost", "Budget"))  # no conference costs in Avi.Intelligence
 
 
 def test_data_management_when_switched_on(make_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]

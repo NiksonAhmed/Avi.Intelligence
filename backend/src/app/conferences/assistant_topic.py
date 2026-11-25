@@ -12,7 +12,6 @@ from app.auth.rbac import CurrentUser, Permission
 from app.core.config import get_settings
 from app.studies.clock import today
 
-from .models import AvionRole
 from .report import build_conferences
 from .source import get_conference_source
 
@@ -21,17 +20,6 @@ WORDS = frozenset(
      "exhibition", "booth", "booths", "bd", "convention", "conventions", "forum", "meeting", "meetings"}
 )  # fmt: skip
 PHRASES = ("trade show", "business development", "where is avion going", "where are we going", "who is going")
-ROLE_WORDS = {
-    "exhibiting": AvionRole.EXHIBITING,
-    "exhibit": AvionRole.EXHIBITING,
-    "booth": AvionRole.EXHIBITING,
-    "booths": AvionRole.EXHIBITING,
-    "speaking": AvionRole.SPEAKING,
-    "talk": AvionRole.SPEAKING,
-    "talks": AvionRole.SPEAKING,
-    "attending": AvionRole.ATTENDING,
-    "considering": AvionRole.CONSIDERING,
-}
 
 
 async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer | None:
@@ -45,9 +33,13 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
     source = get_conference_source()
     records = await source.list_conferences()
     years = [int(y) for y in re.findall(r"\b(20\d\d)\b", q)]
-    role = next((r for w, r in ROLE_WORDS.items() if w in words), None)
-    r = build_conferences(records, today(), year=years[0] if years else None, role=role)
+    m = re.search(r"priority\s*([123])", q)
+    priority = int(m.group(1)) if m else None
+    r = build_conferences(records, today(), year=years[0] if years else None, priority=priority)
     rows = r.conferences
+    clashes = bool(words & {"clash", "clashes", "overlap", "overlaps", "conflict", "conflicts"})
+    if clashes:
+        rows = [c for c in rows if c.clashes]
     place = [c for c in rows if (c.city and c.city.lower() in q) or (c.country and c.country.lower() in q)]
     if place:
         rows = place
@@ -58,16 +50,17 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
     elif words & {"next", "upcoming", "coming"}:
         rows = [c for c in rows if not c.past]
 
-    columns = ["Dates", "Conference", "Where", "Avion's role", "Who is going", "Register by"]
+    columns = ["Dates", "Conference", "Where", "Priority", "Who is going", "Register by"]
+    title = "Registration deadlines" if deadlines else f"Conferences in {r.year}"
     table = AnswerTable(
-        title="Registration deadlines" if deadlines else f"Conferences in {r.year}",
+        title="Date clashes" if clashes and not deadlines else title,
         columns=columns,
         rows=[
             [
                 f"{day(c.starts_on)} – {day(c.ends_on)}" if c.ends_on != c.starts_on else day(c.starts_on),
                 c.name,
                 ", ".join(x for x in (c.city, c.country) if x) or "—",
-                c.role.value,
+                f"Priority {c.priority}" if c.priority else "—",
                 c.team or "—",
                 day(c.register_by),
             ]
@@ -81,19 +74,24 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
         head = f"{len(rows)} upcoming registration deadline{'s' if len(rows) != 1 else ''}" + (
             f"; the first is {rows[0].name}, register by {day(rows[0].register_by)}." if rows else "."
         )
+    elif clashes:
+        twice = sum(1 for g in r.clash_groups if g.shared)
+        head = f"{len(r.clash_groups)} date clash{'es' if len(r.clash_groups) != 1 else ''} in {r.year}" + (
+            f", {twice} with someone booked twice." if twice else "."
+        )
     else:
         head = f"{len(rows)} conference{'s' if len(rows) != 1 else ''} in {r.year}" + (
-            f"{' as ' + role.value.lower() if role else ''}."
+            f" with priority {priority}." if priority else "."
         )
         if nxt and not place:
             head += f" Next: {nxt.name} in {nxt.city}, {day(nxt.starts_on)} (in {nxt.days_until} days)."
     lines = []
     if source.info().mode == "demo":
         lines.append("These are demo conferences: the BD team's SharePoint list is not connected yet.")
-    understood = "Registration deadlines" if deadlines else "Conferences"
+    understood = "Registration deadlines" if deadlines else ("Date clashes" if clashes else "Conferences")
     understood += (
         f" · {r.year}"
-        + (f" · {role.value}" if role else "")
+        + (f" · Priority {priority}" if priority else "")
         + (" · " + (place[0].city or place[0].country or "") if place else "")
     )
     return StudyAnswer(
@@ -107,7 +105,7 @@ async def answer(_db: Session, user: CurrentUser, question: str) -> StudyAnswer 
         sandbox_only=False,
         follow_ups=[
             "Which conference registrations are due?",
-            "Where are we exhibiting this year?",
+            "Are there any conference date clashes?",
             "What is the next conference?",
         ],  # fmt: skip
         note="Worked out by Avi.Intelligence from the BD team's conference list (read-only), by fixed rules.",

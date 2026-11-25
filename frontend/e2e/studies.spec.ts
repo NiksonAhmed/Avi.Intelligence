@@ -37,8 +37,10 @@ test('portfolio to command centre: create a task, complete it, see it in the aud
 })
 
 test('assign a task from the plan; completing it turns the plan entry green', async ({ page }, testInfo) => {
-  // Desktop and tablet runs share one test database, so each uses its own demo milestone.
-  const item = testInfo.project.name === 'tablet' ? 'First site activated' : 'Ethics approval'
+  // Desktop and tablet runs share one test database, so each uses its own demo milestone; a CI retry uses
+  // another one, because the first attempt may already have assigned its milestone.
+  const items = testInfo.project.name === 'tablet' ? ['First site activated', 'Protocol final'] : ['Ethics approval', 'First patient in']
+  const item = items[Math.min(testInfo.retry, items.length - 1)]
   const planRow = () => page.getByRole('row', { name: new RegExp(item) }).first()
 
   await page.goto('/portfolio')

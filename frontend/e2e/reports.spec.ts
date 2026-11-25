@@ -40,7 +40,8 @@ test('Study delivery report: figures, filter by study and Excel export', async (
 })
 
 test('Work management report: overdue task and person', async ({ page }, testInfo) => {
-  const title = `E2E return temperature loggers (${testInfo.project.name})`
+  // The attempt number keeps a CI retry from finding the first attempt's task as well (same database).
+  const title = `E2E return temperature loggers (${testInfo.project.name}, attempt ${testInfo.retry + 1})`
   const due = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const task = await page.request.post('/api/v1/tasks', {
     data: { category: 'vendor', subject_name: 'E2E Courier Ltd', title, assignee_ids: ['demo-dm-1'], due_date: due },

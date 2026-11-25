@@ -178,3 +178,42 @@ The IT administrator needs repository access and this guide. They do **not** nee
 - the local `.env` file or any key value by email or chat (enter secrets directly into Secrets Manager);
 - the SimpleTrials API guide (confidential vendor document);
 - the site feasibility tracker or any downloaded study files.
+
+## 11. Switching Data Management to a real Viedoc study (after go-live)
+
+For the Avi.Intelligence owner, on the server (one-server setup with `docker-compose.server.yml`). Do this only
+after **Quality has approved** showing subject IDs in Data Management. Data Management stays off
+(`DATA_MANAGEMENT_ENABLED=false`) until then.
+
+**Before you start:** your Viedoc admin creates a **read-only API client** (export only) in the real study and gives
+you its API address, client ID, client secret and environment. Never paste the client secret into chat or email.
+
+1. Back up the settings:
+   ```bash
+   cd /opt/avi/Avi.Intelligence && sudo cp .env .env.backup
+   ```
+2. Edit `.env` (`sudo nano .env`):
+   - remove any `VIEDOC_CONNECTIONS__SANDBOX__…` lines;
+   - add the study's four lines, with a short name of your choice (here `STUDY1`):
+     ```
+     VIEDOC_CONNECTIONS__STUDY1__API_URL=...
+     VIEDOC_CONNECTIONS__STUDY1__CLIENT_ID=...
+     VIEDOC_CONNECTIONS__STUDY1__CLIENT_SECRET=...
+     VIEDOC_CONNECTIONS__STUDY1__ENVIRONMENT=live
+     ```
+   - set `VIEDOC_ALLOW_LIVE=true`;
+   - **keep `DATA_MANAGEMENT_ENABLED=false` for now**, so nobody sees the page yet.
+3. Apply: `sudo docker compose -f docker-compose.server.yml up -d`
+4. **Check the real study (do not skip):**
+   ```bash
+   sudo docker compose -f docker-compose.server.yml exec backend uv run --no-sync python -m app.check_viedoc --connection study1 --trial-export
+   ```
+   It prints only file names, column names, row counts and short code lists. It never prints patient values,
+   subject data or keys, and the export is deleted from Viedoc straight away. The output is safe to share with the
+   developer, who checks that the study's forms, visits and lab set-up match what Data Management expects (it was
+   built against the sandbox study). Wrong mappings do not show as errors, only as wrong numbers.
+5. When the check is confirmed, set `DATA_MANAGEMENT_ENABLED=true` and run the command from step 3 again.
+
+**To undo:** `sudo cp .env.backup .env`, then the command from step 3.
+**More studies:** the same steps, with one set of four lines per study (`STUDY2`, `STUDY3`, …). Check each new study
+once (step 4).

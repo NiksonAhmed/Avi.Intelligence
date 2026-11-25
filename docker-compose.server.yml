@@ -1,0 +1,61 @@
+# Avi.Intelligence on ONE server (for example an AWS EC2 instance), with Docker Compose.
+#
+#   1. Put the server's .env file next to this file (settings: see README-AWS.md and .env.example).
+#   2. docker compose -f docker-compose.server.yml up -d --build
+#   3. Put HTTPS in front of port 8080 (a load balancer with a certificate, or nginx with a certificate).
+#
+# Differences from docker-compose.yml (which is for a laptop):
+#   * the allowed web address (CORS_ORIGINS), APP_ENV and all other settings come from .env, never forced here;
+#   * the database password must be set in .env (POSTGRES_PASSWORD); there is no default;
+#   * DATABASE_URL in .env, when set, points the app at an external database (e.g. AWS RDS) instead of
+#     the database container;
+#   * containers restart after a reboot or crash, and their logs are size-limited;
+#   * only the web app's port 8080 is published; the API and database are reachable only inside the server.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: avi
+      POSTGRES_USER: avi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avi -d avi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://avi:${POSTGRES_PASSWORD}@db:5432/avi}
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+    # Exactly one backend: it runs the hourly syncs itself. Do not scale this service.
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:8080" # HTTPS goes in front of this port; limit it to the load balancer in the security group
+    logging: *logging
+
+volumes:
+  pgdata:

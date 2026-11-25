@@ -1,1374 +1,1276 @@
 /** Mirrors the backend response models (backend/src/app/api, connectors/sharepoint/models.py). */
 
 export const SOP_STATUSES = [
-  "Effective",
-  "In Review",
-  "Draft",
-  "Superseded",
-  "Retired",
-  "Unknown",
-] as const;
+  'Effective',
+  'In Review',
+  'Draft',
+  'Superseded',
+  'Retired',
+  'Unknown',
+] as const
 
-export type SopStatus = (typeof SOP_STATUSES)[number];
+export type SopStatus = (typeof SOP_STATUSES)[number]
 
-export type StatusSource =
-  "column" | "folder" | "content-approval" | "version-number" | "none";
+export type StatusSource = 'column' | 'folder' | 'content-approval' | 'version-number' | 'none'
 
 export interface RevisionEntry {
-  issued: string | null;
-  version: string;
-  changes: string;
+  issued: string | null
+  version: string
+  changes: string
 }
 
 /** Document control details read from inside the document (cover page and change history). */
 export interface DocumentDetails {
-  version: string | null;
-  effective_date: string | null;
-  review_date: string | null;
-  prepared_by: string | null;
-  prepared_date: string | null;
-  reviewed_by: string | null;
-  reviewed_date: string | null;
-  approved_by: string | null;
-  approved_date: string | null;
-  revisions: RevisionEntry[];
+  version: string | null
+  effective_date: string | null
+  review_date: string | null
+  prepared_by: string | null
+  prepared_date: string | null
+  reviewed_by: string | null
+  reviewed_date: string | null
+  approved_by: string | null
+  approved_date: string | null
+  revisions: RevisionEntry[]
 }
 
 /** An SOP, or a form/template belonging to an SOP (e.g. CO-005-A under CO-SOP-005). */
-export type DocumentKind = "sop" | "form" | "other";
+export type DocumentKind = 'sop' | 'form' | 'other'
 
 export interface SopDocument {
-  id: string;
-  title: string;
-  file_name: string;
-  sop_number: string | null;
-  kind: DocumentKind;
-  parent_sop_number: string | null;
-  version: string | null;
-  status: SopStatus;
-  status_source: StatusSource;
-  effective_date: string | null;
-  review_date: string | null;
-  owner: string | null;
-  department: string | null;
-  folder_path: string;
-  modified_at: string | null;
-  modified_by: string | null;
-  web_url: string | null;
-  size_bytes: number | null;
-  mime_type: string | null;
+  id: string
+  title: string
+  file_name: string
+  sop_number: string | null
+  kind: DocumentKind
+  parent_sop_number: string | null
+  version: string | null
+  status: SopStatus
+  status_source: StatusSource
+  effective_date: string | null
+  review_date: string | null
+  owner: string | null
+  department: string | null
+  folder_path: string
+  modified_at: string | null
+  modified_by: string | null
+  web_url: string | null
+  size_bytes: number | null
+  mime_type: string | null
   /** Read from inside the document when it was indexed (approved SOPs only). */
-  details?: DocumentDetails | null;
-  version_source?: "column" | "document" | "file-name" | null;
+  details?: DocumentDetails | null
+  version_source?: 'column' | 'document' | 'file-name' | null
   /** Set when the file name states a different version than the document itself. */
-  file_name_version?: string | null;
+  file_name_version?: string | null
   /** Word copy filed next to the signed PDF; offered as a download for forms/templates. */
-  editable_copy?: {
-    id: string;
-    file_name: string;
-    size_bytes: number | null;
-    mime_type: string | null;
-  } | null;
+  editable_copy?: { id: string; file_name: string; size_bytes: number | null; mime_type: string | null } | null
 }
 
+
 export interface SopSource {
-  mode: "live" | "mock";
-  mock_reason: string | null;
-  site_url: string | null;
-  library: string;
-  folder: string | null;
+  mode: 'live' | 'mock'
+  mock_reason: string | null
+  site_url: string | null
+  library: string
+  folder: string | null
   /** Only approved documents are listed; drafts and superseded versions are never shown. */
-  approved_only: boolean;
+  approved_only: boolean
 }
 
 export interface SopSummary {
   /** SOPs only; forms and templates are counted in `forms`. */
-  total: number;
-  forms: number;
-  effective: number;
-  in_review_or_draft: number;
-  review_due: number;
+  total: number
+  forms: number
+  effective: number
+  in_review_or_draft: number
+  review_due: number
 }
 
 export interface SopListResponse {
-  documents: SopDocument[];
-  total_unfiltered: number;
-  summary: SopSummary;
-  departments: string[];
-  fetched_at: string;
-  from_cache: boolean;
-  source: SopSource;
+  documents: SopDocument[]
+  total_unfiltered: number
+  summary: SopSummary
+  departments: string[]
+  fetched_at: string
+  from_cache: boolean
+  source: SopSource
 }
 
 export interface SopDetailResponse {
-  document: SopDocument;
+  document: SopDocument
   /** For an SOP: its forms and templates. */
-  forms: SopDocument[];
+  forms: SopDocument[]
   /** For a form or template: the SOP it belongs to. */
-  parent: SopDocument | null;
-  review_due: boolean;
-  source: SopSource;
+  parent: SopDocument | null
+  review_due: boolean
+  source: SopSource
 }
 
 export interface SopFilters {
-  q?: string;
-  status?: SopStatus;
-  department?: string;
+  q?: string
+  status?: SopStatus
+  department?: string
 }
 
 export interface Me {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  role_label: string;
-  permissions: string[];
-  auth_mode: string;
+  id: string
+  name: string
+  email: string
+  role: string
+  role_label: string
+  permissions: string[]
+  auth_mode: string
 }
 
 export interface CheckStep {
-  label: string;
-  ok: boolean;
-  detail: string | null;
+  label: string
+  ok: boolean
+  detail: string | null
 }
 
 export interface ConnectorColumn {
-  name: string;
-  display_name: string;
-  type: string;
+  name: string
+  display_name: string
+  type: string
 }
 
 export interface SharePointStatus {
-  info: SopSource & { field_map: Record<string, string[]> };
+  info: SopSource & { field_map: Record<string, string[]> }
   check: {
-    ok: boolean;
-    steps: CheckStep[];
-    columns: ConnectorColumn[] | null;
-    document_count: number | null;
-  };
+    ok: boolean
+    steps: CheckStep[]
+    columns: ConnectorColumn[] | null
+    document_count: number | null
+  }
 }
 
 export interface AuditEvent {
-  id: string;
-  occurred_at: string;
-  actor_name: string;
-  actor_role: string;
-  action: string;
-  entity_type: string;
-  entity_id: string | null;
-  summary: string;
-  details: Record<string, unknown>;
+  id: string
+  occurred_at: string
+  actor_name: string
+  actor_role: string
+  action: string
+  entity_type: string
+  entity_id: string | null
+  summary: string
+  details: Record<string, unknown>
 }
 
 export interface AssistantCitation {
-  number: number;
-  sop_id: string;
-  sop_number: string | null;
-  title: string;
-  version: string | null;
-  section: string;
-  cited_text: string;
-  web_url: string | null;
+  number: number
+  sop_id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  section: string
+  cited_text: string
+  web_url: string | null
 }
 
 export interface AnswerSegment {
-  text: string;
-  citations: number[];
+  text: string
+  citations: number[]
 }
 
 export interface AssistantExcerpt {
-  sop_id: string;
-  sop_number: string | null;
-  title: string;
-  version: string | null;
-  section: string;
-  text: string;
+  sop_id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  section: string
+  text: string
 }
 
 export interface StudyAnswerTable {
-  title: string;
-  columns: string[];
-  rows: string[][];
+  title: string
+  columns: string[]
+  rows: string[][]
   /** Per row: where the record is shown in Avi.Intelligence. */
-  links: (string | null)[];
+  links: (string | null)[]
   /** Rows not shown (the table is capped). */
-  more: number;
+  more: number
 }
 
 /** A study question answered from the SimpleTrials copy by fixed rules (no AI). */
 export interface StudyAnswer {
   /** A study intent, or a module's topic (e.g. 'conferences', 'dm_queries'). */
-  intent: string;
+  intent: string
   /** How the question was read, e.g. "What is due · close-out · next 90 days · all studies". */
-  understood: string;
-  headline: string;
-  lines: string[];
-  tables: StudyAnswerTable[];
-  sources: { label: string; url: string }[];
-  as_of: string | null;
-  sandbox_only: boolean;
-  follow_ups: string[];
-  note: string;
+  understood: string
+  headline: string
+  lines: string[]
+  tables: StudyAnswerTable[]
+  sources: { label: string; url: string }[]
+  as_of: string | null
+  sandbox_only: boolean
+  follow_ups: string[]
+  note: string
 }
 
 export interface AskResponse {
-  interaction_id: string;
-  mode: "ai" | "search-only" | "study-lookup";
-  outcome: "answered" | "refused" | "no-sources";
-  segments: AnswerSegment[];
-  citations: AssistantCitation[];
-  excerpts: AssistantExcerpt[];
-  notice: string | null;
-  model: string | null;
-  demo: boolean;
-  kind: "sop" | "study";
-  study: StudyAnswer | null;
+  interaction_id: string
+  mode: 'ai' | 'search-only' | 'study-lookup'
+  outcome: 'answered' | 'refused' | 'no-sources'
+  segments: AnswerSegment[]
+  citations: AssistantCitation[]
+  excerpts: AssistantExcerpt[]
+  notice: string | null
+  model: string | null
+  demo: boolean
+  kind: 'sop' | 'study'
+  study: StudyAnswer | null
 }
 
 export interface AssistantStatus {
-  ai_enabled: boolean;
-  model: string | null;
-  demo: boolean;
-  documents: number;
-  passages: number;
-  failed: number;
-  last_indexed_at: string | null;
-  suggested_questions: string[];
+  ai_enabled: boolean
+  model: string | null
+  demo: boolean
+  documents: number
+  passages: number
+  failed: number
+  last_indexed_at: string | null
+  suggested_questions: string[]
   /** Example study questions (empty when the user cannot see studies). */
-  study_questions: string[];
+  study_questions: string[]
 }
 
 export interface ReindexResponse {
-  indexed: number;
-  unchanged: number;
-  removed: number;
-  failed: { sop: string; reason: string }[];
-  documents: {
-    sop_number: string | null;
-    title: string;
-    version: string | null;
-    passages: number;
-    error: string | null;
-  }[];
+  indexed: number
+  unchanged: number
+  removed: number
+  failed: { sop: string; reason: string }[]
+  documents: { sop_number: string | null; title: string; version: string | null; passages: number; error: string | null }[]
 }
 
 export interface AuditPage {
-  items: AuditEvent[];
-  total: number;
+  items: AuditEvent[]
+  total: number
 }
 
 // --- Studies (read-only copy of SimpleTrials) -------------------------------------------------
 
 /** Progress status: against the current end date. */
 export type MilestoneState =
-  | "completed"
-  | "overdue"
-  | "due_soon"
-  | "in_progress"
-  | "not_started"
-  | "upcoming"
-  | "not_planned";
+  | 'completed'
+  | 'overdue'
+  | 'due_soon'
+  | 'in_progress'
+  | 'not_started'
+  | 'upcoming'
+  | 'not_planned'
 
 /** Schedule status: current end date compared with the original (baseline) end date. */
-export type ScheduleState =
-  "on_plan" | "slipped" | "slipped_major" | "ahead" | "no_baseline";
+export type ScheduleState = 'on_plan' | 'slipped' | 'slipped_major' | 'ahead' | 'no_baseline'
 
 export interface SyncInfo {
-  started_at: string;
-  finished_at: string | null;
-  ok: boolean;
-  mode: string;
-  counts: Record<string, number>;
-  error: string | null;
-  triggered_by: string;
+  started_at: string
+  finished_at: string | null
+  ok: boolean
+  mode: string
+  counts: Record<string, number>
+  error: string | null
+  triggered_by: string
 }
 
 export interface StudySource {
   connector: {
-    name: string;
-    mode: "mock" | "import" | "api";
-    mock_reason: string | null;
-    scope: "workspace" | "study" | null;
-    base_url: string | null;
-  };
-  last_sync: SyncInfo | null;
-  last_successful_sync_at: string | null;
+    name: string
+    mode: 'mock' | 'import' | 'api'
+    mock_reason: string | null
+    scope: 'workspace' | 'study' | null
+    base_url: string | null
+  }
+  last_sync: SyncInfo | null
+  last_successful_sync_at: string | null
 }
 
 /** One entry of the study plan (phase, task or milestone), in SimpleTrials order. */
 export interface Milestone {
-  id: string;
-  external_id: string;
-  parent_external_id: string | null;
-  kind: "phase" | "task" | "milestone";
-  is_key: boolean;
-  name: string;
-  phase: string | null;
+  id: string
+  external_id: string
+  parent_external_id: string | null
+  kind: 'phase' | 'task' | 'milestone'
+  is_key: boolean
+  name: string
+  phase: string | null
   /** Current start date. */
-  start_date: string | null;
+  start_date: string | null
   /** Original (baseline) start date. */
-  baseline_start_date: string | null;
+  baseline_start_date: string | null
   /** Current start minus original start, in days (positive = later). */
-  start_variance_days: number | null;
+  start_variance_days: number | null
   /** Current end date. */
-  planned_date: string | null;
-  actual_date: string | null;
+  planned_date: string | null
+  actual_date: string | null
   /** Original (baseline) end date. */
-  baseline_date: string | null;
-  percent_complete: number | null;
+  baseline_date: string | null
+  percent_complete: number | null
   /** Current end minus original end, in days (positive = later). */
-  variance_days: number | null;
-  state: MilestoneState;
-  schedule: ScheduleState;
+  variance_days: number | null
+  state: MilestoneState
+  schedule: ScheduleState
 }
 
 export interface StudySite {
-  id: string;
-  site_number: string;
-  name: string;
-  country: string | null;
-  principal_investigator: string | null;
-  status: string | null;
-  activation_date: string | null;
-  enrolled: number | null;
-  enrolment_target: number | null;
-  enrolment_percent: number | null;
+  id: string
+  site_number: string
+  name: string
+  country: string | null
+  principal_investigator: string | null
+  status: string | null
+  activation_date: string | null
+  enrolled: number | null
+  enrolment_target: number | null
+  enrolment_percent: number | null
 }
 
 export interface StudySummary {
-  id: string;
-  protocol_number: string;
-  title: string;
-  sponsor: string | null;
-  phase: string | null;
-  therapeutic_area: string | null;
-  status: string | null;
-  countries: string[];
-  project_manager: string | null;
-  in_source: boolean;
-  sandbox: boolean;
-  synced_at: string;
-  site_count: number;
-  enrolled: number | null;
-  enrolment_target: number | null;
-  enrolment_percent: number | null;
-  overdue_milestones: number;
-  next_milestone: Milestone | null;
-  open_tasks: number;
-  open_risks: number;
+  id: string
+  protocol_number: string
+  title: string
+  sponsor: string | null
+  phase: string | null
+  therapeutic_area: string | null
+  status: string | null
+  countries: string[]
+  project_manager: string | null
+  in_source: boolean
+  sandbox: boolean
+  synced_at: string
+  site_count: number
+  enrolled: number | null
+  enrolment_target: number | null
+  enrolment_percent: number | null
+  overdue_milestones: number
+  next_milestone: Milestone | null
+  open_tasks: number
+  open_risks: number
 }
 
-export type Rules = Record<string, string>;
+export type Rules = Record<string, string>
 
 export interface StudyListResponse {
-  studies: StudySummary[];
-  total_unfiltered: number;
-  statuses: string[];
-  phases: string[];
-  source: StudySource;
-  rules: Rules;
+  studies: StudySummary[]
+  total_unfiltered: number
+  statuses: string[]
+  phases: string[]
+  source: StudySource
+  rules: Rules
 }
 
 export interface StudyDetailResponse {
-  study: StudySummary;
-  sites: StudySite[];
-  milestones: Milestone[];
-  source: StudySource;
-  rules: Rules;
+  study: StudySummary
+  sites: StudySite[]
+  milestones: Milestone[]
+  source: StudySource
+  rules: Rules
 }
 
 export interface StudyFilters {
-  q?: string;
-  status?: string;
-  phase?: string;
+  q?: string
+  status?: string
+  phase?: string
 }
 
 // --- Tasks, risks and issues (managed in Avi.Intelligence) ------------------------------------
 
 export interface Person {
-  id: string;
-  name: string;
-  email: string;
-  job_title: string;
-  demo: boolean;
+  id: string
+  name: string
+  email: string
+  job_title: string
+  demo: boolean
 }
 
 export interface StudyRef {
-  id: string;
-  protocol_number: string;
-  title: string;
+  id: string
+  protocol_number: string
+  title: string
 }
 
-export const TASK_STATUSES = [
-  "Not started",
-  "In progress",
-  "Blocked",
-  "Completed",
-  "Cancelled",
-] as const;
-export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const TASK_STATUSES = ['Not started', 'In progress', 'Blocked', 'Completed', 'Cancelled'] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
 
 /** The study-plan entry (SimpleTrials milestone/task) a task was raised for. */
 export interface PlanItemRef {
-  external_id: string;
-  name: string;
+  external_id: string
+  name: string
 }
 
 /** What a task is about. Study tasks link to a study, SOP tasks to approved SOPs/forms. */
-export type TaskCategory = "study" | "sop" | "vendor" | "system" | "general";
+export type TaskCategory = 'study' | 'sop' | 'vendor' | 'system' | 'general'
 
 export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
-  study: "Study",
-  sop: "Procedures and SOPs",
-  vendor: "Vendor",
-  system: "Computer system",
-  general: "General",
-};
+  study: 'Study',
+  sop: 'Procedures and SOPs',
+  vendor: 'Vendor',
+  system: 'Computer system',
+  general: 'General',
+}
 
 export interface TaskAssignee {
-  person_id: string;
-  name: string;
-  status: TaskStatus;
-  completed_at: string | null;
+  person_id: string
+  name: string
+  status: TaskStatus
+  completed_at: string | null
 }
 
 /** An approved SOP or form, as it was when the task was raised. */
 export interface TaskDocumentRef {
-  sop_id: string;
-  kind: string;
-  sop_number: string | null;
-  title: string;
-  version: string | null;
+  sop_id: string
+  kind: string
+  sop_number: string | null
+  title: string
+  version: string | null
 }
 
 export interface Task {
-  id: string;
-  reference: string;
-  category: TaskCategory;
-  category_label: string;
-  study: StudyRef | null;
-  plan_item: PlanItemRef | null;
+  id: string
+  reference: string
+  category: TaskCategory
+  category_label: string
+  study: StudyRef | null
+  plan_item: PlanItemRef | null
   /** Vendor or computer system name, as typed. */
-  subject_name: string | null;
-  documents: TaskDocumentRef[];
-  title: string;
-  description: string | null;
+  subject_name: string | null
+  documents: TaskDocumentRef[]
+  title: string
+  description: string | null
   /** Everyone the task is assigned to, each with their own status. */
-  assignees: TaskAssignee[];
-  progress: { completed: number; total: number };
-  due_date: string | null;
+  assignees: TaskAssignee[]
+  progress: { completed: number; total: number }
+  due_date: string | null
   /** Overall: Completed when everyone is done; Cancelled when the task was cancelled. */
-  status: TaskStatus;
+  status: TaskStatus
   /** The current user's own status, when they are one of the assigned people. */
-  my_status: TaskStatus | null;
+  my_status: TaskStatus | null
   /** Created by someone for themselves. */
-  own_task: boolean;
-  overdue: boolean;
-  created_by_name: string;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-  can_update_status: boolean;
-  can_edit: boolean;
+  own_task: boolean
+  overdue: boolean
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  can_update_status: boolean
+  can_edit: boolean
 }
 
 export interface TaskListResponse {
-  tasks: Task[];
+  tasks: Task[]
   /** Administrator: manages every task. */
-  can_manage: boolean;
+  can_manage: boolean
   /** Categories the current user may create tasks in (empty = read-only). */
-  can_create: TaskCategory[];
+  can_create: TaskCategory[]
   /** Categories the current user may assign to other people; others are for themselves only. */
-  can_assign: TaskCategory[];
-  categories: { value: TaskCategory; label: string }[];
-  statuses: TaskStatus[];
+  can_assign: TaskCategory[]
+  categories: { value: TaskCategory; label: string }[]
+  statuses: TaskStatus[]
 }
 
 export interface TaskFilters {
-  study_id?: string;
-  assignee?: string;
-  category?: TaskCategory;
-  sop_id?: string;
-  include_closed?: boolean;
+  study_id?: string
+  assignee?: string
+  category?: TaskCategory
+  sop_id?: string
+  include_closed?: boolean
 }
 
 export interface TaskInput {
-  category?: TaskCategory;
-  study_id?: string | null;
-  plan_item_id?: string | null;
-  subject_name?: string | null;
-  document_ids?: string[];
-  title: string;
-  description?: string | null;
-  assignee_ids: string[];
-  due_date?: string | null;
+  category?: TaskCategory
+  study_id?: string | null
+  plan_item_id?: string | null
+  subject_name?: string | null
+  document_ids?: string[]
+  title: string
+  description?: string | null
+  assignee_ids: string[]
+  due_date?: string | null
 }
 
 /** A SimpleTrials action item shown as a read-only issue (managed in SimpleTrials). */
 export interface SimpleTrialsIssue {
-  id: string;
-  number: string | null;
-  study: StudyRef;
-  site_number: string | null;
-  site_name: string | null;
-  category: string | null;
-  subcategory: string | null;
-  priority: string | null;
-  status: string | null;
-  closed: boolean;
-  description: string | null;
-  response: string | null;
-  assignee: string | null;
-  opened_on: string | null;
-  due_on: string | null;
-  closed_on: string | null;
+  id: string
+  number: string | null
+  study: StudyRef
+  site_number: string | null
+  site_name: string | null
+  category: string | null
+  subcategory: string | null
+  priority: string | null
+  status: string | null
+  closed: boolean
+  description: string | null
+  response: string | null
+  assignee: string | null
+  opened_on: string | null
+  due_on: string | null
+  closed_on: string | null
   /** Days past the due date for open items; null when not overdue. */
-  days_overdue: number | null;
+  days_overdue: number | null
 }
 
 /** Risks and issues come from SimpleTrials (the CTMS) only; nothing is raised in Avi.Intelligence. */
 export interface RiskListResponse {
-  simpletrials_issues: SimpleTrialsIssue[];
+  simpletrials_issues: SimpleTrialsIssue[]
 }
 
 export interface RiskFilters {
-  study_id?: string;
-  include_closed?: boolean;
+  study_id?: string
+  include_closed?: boolean
 }
+
 
 // ---- Reports and Insights ----
 
-export type ReportTone = "good" | "info" | "warn" | "bad" | "neutral";
+export type ReportTone = 'good' | 'info' | 'warn' | 'bad' | 'neutral'
 
 export interface ReportTile {
-  key: string;
-  label: string;
-  value: string;
-  note: string;
-  tone: ReportTone;
+  key: string
+  label: string
+  value: string
+  note: string
+  tone: ReportTone
 }
 
 /** A tile's trend: one point a week (oldest first) and the change since about 30 days ago. */
 export interface TileTrend {
-  points: number[];
-  change: number | null;
-  change_text: string | null;
-  tone: "good" | "bad" | "neutral";
+  points: number[]
+  change: number | null
+  change_text: string | null
+  tone: 'good' | 'bad' | 'neutral'
 }
 
 /** The top of every report: a headline sentence by fixed rules, and tile trends (all studies only). */
 export interface ReportInsights {
-  headline: string;
-  detail: string | null;
-  tone: ReportTone;
-  trends: Record<string, TileTrend>;
+  headline: string
+  detail: string | null
+  tone: ReportTone
+  trends: Record<string, TileTrend>
   /** The first day figures were saved for this report; null when trends are not shown (a filtered view). */
-  history_since: string | null;
+  history_since: string | null
 }
 
 export interface ReportOption {
-  id: string;
-  label: string;
+  id: string
+  label: string
 }
 
 export interface ReportSource {
   /** "api" (SimpleTrials) or "mock" (demo data). */
-  mode: string;
+  mode: string
   /** When the data was last copied from SimpleTrials. */
-  as_of: string | null;
-  sandbox_only: boolean;
+  as_of: string | null
+  sandbox_only: boolean
   /** Days of history kept so far (trend charts need a few weeks). */
-  snapshot_days: number;
+  snapshot_days: number
 }
 
 export interface DeliveryMilestone {
-  study_id: string;
-  protocol_number: string;
-  name: string;
-  original_date: string | null;
-  current_date: string | null;
-  variance_days: number | null;
-  state: MilestoneState;
-  schedule: ScheduleState;
-  completed_on: string | null;
-  completion_basis: "actual" | "first-seen" | "before-tracking" | null;
-  on_time: boolean | null;
+  study_id: string
+  protocol_number: string
+  name: string
+  original_date: string | null
+  current_date: string | null
+  variance_days: number | null
+  state: MilestoneState
+  schedule: ScheduleState
+  completed_on: string | null
+  completion_basis: 'actual' | 'first-seen' | 'before-tracking' | null
+  on_time: boolean | null
 }
 
 export interface DeliverySite {
-  study_id: string;
-  protocol_number: string;
-  site_id: string;
-  site_number: string;
-  name: string;
-  country: string | null;
-  enrolled: number | null;
-  target: number | null;
-  percent: number | null;
-  flag: "none" | "zero" | "no_target" | "over_target";
+  study_id: string
+  protocol_number: string
+  site_id: string
+  site_number: string
+  name: string
+  country: string | null
+  enrolled: number | null
+  target: number | null
+  percent: number | null
+  flag: 'none' | 'zero' | 'no_target' | 'over_target'
 }
 
 export interface PendingSite {
-  study_id: string;
-  protocol_number: string;
-  site_id: string;
-  site_number: string;
-  name: string;
-  status: string | null;
-  planned_date: string | null;
-  days_late: number | null;
-  state: "late" | "due_soon" | "upcoming" | "no_date";
+  study_id: string
+  protocol_number: string
+  site_id: string
+  site_number: string
+  name: string
+  status: string | null
+  planned_date: string | null
+  days_late: number | null
+  state: 'late' | 'due_soon' | 'upcoming' | 'no_date'
 }
 
 export interface StudyDeliveryReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  milestones: DeliveryMilestone[];
-  on_time: { completed: number; on_time: number; with_original_date: number };
-  sites: DeliverySite[];
-  activation: {
-    total: number;
-    activated: number;
-    percent: number | null;
-    with_target: number;
-    on_time: number;
-  };
-  pending_sites: PendingSite[];
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  milestones: DeliveryMilestone[]
+  on_time: { completed: number; on_time: number; with_original_date: number }
+  sites: DeliverySite[]
+  activation: { total: number; activated: number; percent: number | null; with_target: number; on_time: number }
+  pending_sites: PendingSite[]
   /** Enrolled and target on each day a figure was saved (daily snapshot; nothing estimated). */
-  enrolment_history?: {
-    day: string;
-    enrolled: number;
-    target: number | null;
-  }[];
-  study_options: ReportOption[];
-  site_options: ReportOption[];
-  rules: Record<string, string>;
-  source: ReportSource;
+  enrolment_history?: { day: string; enrolled: number; target: number | null }[]
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
 }
 
 export interface ReportFilters {
-  study_id?: string;
-  site_id?: string;
+  study_id?: string
+  site_id?: string
 }
 
 export interface WorkStatusCounts {
-  key: string;
-  label: string;
-  not_started: number;
-  in_progress: number;
-  blocked: number;
-  overdue: number;
-  total: number;
+  key: string
+  label: string
+  not_started: number
+  in_progress: number
+  blocked: number
+  overdue: number
+  total: number
 }
 
 export interface WorkPersonLoad {
-  person_id: string;
-  name: string;
-  open: number;
-  overdue: number;
-  due_soon: number;
-  blocked: number;
+  person_id: string
+  name: string
+  open: number
+  overdue: number
+  due_soon: number
+  blocked: number
 }
 
 export interface WorkOverdueTask {
-  task_id: string;
-  reference: string;
-  title: string;
-  category: TaskCategory;
-  category_label: string;
-  about: string | null;
-  due_date: string;
-  days_overdue: number;
-  status: TaskStatus;
+  task_id: string
+  reference: string
+  title: string
+  category: TaskCategory
+  category_label: string
+  about: string | null
+  due_date: string
+  days_overdue: number
+  status: TaskStatus
   /** People who have not finished their part yet. */
-  waiting_on: string[];
+  waiting_on: string[]
 }
 
 export interface WorkManagementReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  by_category: WorkStatusCounts[];
-  by_study: WorkStatusCounts[];
-  by_person: WorkPersonLoad[];
-  overdue: WorkOverdueTask[];
-  completed: { total: number; with_due_date: number; on_time: number };
-  study_options: ReportOption[];
-  category_options: ReportOption[];
-  rules: Record<string, string>;
-  source: ReportSource;
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  by_category: WorkStatusCounts[]
+  by_study: WorkStatusCounts[]
+  by_person: WorkPersonLoad[]
+  overdue: WorkOverdueTask[]
+  completed: { total: number; with_due_date: number; on_time: number }
+  study_options: ReportOption[]
+  category_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
 }
 
 export interface EtmfCompleteness {
-  key: string;
-  label: string;
-  expected: number;
-  filed: number;
-  missing: number;
-  percent: number | null;
+  key: string
+  label: string
+  expected: number
+  filed: number
+  missing: number
+  percent: number | null
 }
 
 export interface EtmfHeatRow {
-  site_id: string;
-  label: string;
-  protocol_number: string;
-  cells: EtmfCompleteness[];
+  site_id: string
+  label: string
+  protocol_number: string
+  cells: EtmfCompleteness[]
   /** 'study': the study's own documents, counted as filed (SimpleTrials lists expected documents for sites only). */
-  level?: "site" | "study";
+  level?: 'site' | 'study'
 }
 
 export interface EtmfExpiring {
-  id: string;
-  name: string;
-  protocol_number: string;
+  id: string
+  name: string
+  protocol_number: string
   /** The site, or "Study level". */
-  where: string;
-  expires_on: string;
+  where: string
+  expires_on: string
   /** Days until expiry (negative: expired that many days ago). */
-  days: number;
-  state: "expired" | "expiring";
+  days: number
+  state: 'expired' | 'expiring'
 }
 
 export interface EtmfReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  overall: EtmfCompleteness;
-  by_study: EtmfCompleteness[];
-  sites_missing: EtmfCompleteness[];
-  sections: string[];
-  heat_map: EtmfHeatRow[];
-  qc: { label: string; count: number }[];
-  timeliness: { key: string; label: string; count: number }[];
-  timeliness_measured: number;
-  timeliness_on_time: number;
-  expiring: EtmfExpiring[];
-  missing_documents: {
-    protocol_number: string;
-    where: string;
-    section: string;
-    folder: string | null;
-    name: string;
-  }[];
-  has_documents: boolean;
-  study_options: ReportOption[];
-  site_options: ReportOption[];
-  rules: Record<string, string>;
-  source: ReportSource;
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  overall: EtmfCompleteness
+  by_study: EtmfCompleteness[]
+  sites_missing: EtmfCompleteness[]
+  sections: string[]
+  heat_map: EtmfHeatRow[]
+  qc: { label: string; count: number }[]
+  timeliness: { key: string; label: string; count: number }[]
+  timeliness_measured: number
+  timeliness_on_time: number
+  expiring: EtmfExpiring[]
+  missing_documents: { protocol_number: string; where: string; section: string; folder: string | null; name: string }[]
+  has_documents: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
 }
 
 export interface DeviationCount {
-  key: string;
-  label: string;
-  count: number;
-  open: number;
+  key: string
+  label: string
+  count: number
+  open: number
 }
 
 export interface DeviationRow {
-  id: string;
-  number: string | null;
-  protocol_number: string;
-  where: string;
-  category: string;
-  severity: string;
-  status: string;
-  closed: boolean;
-  description: string | null;
-  subject_level: boolean;
-  occurred_on: string | null;
-  identified_on: string | null;
-  reported_on: string | null;
-  closed_on: string | null;
-  reportable: boolean | null;
-  days_open: number | null;
-  days_to_identify: number | null;
+  id: string
+  number: string | null
+  protocol_number: string
+  where: string
+  category: string
+  severity: string
+  status: string
+  closed: boolean
+  description: string | null
+  subject_level: boolean
+  occurred_on: string | null
+  identified_on: string | null
+  reported_on: string | null
+  closed_on: string | null
+  reportable: boolean | null
+  days_open: number | null
+  days_to_identify: number | null
 }
 
 /** Protocol deviations report: SimpleTrials deviations (read-only copy; no subject IDs or people). */
 export interface DeviationsReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  by_severity: DeviationCount[];
-  by_category: DeviationCount[];
-  by_site: {
-    key: string;
-    label: string;
-    protocol_number: string;
-    total: number;
-    open: number;
-    major: number;
-    enrolled: number | null;
-    per_10: number | null;
-  }[];
-  trend: {
-    month: string;
-    critical: number;
-    major: number;
-    minor: number;
-    other: number;
-  }[];
-  ageing: DeviationCount[];
-  deviations: DeviationRow[];
-  has_deviations: boolean;
-  study_options: ReportOption[];
-  site_options: ReportOption[];
-  rules: Record<string, string>;
-  source: ReportSource;
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  by_severity: DeviationCount[]
+  by_category: DeviationCount[]
+  by_site: { key: string; label: string; protocol_number: string; total: number; open: number; major: number; enrolled: number | null; per_10: number | null }[]
+  trend: { month: string; critical: number; major: number; minor: number; other: number }[]
+  ageing: DeviationCount[]
+  deviations: DeviationRow[]
+  has_deviations: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
 }
 
 export interface IssueRow {
-  id: string;
-  number: string | null;
-  protocol_number: string;
-  where: string;
-  category: string;
-  subcategory: string | null;
-  priority: string;
-  status: string;
-  closed: boolean;
-  description: string | null;
-  response: string | null;
-  assignee: string | null;
-  opened_on: string | null;
-  due_on: string | null;
-  closed_on: string | null;
-  days_open: number | null;
-  days_overdue: number | null;
+  id: string
+  number: string | null
+  protocol_number: string
+  where: string
+  category: string
+  subcategory: string | null
+  priority: string
+  status: string
+  closed: boolean
+  description: string | null
+  response: string | null
+  assignee: string | null
+  opened_on: string | null
+  due_on: string | null
+  closed_on: string | null
+  days_open: number | null
+  days_overdue: number | null
 }
 
 /** Risks and issues report: SimpleTrials action items (read-only copy; nothing raised in Avi.Intelligence). */
 export interface RisksIssuesReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  by_priority: (DeviationCount & { overdue: number })[];
-  by_category: DeviationCount[];
-  by_site: {
-    key: string;
-    label: string;
-    protocol_number: string;
-    open: number;
-    overdue: number;
-    total: number;
-  }[];
-  ageing: DeviationCount[];
-  trend: { month: string; opened: number; closed: number }[];
-  issues: IssueRow[];
-  has_issues: boolean;
-  study_options: ReportOption[];
-  site_options: ReportOption[];
-  rules: Record<string, string>;
-  source: ReportSource;
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  by_priority: (DeviationCount & { overdue: number })[]
+  by_category: DeviationCount[]
+  by_site: { key: string; label: string; protocol_number: string; open: number; overdue: number; total: number }[]
+  ageing: DeviationCount[]
+  trend: { month: string; opened: number; closed: number }[]
+  issues: IssueRow[]
+  has_issues: boolean
+  study_options: ReportOption[]
+  site_options: ReportOption[]
+  rules: Record<string, string>
+  source: ReportSource
 }
 
-export type OverviewTone = "good" | "info" | "warn" | "bad" | "neutral";
+export type OverviewTone = 'good' | 'info' | 'warn' | 'bad' | 'neutral'
 
 export interface OverviewKpi {
-  label: string;
-  value: string;
-  note: string | null;
-  tone: OverviewTone;
+  label: string
+  value: string
+  note: string | null
+  tone: OverviewTone
   /** Opens the page with the detail. */
-  link: string | null;
+  link: string | null
 }
 
 export interface OverviewRow {
-  label: string;
-  detail: string | null;
-  chip: string | null;
-  tone: OverviewTone;
-  link: string | null;
+  label: string
+  detail: string | null
+  chip: string | null
+  tone: OverviewTone
+  link: string | null
 }
 
 export interface OverviewSection {
-  key: string;
-  title: string;
-  source: string;
-  link: string | null;
-  link_label: string | null;
-  kpis: OverviewKpi[];
-  rows: OverviewRow[];
-  notice: string | null;
-  empty: string | null;
+  key: string
+  title: string
+  source: string
+  link: string | null
+  link_label: string | null
+  kpis: OverviewKpi[]
+  rows: OverviewRow[]
+  notice: string | null
+  empty: string | null
 }
 
 /** The role-based Overview: each role sees its own page; administrators may preview any role. */
 export interface OverviewData {
-  view: string;
-  view_label: string;
-  views: { id: string; label: string }[];
-  purpose: string;
-  sources: { name: string; as_of: string | null; ok: boolean }[];
-  attention: { counts: OverviewKpi[]; items: OverviewRow[] };
-  sections: OverviewSection[];
+  view: string
+  view_label: string
+  views: { id: string; label: string }[]
+  purpose: string
+  sources: { name: string; as_of: string | null; ok: boolean }[]
+  attention: { counts: OverviewKpi[]; items: OverviewRow[] }
+  sections: OverviewSection[]
 }
 
 /** Which sites each person (CRA) covers; set by administrators (SimpleTrials does not record it). */
 export interface SiteAssignments {
-  people: { id: string; name: string; job_title: string }[];
-  sites: { key: string; label: string }[];
-  assignments: Record<string, string[]>;
+  people: { id: string; name: string; job_title: string }[]
+  sites: { key: string; label: string }[]
+  assignments: Record<string, string[]>
 }
 
-export type AvionRole = "Exhibiting" | "Speaking" | "Attending" | "Considering";
+export interface ClashRef {
+  id: string
+  name: string
+  starts_on: string
+  ends_on: string
+  /** People going to both (initials); empty when different people go. */
+  shared: string[]
+}
+
+export interface ClashGroup {
+  starts_on: string
+  ends_on: string
+  names: string[]
+  shared: string[]
+}
 
 export interface Conference {
-  id: string;
-  name: string;
-  city: string | null;
-  country: string | null;
-  lat: number | null;
-  lon: number | null;
-  starts_on: string;
-  ends_on: string;
-  role: AvionRole;
-  team: string | null;
-  booth: string | null;
-  register_by: string | null;
-  website: string | null;
-  notes: string | null;
-  source_url: string | null;
-  past: boolean;
-  days_until: number;
-  register_soon: boolean;
+  id: string
+  name: string
+  city: string | null
+  country: string | null
+  lat: number | null
+  lon: number | null
+  starts_on: string
+  ends_on: string
+  /** 1 (must go) to 3, as in the BD schedule. */
+  priority: number | null
+  team: string | null
+  attendees: string[]
+  tags: string[]
+  gov_support: string | null
+  /** The registration text as written, e.g. "EBR to 30 Jan". */
+  registration: string | null
+  register_by: string | null
+  booth: string | null
+  website: string | null
+  /** Why Avion is going (the comment or reason). */
+  notes: string | null
+  source_url: string | null
+  past: boolean
+  days_until: number
+  register_soon: boolean
+  clashes: ClashRef[]
 }
 
 /** Conferences (BD): from the BD team's SharePoint list, or demo data until it is connected. */
 export interface ConferencesReport {
-  year: number;
-  years: number[];
-  tiles: ReportTile[];
-  conferences: Conference[];
-  next_id: string | null;
-  not_on_map: number;
-  rules: Record<string, string>;
+  year: number
+  years: number[]
+  tiles: ReportTile[]
+  conferences: Conference[]
+  clash_groups: ClashGroup[]
+  next_id: string | null
+  not_on_map: number
+  attendees: string[]
+  tags: string[]
+  rules: Record<string, string>
   source: {
-    mode: "demo" | "sharepoint";
-    reason: string | null;
-    fetched_at: string | null;
-  };
+    mode: 'demo' | 'sharepoint'
+    reason: string | null
+    fetched_at: string | null
+    /** The BD workbooks read (document library source). */
+    files?: string[]
+  }
 }
 
-export type ReviewState = "overdue" | "due_soon" | "scheduled" | "no_date";
+export type ReviewState = 'overdue' | 'due_soon' | 'scheduled' | 'no_date'
 
 export interface QualityScheduleRow {
-  id: string;
-  sop_number: string | null;
-  title: string;
-  version: string | null;
-  department: string | null;
-  owner: string | null;
-  effective_date: string | null;
-  review_date: string | null;
-  days_to_review: number | null;
-  state: ReviewState;
-  forms: number;
-  open_tasks: number;
+  id: string
+  sop_number: string | null
+  title: string
+  version: string | null
+  department: string | null
+  owner: string | null
+  effective_date: string | null
+  review_date: string | null
+  days_to_review: number | null
+  state: ReviewState
+  forms: number
+  open_tasks: number
 }
 
 export interface QualityMonth {
   /** "overdue", or the month as YYYY-MM. */
-  key: string;
-  label: string;
-  count: number;
-  items: string[];
+  key: string
+  label: string
+  count: number
+  items: string[]
 }
 
 export interface QualityHealthCheck {
-  key: string;
-  label: string;
-  description: string;
-  count: number;
-  items: { id: string; label: string }[];
+  key: string
+  label: string
+  description: string
+  count: number
+  items: { id: string; label: string }[]
 }
 
 export interface QualityChange {
-  id: string;
-  sop_number: string | null;
-  title: string;
-  kind: "sop" | "form" | "other";
-  version: string;
-  issued: string;
-  changes: string | null;
-  basis: "history" | "effective";
+  id: string
+  sop_number: string | null
+  title: string
+  kind: 'sop' | 'form' | 'other'
+  version: string
+  issued: string
+  changes: string | null
+  basis: 'history' | 'effective'
 }
 
 export interface QualityReport {
-  tiles: ReportTile[];
-  insights?: ReportInsights;
-  schedule: QualityScheduleRow[];
-  by_month: QualityMonth[];
+  tiles: ReportTile[]
+  insights?: ReportInsights
+  schedule: QualityScheduleRow[]
+  by_month: QualityMonth[]
   /** Reviews due after the months shown. */
-  later: number;
-  health: QualityHealthCheck[];
-  changes: QualityChange[];
-  months: number;
-  department_options: ReportOption[];
-  rules: Record<string, string>;
-  source: { mode: string; approved_only: boolean; library: string };
-  fetched_at: string;
+  later: number
+  health: QualityHealthCheck[]
+  changes: QualityChange[]
+  months: number
+  department_options: ReportOption[]
+  rules: Record<string, string>
+  source: { mode: string; approved_only: boolean; library: string }
+  fetched_at: string
 }
 
 export interface QualityReportFilters {
-  department?: string;
-  months?: number;
+  department?: string
+  months?: number
 }
 
 export interface WorkReportFilters {
-  study_id?: string;
-  category?: TaskCategory;
+  study_id?: string
+  category?: TaskCategory
 }
 
 // --- Reports summary: what everyone sees first; detail only when asked ----------------------------
 
-export type ReportTabKey =
-  "study" | "risks" | "deviations" | "etmf" | "quality" | "work";
+export type ReportTabKey = 'study' | 'risks' | 'deviations' | 'etmf' | 'quality' | 'work'
 
 export interface SummaryCard {
-  key: string;
-  label: string;
-  value: string;
-  foot: string;
-  tone: ReportTone;
-  change: string | null;
-  change_tone: "good" | "bad" | "neutral";
+  key: string
+  label: string
+  value: string
+  foot: string
+  tone: ReportTone
+  change: string | null
+  change_tone: 'good' | 'bad' | 'neutral'
 }
 
 export interface StudyStatus {
-  id: string;
-  protocol_number: string;
-  what: string;
-  status: "on_track" | "at_risk" | "off_track";
-  reason: string;
-  enrolled: number;
-  target: number | null;
-  percent: number | null;
+  id: string
+  protocol_number: string
+  what: string
+  status: 'on_track' | 'at_risk' | 'off_track'
+  reason: string
+  enrolled: number
+  target: number | null
+  percent: number | null
 }
 
 export interface SummaryDetail {
-  title: string;
-  summary: string;
-  rows: { label: string; chip: string; tone: ReportTone }[];
-  report: ReportTabKey;
-  study_id: string | null;
+  title: string
+  summary: string
+  rows: { label: string; chip: string; tone: ReportTone }[]
+  report: ReportTabKey
+  study_id: string | null
 }
 
 export interface ReportSummary {
-  cards: SummaryCard[];
-  studies: StudyStatus[];
-  enrolment: { month: string; total: number; new: number | null }[];
-  enrolment_target: number | null;
-  sparks: { key: string; label: string; value: string; points: number[] }[];
-  sites: { key: string; label: string; count: number }[];
-  rings: {
-    key: string;
-    label: string;
-    percent: number | null;
-    left: string;
-    right: string;
-  }[];
-  details: Record<string, SummaryDetail>;
-  history_since: string | null;
-  rules: Record<string, string>;
-  source: ReportSource;
+  cards: SummaryCard[]
+  studies: StudyStatus[]
+  enrolment: { month: string; total: number; new: number | null }[]
+  enrolment_target: number | null
+  sparks: { key: string; label: string; value: string; points: number[] }[]
+  sites: { key: string; label: string; count: number }[]
+  rings: { key: string; label: string; percent: number | null; left: string; right: string }[]
+  details: Record<string, SummaryDetail>
+  history_since: string | null
+  rules: Record<string, string>
+  source: ReportSource
 }
 
 // --- Site validation status (physics request 2026-11-17) ------------------------------------------
 
-export type EquipmentKind =
-  "PET/CT" | "SPECT/CT" | "Dose calibrator" | "Gamma counter";
-export type ValidationStatus =
-  | "overdue"
-  | "files_missing"
-  | "due_soon"
-  | "booked"
-  | "in_date"
-  | "reported"
-  | "none";
-export type ScanStatus =
-  "Booked" | "Scanned" | "Submitted to core lab" | "Passed" | "Failed";
+export type EquipmentKind = 'PET/CT' | 'SPECT/CT' | 'Dose calibrator' | 'Gamma counter'
+export type ValidationStatus = 'overdue' | 'files_missing' | 'due_soon' | 'booked' | 'in_date' | 'reported' | 'none'
+export type ScanStatus = 'Booked' | 'Scanned' | 'Submitted to core lab' | 'Passed' | 'Failed'
 
 export interface SiteSourceInfo {
   /** survey: the sites' own answers in the feasibility tracker, not physics' record. */
-  mode: "demo" | "sharepoint" | "survey";
-  reason: string | null;
-  fetched_at: string | null;
+  mode: 'demo' | 'sharepoint' | 'survey'
+  reason: string | null
+  fetched_at: string | null
 }
 
 export interface ValidationRow {
-  site_id: string;
-  site: string;
-  city: string;
-  state: string;
-  equipment: EquipmentKind;
-  isotope: string;
-  validated_by: string | null;
-  validated_on: string | null;
-  files_available: boolean | null;
-  next_review: string | null;
-  days_to_review: number | null;
-  scan_on: string | null;
-  status: ValidationStatus;
+  site_id: string
+  site: string
+  city: string
+  state: string
+  equipment: EquipmentKind
+  isotope: string
+  validated_by: string | null
+  validated_on: string | null
+  files_available: boolean | null
+  next_review: string | null
+  days_to_review: number | null
+  scan_on: string | null
+  status: ValidationStatus
 }
 
 export interface SitePin {
-  id: string;
-  name: string;
-  city: string;
-  state: string;
-  lat: number;
-  lon: number;
-  status: ValidationStatus;
-  equipment: string[];
-  attention: boolean;
+  id: string
+  name: string
+  city: string
+  state: string
+  lat: number
+  lon: number
+  status: ValidationStatus
+  equipment: string[]
+  attention: boolean
   /** How many phantoms the site has. */
-  phantoms: number;
+  phantoms: number
 }
 
 export interface SiteValidationReport {
-  headline: string;
-  tiles: ReportTile[];
-  sites: SitePin[];
-  reviews: {
-    site_id: string;
-    site: string;
-    city: string;
-    equipment: EquipmentKind;
-    isotope: string;
-    physicist: string | null;
-    next_review: string;
-    days: number;
-  }[];
-  scans: {
-    site_id: string;
-    site: string;
-    city: string;
-    study: string;
-    equipment: EquipmentKind;
-    isotope: string;
-    status: ScanStatus;
-    on: string;
-  }[];
-  rows: ValidationRow[];
-  equipment_options: EquipmentKind[];
-  isotope_options: string[];
-  rules: Record<string, string>;
-  source: SiteSourceInfo;
+  headline: string
+  tiles: ReportTile[]
+  sites: SitePin[]
+  reviews: { site_id: string; site: string; city: string; equipment: EquipmentKind; isotope: string; physicist: string | null; next_review: string; days: number }[]
+  scans: { site_id: string; site: string; city: string; study: string; equipment: EquipmentKind; isotope: string; status: ScanStatus; on: string }[]
+  rows: ValidationRow[]
+  equipment_options: EquipmentKind[]
+  isotope_options: string[]
+  rules: Record<string, string>
+  source: SiteSourceInfo
 }
 
 export interface SiteEquipment {
-  kind: EquipmentKind;
-  manufacturer: string | null;
-  model: string | null;
-  installed: string | null;
-  last_calibration: string | null;
-  maintenance: string | null;
-  replacement: string | null;
+  kind: EquipmentKind
+  manufacturer: string | null
+  model: string | null
+  installed: string | null
+  last_calibration: string | null
+  maintenance: string | null
+  replacement: string | null
 }
 
 export interface SiteDetail {
-  id: string;
-  name: string;
-  department: string | null;
-  city: string;
-  state: string;
-  status: ValidationStatus;
-  last_survey: string | null;
-  artnet_accreditation: string | null;
-  physicist: string | null;
-  radiopharmacy: boolean | null;
-  licensed: string[];
-  equipment: SiteEquipment[];
-  missing_equipment: EquipmentKind[];
-  isotopes: string[];
-  grid: {
-    equipment: EquipmentKind;
-    isotope: string;
-    state: ValidationStatus | null;
-    validated: boolean;
-    tip: string;
-  }[];
+  id: string
+  name: string
+  department: string | null
+  city: string
+  state: string
+  status: ValidationStatus
+  last_survey: string | null
+  artnet_accreditation: string | null
+  physicist: string | null
+  radiopharmacy: boolean | null
+  licensed: string[]
+  equipment: SiteEquipment[]
+  missing_equipment: EquipmentKind[]
+  isotopes: string[]
+  grid: { equipment: EquipmentKind; isotope: string; state: ValidationStatus | null; validated: boolean; tip: string }[]
   qa: {
-    phantoms: string[];
-    used_for_study_scans: string | null;
-    records_access: string | null;
-    monthly_submission: string | null;
-    daily_qc_storage: string | null;
-    routines: Record<string, string>;
-  };
-  transfer: {
-    pacs: string | null;
-    dicom_export: string | null;
-    methods: string[];
-  };
-  scans: {
-    study: string;
-    equipment: EquipmentKind;
-    isotope: string;
-    status: ScanStatus;
-    on: string;
-  }[];
-  rows: ValidationRow[];
-  source_url: string | null;
-  source: SiteSourceInfo;
+    phantoms: string[]
+    used_for_study_scans: string | null
+    records_access: string | null
+    monthly_submission: string | null
+    daily_qc_storage: string | null
+    routines: Record<string, string>
+  }
+  transfer: { pacs: string | null; dicom_export: string | null; methods: string[] }
+  scans: { study: string; equipment: EquipmentKind; isotope: string; status: ScanStatus; on: string }[]
+  rows: ValidationRow[]
+  source_url: string | null
+  source: SiteSourceInfo
 }
 
 /** Administration: the site validation SharePoint connection. */
 export interface SiteValidationConnector {
-  mode: "demo" | "sharepoint" | "survey";
-  reason: string | null;
-  site_url: string | null;
-  sites_list: string | null;
-  validations_list: string | null;
-  scans_list: string | null;
-  ok: boolean | null;
-  error: string | null;
-  fetched_at: string | null;
-  counts: Record<string, number>;
-  skipped: Record<string, number>;
+  mode: 'demo' | 'sharepoint' | 'survey'
+  reason: string | null
+  site_url: string | null
+  sites_list: string | null
+  validations_list: string | null
+  scans_list: string | null
+  ok: boolean | null
+  error: string | null
+  fetched_at: string | null
+  counts: Record<string, number>
+  skipped: Record<string, number>
 }
 
 // ---- Site feasibility (Site Feasibility Tracker: Feasibility and Post-Activation sheets) ----------------
 
-export type Recommendation =
-  "both" | "therapeutics" | "diagnostics" | "not_recommended" | "not_assessed";
+export type Recommendation = 'both' | 'therapeutics' | 'diagnostics' | 'not_recommended' | 'not_assessed'
 
 export interface FeasibilityPin {
-  id: string;
-  name: string;
-  city: string;
-  state: string;
-  lat: number;
-  lon: number;
-  recommendation: Recommendation;
-  short: string;
-  accepting: string | null;
-  survey_due: boolean;
-  hrec_weeks: number | null;
+  id: string
+  name: string
+  city: string
+  state: string
+  lat: number
+  lon: number
+  recommendation: Recommendation
+  short: string
+  accepting: string | null
+  survey_due: boolean
+  hrec_weeks: number | null
 }
 
 export interface FeasibilityRow {
-  site_id: string;
-  site: string;
-  city: string;
-  state: string;
-  sector: string | null;
-  accepting: string | null;
-  recommendation: Recommendation;
-  licensed: string[];
-  hrec_weeks: number | null;
-  contract_weeks: number | null;
-  startup_weeks: number | null;
-  last_survey: string | null;
-  survey_due: boolean;
-  answered: number;
-  score: number | null;
+  site_id: string
+  site: string
+  city: string
+  state: string
+  sector: string | null
+  accepting: string | null
+  recommendation: Recommendation
+  licensed: string[]
+  hrec_weeks: number | null
+  contract_weeks: number | null
+  startup_weeks: number | null
+  last_survey: string | null
+  survey_due: boolean
+  answered: number
+  score: number | null
 }
 
 export interface SiteFeasibilityReport {
-  headline: string;
-  tiles: ReportTile[];
-  sites: FeasibilityPin[];
-  rows: FeasibilityRow[];
-  surveys_due: {
-    site_id: string;
-    site: string;
-    city: string;
-    last_survey: string | null;
-    months: number | null;
-  }[];
+  headline: string
+  tiles: ReportTile[]
+  sites: FeasibilityPin[]
+  rows: FeasibilityRow[]
+  surveys_due: { site_id: string; site: string; city: string; last_survey: string | null; months: number | null }[]
   fastest: {
-    site_id: string;
-    site: string;
-    city: string;
-    hrec_weeks: number | null;
-    contract_weeks: number | null;
-    startup_weeks: number | null;
-  }[];
-  isotope_options: string[];
-  indication_options: string[];
-  recommendation_options: { value: Recommendation; label: string }[];
-  rules: Record<string, string>;
-  source: {
-    mode: "demo" | "sharepoint";
-    reason: string | null;
-    fetched_at: string | null;
-  };
+    site_id: string
+    site: string
+    city: string
+    hrec_weeks: number | null
+    contract_weeks: number | null
+    startup_weeks: number | null
+  }[]
+  isotope_options: string[]
+  indication_options: string[]
+  recommendation_options: { value: Recommendation; label: string }[]
+  rules: Record<string, string>
+  source: { mode: 'demo' | 'sharepoint'; reason: string | null; fetched_at: string | null }
 }
 
 export interface SiteFeasibilityDetail {
-  id: string;
-  name: string;
-  department: string | null;
-  city: string;
-  state: string;
-  sector: string | null;
-  last_survey: string | null;
-  last_survey_study: string | null;
-  survey_type: string | null;
-  accepting: string | null;
-  withdrawal: string | null;
-  recommend_diagnostics: string | null;
-  recommend_therapeutics: string | null;
-  timelines: {
-    startup_weeks: number | null;
-    siv_weeks: number | null;
-    fpi_weeks: number | null;
-  };
+  id: string
+  name: string
+  department: string | null
+  city: string
+  state: string
+  sector: string | null
+  last_survey: string | null
+  last_survey_study: string | null
+  survey_type: string | null
+  accepting: string | null
+  withdrawal: string | null
+  recommend_diagnostics: string | null
+  recommend_therapeutics: string | null
+  timelines: { startup_weeks: number | null; siv_weeks: number | null; fpi_weeks: number | null }
   experience: {
-    imaging_trials: string | null;
-    therapeutic_trials: string | null;
-    isotopes: string[];
-    patient_identification: string | null;
-    by_indication: {
-      indication: string;
-      experience: string | null;
-      imaging: number | null;
-      therapeutic: number | null;
-    }[];
-    active_imaging_trials: number | null;
-  };
+    imaging_trials: string | null
+    therapeutic_trials: string | null
+    isotopes: string[]
+    patient_identification: string | null
+    by_indication: { indication: string; experience: string | null; imaging: number | null; therapeutic: number | null }[]
+    active_imaging_trials: number | null
+  }
   ip: {
-    licensed: string[];
-    trained: string[];
-    handled: string[];
-    treatment_days: string | null;
-    fridges: number | null;
-    freezers_20: number | null;
-    freezers_80: number | null;
-  };
-  equipment: Record<string, string | null>;
+    licensed: string[]
+    trained: string[]
+    handled: string[]
+    treatment_days: string | null
+    fridges: number | null
+    freezers_20: number | null
+    freezers_80: number | null
+  }
+  equipment: Record<string, string | null>
   admin: {
-    audited: string | null;
-    auditor: string | null;
-    major_findings: string | null;
-    sops: string | null;
-    radiation_licence: string | null;
-    central_hrec: string | null;
-    hrec_weeks: number | null;
-    additional_approvals: string | null;
-    contract_during_hrec: string | null;
-    contract_weeks: number | null;
-    artnet: string | null;
-    remote_monitoring: string | null;
-    remote_records: string | null;
-  };
+    audited: string | null
+    auditor: string | null
+    major_findings: string | null
+    sops: string | null
+    radiation_licence: string | null
+    central_hrec: string | null
+    hrec_weeks: number | null
+    additional_approvals: string | null
+    contract_during_hrec: string | null
+    contract_weeks: number | null
+    artnet: string | null
+    remote_monitoring: string | null
+    remote_records: string | null
+  }
   performance: {
     projects: {
-      protocol: string;
-      indication: string | null;
-      expected_min: number | null;
-      expected_max: number | null;
-      actual: number | null;
-    }[];
-    scores: Record<string, number>;
-    competing_trials: string | null;
-    comments: string | null;
-  } | null;
-  source_url: string | null;
-  recommendation: Recommendation;
-  recommendation_label: string;
-  survey_due: boolean;
-  answered: number;
-  score: number | null;
-  score_max: number;
-  score_rows: { criterion: string; score: number | null; max: number }[];
-  validation_site_id: string | null;
+      protocol: string
+      indication: string | null
+      expected_min: number | null
+      expected_max: number | null
+      actual: number | null
+    }[]
+    scores: Record<string, number>
+    competing_trials: string | null
+    comments: string | null
+  } | null
+  source_url: string | null
+  recommendation: Recommendation
+  recommendation_label: string
+  survey_due: boolean
+  answered: number
+  score: number | null
+  score_max: number
+  score_rows: { criterion: string; score: number | null; max: number }[]
+  validation_site_id: string | null
 }

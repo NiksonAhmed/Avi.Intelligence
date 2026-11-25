@@ -1,4 +1,4 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined } from '@ant-design/icons'
 import {
   Alert,
   Button,
@@ -16,115 +16,93 @@ import {
   Tag,
   Tooltip,
   Typography,
-} from "antd";
-import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+} from 'antd'
+import { useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
 
-import { useRisks, useStudy, useTasks } from "../../api/hooks";
-import type { PlanItemRef, StudySite, Task } from "../../api/types";
-import { ApiError } from "../../api/client";
-import { PageHeader } from "../../components/PageHeader";
-import { PlanTable } from "../../components/PlanTable";
-import { StudySourceBanner } from "../../components/StudySourceBanner";
-import { SimpleTrialsIssues } from "../../components/work/SimpleTrialsIssues";
-import { TaskFormModal } from "../../components/work/TaskFormModal";
-import { TaskTable } from "../../components/work/TaskTable";
-import { formatDateTime, formatDay } from "../../lib/format";
-import { enrolmentText } from "../../lib/studies";
-import { EnrolmentCell } from "./StudyPortfolioPage";
+import { useRisks, useStudy, useTasks } from '../../api/hooks'
+import type { PlanItemRef, StudySite, Task } from '../../api/types'
+import { ApiError } from '../../api/client'
+import { PageHeader } from '../../components/PageHeader'
+import { PlanTable } from '../../components/PlanTable'
+import { StudySourceBanner } from '../../components/StudySourceBanner'
+import { SimpleTrialsIssues } from '../../components/work/SimpleTrialsIssues'
+import { TaskFormModal } from '../../components/work/TaskFormModal'
+import { TaskTable } from '../../components/work/TaskTable'
+import { formatDateTime, formatDay } from '../../lib/format'
+import { enrolmentText } from '../../lib/studies'
+import { EnrolmentCell } from './StudyPortfolioPage'
 
-const TABS = ["milestones", "sites", "tasks", "risks"] as const;
-type TabKey = (typeof TABS)[number];
+const TABS = ['milestones', 'sites', 'tasks', 'risks'] as const
+type TabKey = (typeof TABS)[number]
 
 export function StudyCommandCentrePage() {
-  const { studyId } = useParams();
-  const [params, setParams] = useSearchParams();
-  const tabParam = params.get("tab") as TabKey | null;
-  const tab: TabKey =
-    tabParam && TABS.includes(tabParam) ? tabParam : "milestones";
+  const { studyId } = useParams()
+  const [params, setParams] = useSearchParams()
+  const tabParam = params.get('tab') as TabKey | null
+  const tab: TabKey = tabParam && TABS.includes(tabParam) ? tabParam : 'milestones'
 
-  const study = useStudy(studyId);
+  const study = useStudy(studyId)
   // Closed tasks too: the plan shows completed tasks (in green); the Tasks tab lists open ones.
-  const tasks = useTasks({ study_id: studyId, include_closed: true });
-  const risks = useRisks({ study_id: studyId });
-  const [taskModal, setTaskModal] = useState<{
-    open: boolean;
-    task?: Task | null;
-    planItem?: PlanItemRef;
-  }>({
+  const tasks = useTasks({ study_id: studyId, include_closed: true })
+  const risks = useRisks({ study_id: studyId })
+  const [taskModal, setTaskModal] = useState<{ open: boolean; task?: Task | null; planItem?: PlanItemRef }>({
     open: false,
-  });
+  })
 
   if (study.isError) {
-    const notFound =
-      study.error instanceof ApiError && study.error.status === 404;
+    const notFound = study.error instanceof ApiError && study.error.status === 404
     return (
       <Result
-        status={notFound ? "404" : "error"}
-        title={notFound ? "Study not found" : "Could not load this study"}
-        subTitle={
-          notFound
-            ? "It may have been removed from SimpleTrials."
-            : study.error.message
-        }
+        status={notFound ? '404' : 'error'}
+        title={notFound ? 'Study not found' : 'Could not load this study'}
+        subTitle={notFound ? 'It may have been removed from SimpleTrials.' : study.error.message}
         extra={<Link to="/portfolio">Back to Study Portfolio</Link>}
       />
-    );
+    )
   }
-  if (!study.data) return <Skeleton active />;
+  if (!study.data) return <Skeleton active />
 
-  const { study: s, sites, milestones, source, rules } = study.data;
-  const canManage = Boolean(tasks.data?.can_manage);
-  const allTasks = tasks.data?.tasks ?? [];
-  const openTasks = allTasks.filter(
-    (t) => t.status !== "Completed" && t.status !== "Cancelled",
-  );
+  const { study: s, sites, milestones, source, rules } = study.data
+  const canManage = Boolean(tasks.data?.can_manage)
+  const allTasks = tasks.data?.tasks ?? []
+  const openTasks = allTasks.filter((t) => t.status !== 'Completed' && t.status !== 'Cancelled')
 
   const siteColumns = [
-    { title: "Site", dataIndex: "site_number", width: 80 },
+    { title: 'Site', dataIndex: 'site_number', width: 80 },
     {
-      title: "Name",
-      dataIndex: "name",
+      title: 'Name',
+      dataIndex: 'name',
       render: (name: string, site: StudySite) => (
         <div>
           <div>{name}</div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {[site.principal_investigator, site.country]
-              .filter(Boolean)
-              .join(" · ")}
+            {[site.principal_investigator, site.country].filter(Boolean).join(' · ')}
           </Typography.Text>
         </div>
       ),
     },
+    { title: 'Status', dataIndex: 'status', width: 150, render: (v: string | null) => (v ? <Tag>{v}</Tag> : '—') },
     {
-      title: "Status",
-      dataIndex: "status",
-      width: 150,
-      render: (v: string | null) => (v ? <Tag>{v}</Tag> : "—"),
-    },
-    {
-      title: "Activated",
-      dataIndex: "activation_date",
+      title: 'Activated',
+      dataIndex: 'activation_date',
       width: 130,
-      responsive: ["md" as const],
+      responsive: ['md' as const],
       render: (d: string | null) => formatDay(d),
     },
     {
-      title: "Enrolment",
-      key: "enrolment",
+      title: 'Enrolment',
+      key: 'enrolment',
       width: 200,
       render: (_: unknown, site: StudySite) => <EnrolmentCell study={site} />,
     },
-  ];
+  ]
 
   return (
     <>
       <PageHeader
         title={`${s.protocol_number} · ${s.title}`}
-        breadcrumbs={[
-          { title: "Study Portfolio", to: "/portfolio" },
-          { title: s.protocol_number },
-        ]}
+        breadcrumbs={[{ title: 'Study Portfolio', to: '/portfolio' }, { title: s.protocol_number }]}
       />
       <StudySourceBanner source={source} />
       {s.sandbox && (
@@ -148,38 +126,18 @@ export function StudyCommandCentrePage() {
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} xl={10}>
-          <Card title="Key information" size="small" style={{ height: "100%" }}>
+          <Card title="Key information" size="small" style={{ height: '100%' }}>
             <Descriptions
               column={1}
               size="small"
               items={[
-                {
-                  key: "sponsor",
-                  label: "Sponsor",
-                  children: s.sponsor ?? "—",
-                },
-                { key: "phase", label: "Phase", children: s.phase ?? "—" },
-                {
-                  key: "ta",
-                  label: "Therapeutic area",
-                  children: s.therapeutic_area ?? "—",
-                },
-                { key: "status", label: "Status", children: s.status ?? "—" },
-                {
-                  key: "countries",
-                  label: "Countries",
-                  children: s.countries.join(", ") || "—",
-                },
-                {
-                  key: "pm",
-                  label: "Project manager",
-                  children: s.project_manager ?? "—",
-                },
-                {
-                  key: "synced",
-                  label: "Synced",
-                  children: formatDateTime(s.synced_at),
-                },
+                { key: 'sponsor', label: 'Sponsor', children: s.sponsor ?? '—' },
+                { key: 'phase', label: 'Phase', children: s.phase ?? '—' },
+                { key: 'ta', label: 'Therapeutic area', children: s.therapeutic_area ?? '—' },
+                { key: 'status', label: 'Status', children: s.status ?? '—' },
+                { key: 'countries', label: 'Countries', children: s.countries.join(', ') || '—' },
+                { key: 'pm', label: 'Project manager', children: s.project_manager ?? '—' },
+                { key: 'synced', label: 'Synced', children: formatDateTime(s.synced_at) },
               ]}
             />
           </Card>
@@ -187,40 +145,22 @@ export function StudyCommandCentrePage() {
         <Col xs={24} xl={14}>
           <Row gutter={[16, 16]}>
             {[
-              { label: "Sites", value: s.site_count, help: rules.sites },
+              { label: 'Sites', value: s.site_count, help: rules.sites },
               {
-                label: "Enrolment",
-                value: enrolmentText(
-                  s.enrolled,
-                  s.enrolment_target,
-                  s.enrolment_percent,
-                ),
+                label: 'Enrolment',
+                value: enrolmentText(s.enrolled, s.enrolment_target, s.enrolment_percent),
                 help: rules.enrolment,
               },
-              {
-                label: "Overdue milestones",
-                value: s.overdue_milestones,
-                help: rules.milestone_overdue,
-              },
-              { label: "Open tasks", value: s.open_tasks },
-              { label: "Open risks and issues", value: s.open_risks },
+              { label: 'Overdue milestones', value: s.overdue_milestones, help: rules.milestone_overdue },
+              { label: 'Open tasks', value: s.open_tasks },
+              { label: 'Open risks and issues', value: s.open_risks },
             ].map((stat) => (
               <Col key={stat.label} xs={12} md={8}>
                 <Card size="small">
                   <Statistic
-                    title={
-                      stat.help ? (
-                        <Tooltip title={stat.help}>{stat.label}</Tooltip>
-                      ) : (
-                        stat.label
-                      )
-                    }
+                    title={stat.help ? <Tooltip title={stat.help}>{stat.label}</Tooltip> : stat.label}
                     value={stat.value}
-                    styles={{
-                      content: {
-                        fontSize: typeof stat.value === "string" ? 16 : 24,
-                      },
-                    }}
+                    styles={{ content: { fontSize: typeof stat.value === 'string' ? 16 : 24 } }}
                   />
                 </Card>
               </Col>
@@ -233,14 +173,14 @@ export function StudyCommandCentrePage() {
         <Tabs
           activeKey={tab}
           onChange={(key) => {
-            const next = new URLSearchParams(params);
-            next.set("tab", key);
-            setParams(next, { replace: true });
+            const next = new URLSearchParams(params)
+            next.set('tab', key)
+            setParams(next, { replace: true })
           }}
           items={[
             {
-              key: "milestones",
-              label: `Milestones & tasks (${milestones.filter((m) => m.kind !== "phase").length})`,
+              key: 'milestones',
+              label: `Milestones & tasks (${milestones.filter((m) => m.kind !== 'phase').length})`,
               children: (
                 <PlanTable
                   items={milestones}
@@ -248,16 +188,13 @@ export function StudyCommandCentrePage() {
                   tasks={allTasks}
                   canManage={canManage}
                   onAssign={(m) =>
-                    setTaskModal({
-                      open: true,
-                      planItem: { external_id: m.external_id, name: m.name },
-                    })
+                    setTaskModal({ open: true, planItem: { external_id: m.external_id, name: m.name } })
                   }
                 />
               ),
             },
             {
-              key: "sites",
+              key: 'sites',
               label: `Sites (${sites.length})`,
               children: (
                 <Table<StudySite>
@@ -266,36 +203,21 @@ export function StudyCommandCentrePage() {
                   pagination={false}
                   columns={siteColumns}
                   dataSource={sites}
-                  locale={{
-                    emptyText: (
-                      <Empty description="SimpleTrials has no sites for this study." />
-                    ),
-                  }}
+                  locale={{ emptyText: <Empty description="SimpleTrials has no sites for this study." /> }}
                 />
               ),
             },
             {
-              key: "tasks",
+              key: 'tasks',
               label: `Tasks (${s.open_tasks})`,
               children: (
                 <>
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    wrap
-                    gap={8}
-                    style={{ marginBottom: 12 }}
-                  >
+                  <Flex justify="space-between" align="center" wrap gap={8} style={{ marginBottom: 12 }}>
                     <Typography.Text type="secondary">
-                      Open tasks for this study. Only the assigned person can
-                      change a task&apos;s status.
+                      Open tasks for this study. Only the assigned person can change a task&apos;s status.
                     </Typography.Text>
                     {canManage && (
-                      <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => setTaskModal({ open: true })}
-                      >
+                      <Button type="primary" icon={<PlusOutlined />} onClick={() => setTaskModal({ open: true })}>
                         New task
                       </Button>
                     )}
@@ -310,14 +232,11 @@ export function StudyCommandCentrePage() {
               ),
             },
             {
-              key: "risks",
+              key: 'risks',
               label: `Risks and issues (${s.open_risks})`,
               children: (
                 <>
-                  <SimpleTrialsIssues
-                    issues={risks.data?.simpletrials_issues ?? []}
-                    loading={risks.isLoading}
-                  />
+                  <SimpleTrialsIssues issues={risks.data?.simpletrials_issues ?? []} loading={risks.isLoading} />
                 </>
               ),
             },
@@ -333,5 +252,5 @@ export function StudyCommandCentrePage() {
         onClose={() => setTaskModal({ open: false })}
       />
     </>
-  );
+  )
 }
